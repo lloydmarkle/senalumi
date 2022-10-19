@@ -1,77 +1,93 @@
-import type { Game, Point } from './game';
-import { constants } from './game';
+import type { Point } from './math';
+import { distSqr } from './math';
+import { Game, constants } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 
+
 class Selector {
-    p: Point;
     mid: Point = { x:0, y:0 };
     radius: number = 0;
     radiusSqr: number = 0;
     downStart: number = 0;
-    private gfx: PIXI.Graphics;
+    downPoint: Point;
+    readonly gfx: PIXI.Graphics;
+    private _mode: 'none' | 'select' | 'drag' = 'none';
+    get mode() { return this._mode; }
 
-    constructor(container: PIXI.Container, readonly game: Game, readonly viewport: Viewport) {
+    constructor(readonly viewport: Viewport) {
         this.gfx = new PIXI.Graphics();
-        container.addChild(this.gfx);
     }
 
     contains(point: Point) {
-        const distSqr = (point.x - this.mid.x) * (point.x - this.mid.x) + (point.y - this.mid.y) * (point.y - this.mid.y);
-        return distSqr < this.radiusSqr;
+        return distSqr(point, this.mid) < this.radiusSqr;
     }
 
-    private clear() {
+    private clearGfx() {
         this.radius = 0;
         this.radiusSqr = 0;
-        this.p = null;
         this.gfx.clear();
     }
 
     private update(point: Point) {
-        this.radius = Math.max(Math.abs(this.p.x - point.x), Math.abs(this.p.y - point.y));
-        this.radiusSqr = this.radius * this.radius;
         this.gfx.clear();
         this.gfx.lineStyle(2, 0xff0000);
-        this.mid.x = (point.x > this.p.x ? this.p.x : point.x) + Math.abs(this.p.x - point.x) / 2;
-        this.mid.y = (point.y > this.p.y ? this.p.y : point.y) + Math.abs(this.p.y - point.y) / 2;
-        this.gfx.drawCircle(this.mid.x, this.mid.y, this.radius);
+
+        const top = Math.min(point.y, this.downPoint.y);
+        const bottom = Math.max(point.y, this.downPoint.y);
+        const left = Math.min(point.x, this.downPoint.x);
+        const right = Math.max(point.x, this.downPoint.x);
         // this.gfx.drawRect(
-        //     point.x > this.p.x ? this.p.x : point.x,
-        //     point.y > this.p.y ? this.p.y : point.y,
-        //     Math.abs(this.p.x - point.x),
-        //     Math.abs(this.p.y - point.y)
-        // )
+        //     left,
+        //     top,
+        //     right - left,
+        //     bottom - top,
+        // );
+
+        this.radius = Math.max(Math.abs(this.downPoint.x - point.x), Math.abs(this.downPoint.y - point.y)) / 2;
+        this.radiusSqr = this.radius * this.radius;
+        this.mid.x = left + (right - left) / 2;
+        this.mid.y = top + (bottom - top) / 2;
+        this.gfx.drawCircle(this.mid.x, this.mid.y, this.radius);
     }
 
     pointerdown(point: Point) {
-        if (this.p) {
-            this.game.stars.forEach(star => {
-                if (this.contains(star.position)) {
-                    star.goto(point);
-                }
-            });
-            this.clear();
-        } else {
-            this.downStart = new Date().getTime();
-            this.p = point;
-        }
+        this.downStart = new Date().getTime();
+        this.downPoint = point;
     }
 
     pointermove(point: Point) {
-        const now = new Date().getTime();
-        if (!this.downStart || now - this.downStart < 300) {
-            this.viewport.plugins.resume('drag');
+        if (!this.downStart) {
             return;
         }
 
-        this.update(point);
+        const moveDistSqr = distSqr(this.downPoint, point);
+        if (moveDistSqr > 50) {
+            if (this._mode === 'none') {
+                const now = new Date().getTime();
+                if (now - this.downStart > 200) {
+                    this._mode = 'drag';
+                    this.clearGfx();
+                    // this.viewport.plugins.resume('drag');
+                } else {
+                    // this.viewport.plugins.pause('drag');
+                    this._mode = 'select';
+                }
+                console.log('set',this._mode)
+            }
+
+            if (this._mode !== 'drag') {
+                this.update(point);
+            }
+        }
     }
 
     pointerup() {
-        if (this.downStart) {
-            this.viewport.plugins.pause('drag');
+        if (this._mode === 'none') {
+            this.clearGfx();
         }
+        this._mode = 'none';
+        // this.viewport.plugins.resume('drag');
         this.downStart = 0;
     }
 }
@@ -82,6 +98,7 @@ export function run(game: Game) {
         app.destroy(true, { baseTexture: true, children: true, texture: true });
     }
 
+    const player = game.players[0];
     app = new PIXI.Application({
         view: document.querySelector("#game") as HTMLCanvasElement,
         autoDensity: true,
@@ -97,7 +114,6 @@ export function run(game: Game) {
         // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
         interaction: app.renderer.plugins.interaction,
     });
-    // let viewport = new PIXI.Container();
     app.stage.addChild(viewport);
     // activate plugins
     viewport.moveCenter(300,300)
@@ -106,7 +122,6 @@ export function run(game: Game) {
         .pinch()
         .wheel()
         .decelerate();
-    viewport.plugins.pause('drag');
 
     let greenTeamMatrix = new PIXI.filters.ColorMatrixFilter();
     greenTeamMatrix.tint(0x00aa00, true);
@@ -130,7 +145,9 @@ export function run(game: Game) {
     let starsContainer = new PIXI.ParticleContainer(constants.maxStars, { rotation: true, tint: true });
     let interactionContainer = new PIXI.Container();
 
-    let selector = new Selector(interactionContainer, game, viewport);
+    viewport.plugins.pause('drag');
+    let selector = new Selector(viewport);
+    interactionContainer.addChild(selector.gfx);
     viewport.on('pointerdown', ev => {
         const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
         selector.pointerdown(point);
@@ -140,6 +157,11 @@ export function run(game: Game) {
         selector.pointermove(point);
     });
     viewport.on('pointerup', ev => {
+        if (selector.mode === 'none') {
+            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+            const selectedStars = game.stars.filter(star => star.owner === player && selector.contains(star.position));
+            game.moveStars(player, selectedStars, point);
+        }
         selector.pointerup();
     });
     // app.ticker.maxFPS = 10;
@@ -161,7 +183,7 @@ export function run(game: Game) {
 
         sprite.anchor.set(0.5, 0.5);
         sprite.interactive = true;
-        sprite.on('pointerdown', () => sun.level = (sun.level + 1) % 4 as any)
+        // sprite.on('pointerdown', () => sun.level = (sun.level + 1) % 4 as any)
         if (sun.owner) {
             sprite.filters = [teamColours[sun.owner.id]];
         }
@@ -198,7 +220,8 @@ export function run(game: Game) {
                 sprite.x = star.position.x;
                 sprite.y = star.position.y;
 
-                sprite.tint = selector.contains(star.position) ? 0xaaaaaa : star.owner.color;
+                sprite.tint = star.owner === player && selector.contains(star.position) ? 0xaaaaaa : star.owner.color;
+                sprite.tint =  0xaaaaaa;
             };
             sprite.anchor.set(0.5, 0.5);
         }

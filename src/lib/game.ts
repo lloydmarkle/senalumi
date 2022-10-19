@@ -1,3 +1,5 @@
+import { copyPoint, distSqr, normalizeVector, point, scaleVector, vectorLength, type Point } from "./math";
+
 const maxStarVelocity = 0.02;
 const starTurnSpeed = 0.01;
 const maxStars = 1000;
@@ -8,25 +10,6 @@ export type Team = 'red' | 'green' | 'blue';
 interface Renderable {
     render: Function;
 }
-
-export interface Point {
-    x: number;
-    y: number;
-}
-const originPoint = () => ({ x: 0, y: 0 });
-const copyPoint = (p: Point) => ({ x: p.x, y: p.y });
-const point = (x: number, y: number) => ({ x, y });
-
-// Vector math
-const normalizeVector = (p: Point) => {
-    const len = Math.sqrt(p.x * p.x + p.y * p.y);
-    p.x /= len;
-    p.y /= len;
-};
-const scaleVector = (p: Point, scalar: number) => {
-    p.x *= scalar;
-    p.y *= scalar;
-};
 
 class Player {
     constructor(readonly id: Team, readonly color: number) {
@@ -50,9 +33,9 @@ export class Game {
             new Sun(point(300, 300)),
         ];
         this.players = [
+            new Player('blue', 0x0000aa),
             new Player('green', 0x00aa00),
             new Player('red', 0xaa0000),
-            new Player('blue', 0x0000aa),
         ];
 
         this.suns[0].capture(this.players[0]);
@@ -81,13 +64,25 @@ export class Game {
         }
     }
 
+    moveStars(player: Player, stars: Star[], point: Point) {
+        for (const sun of this.suns) {
+            const ds = distSqr(sun.position, point);
+            if (ds < 400) {
+                stars.forEach(s => s.mover = new OrbitMover(this, s, sun))
+                return;
+            }
+        }
+        stars.forEach(s => s.mover = new PointMover(this, s, point))
+    }
+
     private pulse() {
         for (const sun of this.suns) {
             if (this.stars.length >= maxStars) {
                 return;
             }
             if (sun.owner) {
-                const star = new Star(sun.owner, sun);
+                const star = new Star(sun.owner, sun.position);
+                star.mover = new OrbitMover(this, star, sun);
                 this.stars.push(star);
             }
         }
@@ -122,22 +117,31 @@ class Sun implements Renderable {
     }
 }
 
+const arrived = (star: Star, point: Point) => {
+    return distSqr(star.position, point) < 400;
+}
+
 interface Mover {
-    evaluate(elapsedMS: number);
+    evaluate(elapsedMS: number): Mover;
+}
+
+class NullMover implements Mover {
+    evaluate(elapsedMS: number) {
+        return this;
+    }
 }
 
 class OrbitMover implements Mover {
-    private orbitSpeed = Math.random() * Math.PI * 2 / 40000;
+    private orbitSpeed = Math.random() * Math.PI * 2 / 4000;
     private orbitRotationOffset = Math.random() * Math.PI * 2;
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private turnSpeed = Math.random() * starTurnSpeed + starTurnSpeed;
-    constructor(readonly star: Star, readonly sun: Sun) {}
+    constructor(readonly game: Game, readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed;
-        const rotation = this.sun.rotation + this.orbitRotationOffset;
-        const targetX = Math.cos(rotation) * this.sun.orbitDistance * this.orbitDistanceOffset + this.sun.position.x;
-        const targetY = Math.sin(rotation) * this.sun.orbitDistance * this.orbitDistanceOffset + this.sun.position.y;
+        const targetX = Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x;
+        const targetY = Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y;
         const distance = {
             x: targetX - this.star.position.x,
             y: targetY - this.star.position.y,
@@ -145,73 +149,70 @@ class OrbitMover implements Mover {
         normalizeVector(distance);
         scaleVector(distance, this.turnSpeed * elapsedMS);
 
-        this.star.direction.x = distance.x + this.star.direction.x;
-        this.star.direction.y = distance.y + this.star.direction.y;
-        normalizeVector(this.star.direction);
-        scaleVector(this.star.direction, maxStarVelocity);
+        this.star.velocity.x = distance.x + this.star.velocity.x;
+        this.star.velocity.y = distance.y + this.star.velocity.y;
+        normalizeVector(this.star.velocity);
+        scaleVector(this.star.velocity, maxStarVelocity);
+        return this;
     }
 }
 
 class PointMover implements Mover {
-    private orbitSpeed = Math.random() * Math.PI * 2 / 2000;
-    private orbitRotationOffset = Math.random() * Math.PI * 2;
-    private orbitDistanceOffset = Math.random() * 50;
-    private turnSpeed = Math.random() * starTurnSpeed + starTurnSpeed;
-    private _target: Point;
-    constructor(readonly star: Star, target: Point) {
-        this._target = copyPoint(target);
+    private turnSpeed = (Math.random() * starTurnSpeed + starTurnSpeed) * 0.01;
+    readonly target: Point;
+    constructor(readonly game: Game, readonly star: Star, target: Point) {
+        this.target = copyPoint(target);
     }
 
     evaluate(elapsedMS: number) {
-        this.orbitRotationOffset += this.orbitSpeed;
-        const targetX = Math.cos(this.orbitRotationOffset) * this.orbitDistanceOffset + this._target.x;
-        const targetY = Math.sin(this.orbitRotationOffset) * this.orbitDistanceOffset + this._target.y;
+        if (arrived(this.star, this.target)) {
+            return new OrbitMover(this.game, this.star, {
+                orbitDistance: Math.random() * 20,
+                position: this.target,
+            });
+        }
+
         const distance = {
-            x: targetX - this.star.position.x,
-            y: targetY - this.star.position.y,
+            x: this.target.x - this.star.position.x,
+            y: this.target.y - this.star.position.y,
         };
         normalizeVector(distance);
+        scaleVector(distance, this.turnSpeed * elapsedMS);
 
-        const turnSpeed = this.turnSpeed * elapsedMS;
-        this.star.direction.x = distance.x * turnSpeed + this.star.direction.x;
-        this.star.direction.y = distance.y * turnSpeed + this.star.direction.y;
-        normalizeVector(this.star.direction);
-        scaleVector(this.star.direction, maxStarVelocity);
+        this.star.velocity.x = distance.x + this.star.velocity.x;
+        this.star.velocity.y = distance.y + this.star.velocity.y;
+        normalizeVector(this.star.velocity);
+        scaleVector(this.star.velocity, maxStarVelocity);
+
+        // console.log(
+        //     vectorLength(distance),
+        //     vectorLength(this.star.direction),
+        // )
+        return this;
     }
 }
 
 class Star implements Renderable {
-    private mover: Mover;
-
-    direction: Point;
+    mover: Mover;
+    velocity: Point;
     render: Function;
     readonly position: Point;
 
-    constructor(readonly owner: Player, sun: Sun) {
+    constructor(readonly owner: Player, position: Point) {
         this.owner = owner;
-        this.position = copyPoint(sun.position);
-        const velocity = Math.random() * maxStarVelocity;
+        this.position = copyPoint(position);
         const angle = Math.random() * Math.PI * 2;
-        this.direction = {
-            x: Math.cos(angle) * velocity,
-            y: Math.sin(angle) * velocity,
+        this.mover = new NullMover();
+        const speed = Math.random() * maxStarVelocity;
+        this.velocity = {
+            x: Math.cos(angle) * speed,
+            y: Math.sin(angle) * speed,
         };
-        this.goto(sun);
-    }
-
-    goto(target: Sun | Point) {
-        if ('x' in target) {
-            this.mover = new PointMover(this, target);
-        } else {
-            this.mover = new OrbitMover(this, target);
-        }
     }
 
     tick(elapsedMS: number) {
-        if (this.mover) {
-            this.mover.evaluate(elapsedMS);
-            this.position.x += this.direction.x * elapsedMS;
-            this.position.y += this.direction.y * elapsedMS;
-        }
+        this.mover = this.mover.evaluate(elapsedMS);
+        this.position.x += this.velocity.x * elapsedMS;
+        this.position.y += this.velocity.y * elapsedMS;
     }
 }
