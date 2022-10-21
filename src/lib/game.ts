@@ -1,9 +1,15 @@
 import { copyPoint, distSqr, normalizeVector, point, scaleVector, vectorLength, type Point } from "./math";
 
-const maxStarVelocity = 0.02;
-const starTurnSpeed = 0.01;
-const maxStars = 1000;
-export const constants = { maxStarelocity: maxStarVelocity, starTurnSpeed, maxStars };
+const maxStarVelocity = 0.015;
+const maxStars = 10000;
+const forceStiffness = 0.0000001;
+const forceDamping = 0.001;
+const moveNoise = () => Math.random() * 1.2 + 0.8;
+const targetOffsetNoise = (): Point => ({
+    x: Math.random() * 20 - 10,
+    y: Math.random() * 20 - 10,
+})
+export const constants = { maxStarVelocity, maxStars, forceStiffness, forceDamping };
 
 export type Team = 'red' | 'green' | 'blue';
 
@@ -12,7 +18,9 @@ interface Renderable {
 }
 
 class Player {
+    readonly starColor: number;
     constructor(readonly id: Team, readonly color: number) {
+        this.starColor  = color | 0x666666;
     }
 }
 
@@ -42,7 +50,7 @@ export class Game {
         this.suns[1].capture(this.players[1]);
         this.suns[2].capture(this.players[2]);
 
-        for (let i = 0; i < maxStars; i++){
+        for (let i = 0; i < 100; i++){
             this.pulse();
         }
     }
@@ -53,7 +61,7 @@ export class Game {
         const seconds = Math.floor(this.gameTime / 1000);
         if (seconds > this.lastTick) {
             this.lastTick = seconds;
-            // this.pulse();
+            this.pulse();
         }
 
         for (const star of this.stars) {
@@ -68,18 +76,24 @@ export class Game {
         for (const sun of this.suns) {
             const ds = distSqr(sun.position, point);
             if (ds < 400) {
-                stars.forEach(s => s.mover = new OrbitMover(this, s, sun))
+                stars.forEach(s => s.mover = new MoveSequence(s, [
+                    [new PointMover(this, s, sun.position), () => arrived(s, sun.position)],
+                    [new OrbitMover(this, s, sun), () => false],
+                ]));
                 return;
             }
         }
-        stars.forEach(s => s.mover = new PointMover(this, s, point))
+        stars.forEach(s => s.mover = new MoveSequence(s, [
+            [new PointMover(this, s, point), () => arrived(s, point)],
+            [new OrbitMover(this, s, { orbitDistance: Math.random() * 20, position: point }), () => false],
+        ]));
     }
 
     private pulse() {
+        if (this.stars.length >= maxStars) {
+            return;
+        }
         for (const sun of this.suns) {
-            if (this.stars.length >= maxStars) {
-                return;
-            }
             if (sun.owner) {
                 const star = new Star(sun.owner, sun.position);
                 star.mover = new OrbitMover(this, star, sun);
@@ -135,68 +149,55 @@ class OrbitMover implements Mover {
     private orbitSpeed = Math.random() * Math.PI * 2 / 4000;
     private orbitRotationOffset = Math.random() * Math.PI * 2;
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
-    private turnSpeed = Math.random() * starTurnSpeed + starTurnSpeed;
+    private positionNoise = targetOffsetNoise();
+    private moveNoise = moveNoise();
     constructor(readonly game: Game, readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed;
-        const targetX = Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x;
-        const targetY = Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y;
-        const distance = {
-            x: targetX - this.star.position.x,
-            y: targetY - this.star.position.y,
+        const target = {
+            x: Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
+            y: Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,
         };
-        normalizeVector(distance);
-        scaleVector(distance, this.turnSpeed * elapsedMS);
-
-        this.star.velocity.x = distance.x + this.star.velocity.x;
-        this.star.velocity.y = distance.y + this.star.velocity.y;
-        normalizeVector(this.star.velocity);
-        scaleVector(this.star.velocity, maxStarVelocity);
+        this.star.updateVelocity(target, elapsedMS * this.moveNoise);
         return this;
     }
 }
 
 class PointMover implements Mover {
-    private turnSpeed = (Math.random() * starTurnSpeed + starTurnSpeed) * 0.01;
-    readonly target: Point;
-    constructor(readonly game: Game, readonly star: Star, target: Point) {
-        this.target = copyPoint(target);
-    }
+    private moveNoise = moveNoise();
+    private positionNoise = targetOffsetNoise();
+    constructor(readonly game: Game, readonly star: Star, readonly target: Point) {}
 
     evaluate(elapsedMS: number) {
-        if (arrived(this.star, this.target)) {
-            return new OrbitMover(this.game, this.star, {
-                orbitDistance: Math.random() * 20,
-                position: this.target,
-            });
+        // why compute this every frame? If this.target is a reference to a sun, then
+        // the sun could be moving so we have a moving target
+        const target = {
+            x: this.target.x + this.positionNoise.x,
+            y: this.target.y + this.positionNoise.y,
         }
+        this.star.updateVelocity(target, elapsedMS * this.moveNoise);
+        return this;
+    }
+}
 
-        const distance = {
-            x: this.target.x - this.star.position.x,
-            y: this.target.y - this.star.position.y,
-        };
-        normalizeVector(distance);
-        scaleVector(distance, this.turnSpeed * elapsedMS);
-
-        this.star.velocity.x = distance.x + this.star.velocity.x;
-        this.star.velocity.y = distance.y + this.star.velocity.y;
-        normalizeVector(this.star.velocity);
-        scaleVector(this.star.velocity, maxStarVelocity);
-
-        // console.log(
-        //     vectorLength(distance),
-        //     vectorLength(this.star.direction),
-        // )
+type MovePair = [Mover, () => boolean];
+class MoveSequence implements Mover {
+    constructor(readonly star: Star, readonly movers: MovePair[]) {}
+    evaluate(elapsedMS: number) {
+        if (this.movers[0][1]()) {
+            this.movers.shift();
+        }
+        this.movers[0][0].evaluate(elapsedMS);
         return this;
     }
 }
 
 class Star implements Renderable {
-    mover: Mover;
-    velocity: Point;
-    render: Function;
     readonly position: Point;
+    render: Function;
+    mover: Mover;
+    private velocity: Point;
 
     constructor(readonly owner: Player, position: Point) {
         this.owner = owner;
@@ -214,5 +215,20 @@ class Star implements Renderable {
         this.mover = this.mover.evaluate(elapsedMS);
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
+    }
+
+    updateVelocity(target: Point, rate: number) {
+        // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
+        const direction = {
+            x: target.x - this.position.x,
+            y: target.y - this.position.y,
+        }
+        normalizeVector(direction);
+
+        const targetVelocity = copyPoint(direction);
+        scaleVector(targetVelocity, maxStarVelocity);
+
+        this.velocity.x += (forceStiffness * direction.x + forceDamping * (targetVelocity.x - this.velocity.x)) * rate;
+        this.velocity.y += (forceStiffness * direction.y + forceDamping * (targetVelocity.y - this.velocity.y)) * rate;
     }
 }

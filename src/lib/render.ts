@@ -1,5 +1,4 @@
-import type { Point } from './math';
-import { distSqr } from './math';
+import { type Point, distSqr } from './math';
 import { Game, constants } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -220,8 +219,8 @@ export function run(game: Game) {
                 sprite.x = star.position.x;
                 sprite.y = star.position.y;
 
-                sprite.tint = star.owner === player && selector.contains(star.position) ? 0xaaaaaa : star.owner.color;
-                sprite.tint =  0xaaaaaa;
+                sprite.tint = star.owner === player && selector.contains(star.position) ? 0xaaaaaa : star.owner.starColor;
+                // sprite.tint =  0xaaaaaa;
             };
             sprite.anchor.set(0.5, 0.5);
         }
