@@ -98,6 +98,7 @@ export function run(game: Game) {
     }
 
     const player = game.players[0];
+    const isPlayerStar = (star: any) =>  selector.contains(star.position);
     app = new PIXI.Application({
         view: document.querySelector("#game") as HTMLCanvasElement,
         autoDensity: true,
@@ -128,6 +129,8 @@ export function run(game: Game) {
     blueTeamMatrix.tint(0x0000ff, true);
     let redTeamMatrix = new PIXI.filters.ColorMatrixFilter();
     redTeamMatrix.tint(0xaa0000, true);
+    let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
+    greyTeamMatrix.tint(0x222222, true);
 
     let teamColours = {
         'red': redTeamMatrix,
@@ -142,6 +145,7 @@ export function run(game: Game) {
     let bgContainer = new PIXI.Container();
     let sunsContainer = new PIXI.Container();
     let starsContainer = new PIXI.ParticleContainer(constants.maxStars, { rotation: true, tint: true });
+    let flashContainer = new PIXI.ParticleContainer(constants.maxStars, { scale: true, rotation: true, alpha: true });
     let interactionContainer = new PIXI.Container();
 
     viewport.plugins.pause('drag');
@@ -158,7 +162,7 @@ export function run(game: Game) {
     viewport.on('pointerup', ev => {
         if (selector.mode === 'none') {
             const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            const selectedStars = game.stars.filter(star => star.owner === player && selector.contains(star.position));
+            const selectedStars = game.stars.filter(isPlayerStar);
             game.moveStars(player, selectedStars, point);
         }
         selector.pointerup();
@@ -168,24 +172,30 @@ export function run(game: Game) {
     viewport.addChild(bgContainer);
     viewport.addChild(sunsContainer);
     viewport.addChild(starsContainer);
+    viewport.addChild(flashContainer);
     viewport.addChild(interactionContainer);
 
     for (const sun of game.suns) {
         const sprite = PIXI.Sprite.from(sunTexture);
         sunsContainer.addChild(sprite);
+
+        const text = new PIXI.Text('');
+        text.style.fill = 0xffffff;
+        text.position.x = sun.position.x;
+        text.position.y = sun.position.y;
+        sunsContainer.addChild(text)
+        sun.destroy = () => sunsContainer.removeChild(sprite);
         sun.render = () => {
+            text.text = sun.health + ':' + sun.upgrade + (sun.candidateOwner?.id[0] ?? '') + ':' + sun.level;
             sprite.rotation = sun.rotation;
             sprite.scale.set(sun.radius);
             sprite.x = sun.position.x;
             sprite.y = sun.position.y;
+            sprite.filters = sun.owner ? [teamColours[sun.owner.id]] : [greyTeamMatrix];
         };
 
         sprite.anchor.set(0.5, 0.5);
         sprite.interactive = true;
-        // sprite.on('pointerdown', () => sun.level = (sun.level + 1) % 4 as any)
-        if (sun.owner) {
-            sprite.filters = [teamColours[sun.owner.id]];
-        }
     }
 
     const basicText = new PIXI.Text('');
@@ -197,10 +207,30 @@ export function run(game: Game) {
     app.ticker.add((delta) => {
         basicText.text = app.ticker.FPS.toFixed(2) + ' fps\n'
             + app.ticker.elapsedMS.toFixed(2) + 'ms';
-        game.tick(app.ticker.elapsedMS);
+        game.tick(app.ticker.elapsedMS * 8);
+        // game.tick(app.ticker.elapsedMS);
 
         for (const sun of game.suns) {
             sun.render();
+        }
+
+        for (const flash of game.flashes) {
+            if (flash.render) {
+                flash.render();
+                continue;
+            }
+
+            const sprite = PIXI.Sprite.from(starTexture);
+            flashContainer.addChild(sprite);
+            flash.destroy = () => flashContainer.removeChild(sprite);
+            flash.render = () => {
+                sprite.rotation = flash.rotation;
+                sprite.scale.set(flash.size);
+                sprite.alpha = flash.alpha;
+                sprite.x = flash.position.x;
+                sprite.y = flash.position.y;
+            };
+            sprite.anchor.set(0.5, 0.5);
         }
 
         for (const star of game.stars) {
@@ -213,16 +243,25 @@ export function run(game: Game) {
             let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
             const sprite = PIXI.Sprite.from(starTexture);
             starsContainer.addChild(sprite);
+            star.destroy = () => {
+                starsContainer.removeChild(sprite);
+            }
             star.render = () => {
                 rotation += rotationSpeed * app.ticker.elapsedMS;
                 sprite.rotation = rotation;
                 sprite.x = star.position.x;
                 sprite.y = star.position.y;
 
-                sprite.tint = star.owner === player && selector.contains(star.position) ? 0xaaaaaa : star.owner.starColor;
+                sprite.tint = isPlayerStar(star) ? 0xaaaaaa : star.owner.starColor;
                 // sprite.tint =  0xaaaaaa;
             };
             sprite.anchor.set(0.5, 0.5);
         }
     });
 }
+
+// const xstars = stars.reduce((m, s) => {
+//     let l = m[s.owner.id] ?? 0;
+//     m[s.owner.id] = l + 1;
+//     return m;
+// }, {})

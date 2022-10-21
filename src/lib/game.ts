@@ -15,6 +15,7 @@ export type Team = 'red' | 'green' | 'blue';
 
 interface Renderable {
     render: Function;
+    destroy: Function;
 }
 
 class Player {
@@ -25,6 +26,7 @@ class Player {
 }
 
 export class Game {
+    flashes: Flash[];
     suns: Sun[];
     stars: Star[];
     players: Player[];
@@ -33,12 +35,13 @@ export class Game {
     pulsed = 0;
 
     constructor() {
+        this.flashes = [];
         this.stars = [];
         this.suns = [
-            new Sun(point(0, 0)),
-            new Sun(point(200, 600)),
-            new Sun(point(600, 100)),
-            new Sun(point(300, 300)),
+            new Sun(this, point(0, 0), 3),
+            new Sun(this, point(200, 600), 3),
+            new Sun(this, point(600, 100), 3),
+            new Sun(this, point(300, 300), 3),
         ];
         this.players = [
             new Player('blue', 0x0000aa),
@@ -64,6 +67,9 @@ export class Game {
             this.pulse();
         }
 
+        for (const flash of this.flashes) {
+            flash.tick(elapsedMS);
+        }
         for (const star of this.stars) {
             star.tick(elapsedMS);
         }
@@ -77,15 +83,16 @@ export class Game {
             const ds = distSqr(sun.position, point);
             if (ds < 400) {
                 stars.forEach(s => s.mover = new MoveSequence(s, [
-                    [new PointMover(this, s, sun.position), () => arrived(s, sun.position)],
-                    [new OrbitMover(this, s, sun), () => false],
+                    [new PointMover(s, sun.position), () => arrived(s, sun.position)],
+                    [new SunMover(s, sun), () => arrived(s, sun.position)],
+                    [new OrbitMover(s, sun), () => false],
                 ]));
                 return;
             }
         }
         stars.forEach(s => s.mover = new MoveSequence(s, [
-            [new PointMover(this, s, point), () => arrived(s, point)],
-            [new OrbitMover(this, s, { orbitDistance: Math.random() * 20, position: point }), () => false],
+            [new PointMover(s, point), () => arrived(s, point)],
+            [new OrbitMover(s, { orbitDistance: Math.random() * 20, position: point }), () => false],
         ]));
     }
 
@@ -95,39 +102,95 @@ export class Game {
         }
         for (const sun of this.suns) {
             if (sun.owner) {
-                const star = new Star(sun.owner, sun.position);
-                star.mover = new OrbitMover(this, star, sun);
-                this.stars.push(star);
+                for (let i = 0; i < sun.level; i++) {
+                    this.spawnStar(sun);
+                }
             }
         }
     }
+
+    private spawnStar(sun: Sun) {
+        const star = new Star(sun.owner, sun.position);
+        star.mover = new OrbitMover(star, sun);
+        this.stars.push(star);
+    }
+
+    destroy(star: Star) {
+        this.stars = this.stars.filter(s => s !== star);
+        this.flashes.push(new Flash(this, star.position, star.velocity));
+        star.destroy();
+    }
 }
 
+type SunLevel = 0 | 1 | 2 | 3;
 class Sun implements Renderable {
+    private _candidateOwner?: Player;
     private _owner?: Player;
-    private _rotation: number;
+    private _rotation: number = Math.random() * Math.PI * 2;
+    private _health: number = 0;
+    private _upgrade: number = 0;
 
     render: Function;
-    level: 0 | 1 | 2 | 3;
+    destroy: Function;
+    level: SunLevel = 0;
     get rotation() { return this._rotation; }
     get owner(): Player | undefined { return this._owner; }
+    get candidateOwner(): Player | undefined { return this._candidateOwner; }
     // value between 0 and 1
     get radius() { return (this.level / 6) + .5; }
     // sprite is (currently) 300px
     get orbitDistance() { return this.radius * 150; }
+    get health() { return this._health; }
+    get upgrade() { return this._upgrade; }
 
-    constructor(readonly position: Point) {
-        this.level = 0;
-        this._rotation = Math.random() * Math.PI * 2;
-    }
+    constructor(readonly game: Game, readonly position: Point, readonly maxLevel: SunLevel) {}
 
     capture(owner: Player) {
+        this._health = 100;
+        this._upgrade = 0;
         this.level = 1;
+        this._candidateOwner = null;
         this._owner = owner;
     }
 
     tick(elapsedMS: number) {
         this._rotation += Math.PI / 30000 * elapsedMS;
+    }
+
+    hit(star: Star) {
+        if (!this.owner) {
+            if (!this._candidateOwner) {
+                this._candidateOwner = star.owner;
+            }
+            this._upgrade += (this._candidateOwner === star.owner) ? 1 : -1;
+            star.destroy();
+
+            if (this._upgrade === 0) {
+                this._candidateOwner = null;
+            }
+            if (this._upgrade === 100) {
+                this.capture(this._candidateOwner);
+            }
+        } else if (star.owner === this.owner) {
+            if (this.level < this.maxLevel && this._health === 100) {
+                this._upgrade += 1;
+                this.game.destroy(star);
+            } else if (this._health < 100) {
+                this._health += 1;
+                this.game.destroy(star);
+            }
+            if (this._upgrade === 100) {
+                this.level += 1;
+                this._upgrade = 0;
+            }
+        } else {
+            this._health -= 1;
+            this.game.destroy(star);
+            if (this._health === 0) {
+                this.capture(null);
+                this.level = 0;
+            }
+        }
     }
 }
 
@@ -137,6 +200,34 @@ const arrived = (star: Star, point: Point) => {
 
 interface Mover {
     evaluate(elapsedMS: number): Mover;
+}
+
+type Missions = 'hurt' | 'heal' | 'take' | 'upgrade' | 'none';
+class SunMover implements Mover {
+    private mission: Missions;
+    private sunLevel: SunLevel;
+    constructor(readonly star: Star, readonly sun: Sun) {
+        this.sunLevel = sun.level;
+        this.mission = this.computeMission();
+    }
+
+    evaluate(elapsedMS: number) {
+        const mission = this.computeMission();
+        if (mission === this.mission) {
+            this.sun.hit(this.star);
+        }
+        return this;
+    }
+
+    private computeMission(): Missions {
+        return (
+            !this.sun.owner ? 'take'
+            : (this.star.owner !== this.sun.owner) ? 'hurt'
+            : (this.sun.health < 100) ? 'heal'
+            : (this.sun.upgrade < 100 && this.sunLevel === this.sun.level) ? 'upgrade'
+            : 'none'
+        );
+    }
 }
 
 class NullMover implements Mover {
@@ -151,7 +242,7 @@ class OrbitMover implements Mover {
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private positionNoise = targetOffsetNoise();
     private moveNoise = moveNoise();
-    constructor(readonly game: Game, readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
+    constructor(readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed;
@@ -167,7 +258,7 @@ class OrbitMover implements Mover {
 class PointMover implements Mover {
     private moveNoise = moveNoise();
     private positionNoise = targetOffsetNoise();
-    constructor(readonly game: Game, readonly star: Star, readonly target: Point) {}
+    constructor(readonly star: Star, readonly target: Point) {}
 
     evaluate(elapsedMS: number) {
         // why compute this every frame? If this.target is a reference to a sun, then
@@ -196,8 +287,9 @@ class MoveSequence implements Mover {
 class Star implements Renderable {
     readonly position: Point;
     render: Function;
+    destroy: Function;
     mover: Mover;
-    private velocity: Point;
+    readonly velocity: Point;
 
     constructor(readonly owner: Player, position: Point) {
         this.owner = owner;
@@ -230,5 +322,30 @@ class Star implements Renderable {
 
         this.velocity.x += (forceStiffness * direction.x + forceDamping * (targetVelocity.x - this.velocity.x)) * rate;
         this.velocity.y += (forceStiffness * direction.y + forceDamping * (targetVelocity.y - this.velocity.y)) * rate;
+    }
+}
+
+class Flash implements Renderable {
+    private rotationSpeed = Math.random() * Math.PI / 200;
+    private timeleftMS = (Math.random() * 300 + 200) * 1;
+    size: number = 1;
+    alpha: number = 1;
+    rotation: number = Math.random() * Math.PI * 2;
+    render: Function;
+    destroy: Function;
+    constructor(readonly game: Game, readonly position: Point, readonly velocity: Point) {}
+
+    tick(elapsedMS: number) {
+        this.timeleftMS -= elapsedMS;
+        if (this.timeleftMS < 0) {
+            this.destroy();
+            this.game.flashes = this.game.flashes.filter(e => e !== this);
+        }
+
+        this.alpha -= 0.001 * elapsedMS;
+        this.size += 0.005 * elapsedMS;
+        this.rotation += this.rotationSpeed * elapsedMS;
+        this.position.x += this.velocity.x * elapsedMS;
+        this.position.y += this.velocity.y * elapsedMS;
     }
 }
