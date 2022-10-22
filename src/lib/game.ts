@@ -1,9 +1,9 @@
-import { copyPoint, distSqr, normalizeVector, point, scaleVector, vectorLength, type Point } from "./math";
+import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, vectorLength, type Point } from "./math";
 
 const maxStarVelocity = 0.015;
-const maxStars = 10000;
-const forceStiffness = 0.0000001;
-const forceDamping = 0.001;
+const maxStars = 1000;
+const forceStiffness = 0.0000005;
+const forceDamping = 0.0004;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = (): Point => ({
     x: Math.random() * 20 - 10,
@@ -21,7 +21,95 @@ interface Renderable {
 class Player {
     readonly starColor: number;
     constructor(readonly id: Team, readonly color: number) {
-        this.starColor  = color | 0x666666;
+        this.starColor  = color | 0x777777;
+    }
+}
+
+// Mostly based on https://en.wikipedia.org/wiki/Quadtree
+// but adapted for circles (xy + radius) based on some suggestions
+// from https://gamedev.stackexchange.com/questions/175799
+class QuadTree<T extends { position: Point }> {
+    chidlren: QuadTree<T>[];
+    data: T[] = [];
+    constructor(readonly topLeft: Point, readonly bottomRight: Point, readonly capacity = 10) {
+        if (topLeft.x > bottomRight.x || topLeft.y > bottomRight.y)  {
+            throw ['invalid tree',topLeft,bottomRight]
+        }
+    }
+
+    private contains(t: T, radius: number) {
+        return (t.position.x - radius) > this.topLeft.x && (t.position.x + radius) < this.bottomRight.x
+            && (t.position.y - radius) > this.topLeft.y && (t.position.y + radius) < this.bottomRight.y;
+    }
+
+    insert(t: T, radius: number) {
+        if (!this.contains(t, radius)) {
+            return false;
+        }
+
+        if (this.data.length < this.capacity) {
+            this.data.push(t);
+            return true;
+        }
+
+        this.subdivide(radius);
+        return this.insertData(t, radius);
+    }
+
+    private insertData(t: T, radius: number) {
+        let inserted = this.chidlren
+            .reduce((acc, child) => acc = acc || child.insert(t, radius), false);
+        if (!inserted) {
+            // point stradles a boundary(?) so allow it to overfill this tree
+            this.data.push(t);
+        }
+        return inserted;
+    }
+
+    private subdivide(radius: number) {
+        if (this.chidlren) {
+            return;
+        }
+        const { x: left, y: top } = this.topLeft;
+        const { x: right, y: bottom } = this.bottomRight;
+        const halfx = (left + right) / 2;
+        const halfy = (top + bottom) / 2;
+        this.chidlren = [
+            new QuadTree({ x: left, y: top }, { x: halfx, y: halfy }),
+            new QuadTree({ x: halfx, y: top }, { x: right, y: halfy }),
+            new QuadTree({ x: halfx, y: halfy }, { x: right, y: bottom }),
+            new QuadTree({ x: left, y: halfy }, { x: halfx, y: bottom }),
+        ];
+
+        // push points to children
+        let data = this.data;
+        this.data = [];
+        for (const d of data) {
+            this.insertData(d, radius);
+        }
+    }
+
+    query(t: T, radius: number): T[] {
+        const result: T[] = [];
+        if (!this.contains(t, radius)) {
+            return result;
+        }
+
+        this.appendPoints(result, t, radius);
+        this.chidlren?.forEach(child => child.appendPoints(result, t, radius));
+        return result;
+    }
+
+    private appendPoints(results: T[], t: T, radius: number) {
+        if (!this.contains(t, radius)) {
+            return;
+        }
+        const r2 = radius * radius;
+        for (const d of this.data) {
+            if (distSqr(d.position, t.position) < r2) {
+                results.push(d);
+            }
+        }
     }
 }
 
@@ -33,6 +121,7 @@ export class Game {
     gameTime = 0.0;
     lastTick = 0.0;
     pulsed = 0;
+    qTree: QuadTree<Star>;
 
     constructor() {
         this.flashes = [];
@@ -67,14 +156,38 @@ export class Game {
             this.pulse();
         }
 
+        const radius = 5;
+        const starSpaceTL = originPoint();
+        const starSpaceBR = originPoint();
         for (const flash of this.flashes) {
             flash.tick(elapsedMS);
         }
         for (const star of this.stars) {
             star.tick(elapsedMS);
+            starSpaceTL.x = Math.min(starSpaceTL.x, star.position.x - radius - 1);
+            starSpaceTL.y = Math.min(starSpaceTL.y, star.position.y - radius - 1);
+            starSpaceBR.x = Math.max(starSpaceBR.x, star.position.x + radius + 1);
+            starSpaceBR.y = Math.max(starSpaceBR.y, star.position.y + radius + 1);
         }
         for (const sun of this.suns) {
             sun.tick(elapsedMS);
+        }
+
+        const qt = new QuadTree<Star>(starSpaceTL, starSpaceBR);
+        this.qTree = qt;
+        for (const star of this.stars) {
+            qt.insert(star, radius);
+        }
+
+        for (const star of this.stars) {
+            const nearbyStarts = qt.query(star, radius);
+            for (const s of nearbyStarts) {
+                if (s.owner !== star.owner) {
+                    this.destroy(s);
+                    this.destroy(star)
+                    break;
+                }
+            }
         }
     }
 
@@ -127,7 +240,8 @@ class Sun implements Renderable {
     private _candidateOwner?: Player;
     private _owner?: Player;
     private _rotation: number = Math.random() * Math.PI * 2;
-    private _health: number = 0;
+    private rotationSpeed = Math.PI / 80000;
+    private _health: number = 100;
     private _upgrade: number = 0;
 
     render: Function;
@@ -154,7 +268,7 @@ class Sun implements Renderable {
     }
 
     tick(elapsedMS: number) {
-        this._rotation += Math.PI / 30000 * elapsedMS;
+        this._rotation += this.rotationSpeed * elapsedMS;
     }
 
     hit(star: Star) {
@@ -237,7 +351,7 @@ class NullMover implements Mover {
 }
 
 class OrbitMover implements Mover {
-    private orbitSpeed = Math.random() * Math.PI * 2 / 4000;
+    private orbitSpeed = Math.random() * Math.PI * 2 / 40000;
     private orbitRotationOffset = Math.random() * Math.PI * 2;
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private positionNoise = targetOffsetNoise();
@@ -245,7 +359,7 @@ class OrbitMover implements Mover {
     constructor(readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
 
     evaluate(elapsedMS: number) {
-        this.orbitRotationOffset += this.orbitSpeed;
+        this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
         const target = {
             x: Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
             y: Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,

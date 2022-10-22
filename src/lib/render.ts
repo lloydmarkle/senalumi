@@ -2,7 +2,7 @@ import { type Point, distSqr } from './math';
 import { Game, constants } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
-
+import { Simple } from "pixi-cull"
 
 class Selector {
     mid: Point = { x:0, y:0 };
@@ -175,6 +175,21 @@ export function run(game: Game) {
     viewport.addChild(flashContainer);
     viewport.addChild(interactionContainer);
 
+    let qTree = new PIXI.Graphics();
+    let b = new PIXI.Container();
+    b.addChild(qTree);
+    viewport.addChild(b);
+
+    // const cull = new Simple();
+    // cull.addList(viewport.children);
+    // cull.cull(viewport.getVisibleBounds());
+    // app.ticker.add(() => {
+    //     if (viewport.dirty) {
+    //         cull.cull(viewport.getVisibleBounds());
+    //         viewport.dirty = false;
+    //     }
+    // });
+
     for (const sun of game.suns) {
         const sprite = PIXI.Sprite.from(sunTexture);
         sunsContainer.addChild(sprite);
@@ -204,11 +219,33 @@ export function run(game: Game) {
     basicText.style.fill = 0xffffff;
     app.stage.addChild(basicText)
 
+    let last = new Date();
     app.ticker.add((delta) => {
         basicText.text = app.ticker.FPS.toFixed(2) + ' fps\n'
             + app.ticker.elapsedMS.toFixed(2) + 'ms';
-        game.tick(app.ticker.elapsedMS * 8);
-        // game.tick(app.ticker.elapsedMS);
+        // game.tick(app.ticker.elapsedMS * 8);
+        game.tick(app.ticker.elapsedMS);
+
+        const now = new Date();
+        if (game.qTree && now.getTime() - last.getTime() > 500) {
+            last = now;
+            qTree.removeChildren();
+            qTree.clear();
+            qTree.lineStyle(3, 0x00ffaa);
+
+            let q: any[] = [];
+            q.push(game.qTree);
+            while (q.length){
+                const qt = q.shift();
+                qt.chidlren?.forEach(c => q.push(c));
+                const t = new PIXI.Text(qt.data.length);
+                t.x = (qt.topLeft.x + qt.bottomRight.x) / 2;
+                t.y = (qt.topLeft.y + qt.bottomRight.y) / 2;
+                t.style.fill = 0x00dddd;
+                qTree.addChild(t);
+                qTree.drawRect(qt.topLeft.x, qt.topLeft.y, qt.bottomRight.x - qt.topLeft.x, qt.bottomRight.y - qt.topLeft.y);
+            }
+        }
 
         for (const sun of game.suns) {
             sun.render();
@@ -253,7 +290,6 @@ export function run(game: Game) {
                 sprite.y = star.position.y;
 
                 sprite.tint = isPlayerStar(star) ? 0xaaaaaa : star.owner.starColor;
-                // sprite.tint =  0xaaaaaa;
             };
             sprite.anchor.set(0.5, 0.5);
         }
