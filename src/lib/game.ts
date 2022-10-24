@@ -1,15 +1,15 @@
-import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, vectorLength, type Point } from "./math";
+import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from "./math";
 
+const gameSpeed = 1;
 const maxStarVelocity = 0.015;
-const maxStars = 1000;
+const maxStars = 3000;
 const forceStiffness = 0.0000005;
 const forceDamping = 0.0004;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
-const targetOffsetNoise = (): Point => ({
-    x: Math.random() * 20 - 10,
-    y: Math.random() * 20 - 10,
-})
-export const constants = { maxStarVelocity, maxStars, forceStiffness, forceDamping };
+const targetOffsetNoise = () => point(
+    Math.random() * 20 - 10,
+    Math.random() * 20 - 10);
+export const constants = { maxStarVelocity, maxStars, forceStiffness, forceDamping, gameSpeed };
 
 export type Team = 'red' | 'green' | 'blue';
 
@@ -25,94 +25,6 @@ class Player {
     }
 }
 
-// Mostly based on https://en.wikipedia.org/wiki/Quadtree
-// but adapted for circles (xy + radius) based on some suggestions
-// from https://gamedev.stackexchange.com/questions/175799
-class QuadTree<T extends { position: Point }> {
-    chidlren: QuadTree<T>[];
-    data: T[] = [];
-    constructor(readonly topLeft: Point, readonly bottomRight: Point, readonly capacity = 10) {
-        if (topLeft.x > bottomRight.x || topLeft.y > bottomRight.y)  {
-            throw ['invalid tree',topLeft,bottomRight]
-        }
-    }
-
-    private contains(t: T, radius: number) {
-        return (t.position.x - radius) > this.topLeft.x && (t.position.x + radius) < this.bottomRight.x
-            && (t.position.y - radius) > this.topLeft.y && (t.position.y + radius) < this.bottomRight.y;
-    }
-
-    insert(t: T, radius: number) {
-        if (!this.contains(t, radius)) {
-            return false;
-        }
-
-        if (this.data.length < this.capacity) {
-            this.data.push(t);
-            return true;
-        }
-
-        this.subdivide(radius);
-        return this.insertData(t, radius);
-    }
-
-    private insertData(t: T, radius: number) {
-        let inserted = this.chidlren
-            .reduce((acc, child) => acc = acc || child.insert(t, radius), false);
-        if (!inserted) {
-            // point stradles a boundary(?) so allow it to overfill this tree
-            this.data.push(t);
-        }
-        return inserted;
-    }
-
-    private subdivide(radius: number) {
-        if (this.chidlren) {
-            return;
-        }
-        const { x: left, y: top } = this.topLeft;
-        const { x: right, y: bottom } = this.bottomRight;
-        const halfx = (left + right) / 2;
-        const halfy = (top + bottom) / 2;
-        this.chidlren = [
-            new QuadTree({ x: left, y: top }, { x: halfx, y: halfy }),
-            new QuadTree({ x: halfx, y: top }, { x: right, y: halfy }),
-            new QuadTree({ x: halfx, y: halfy }, { x: right, y: bottom }),
-            new QuadTree({ x: left, y: halfy }, { x: halfx, y: bottom }),
-        ];
-
-        // push points to children
-        let data = this.data;
-        this.data = [];
-        for (const d of data) {
-            this.insertData(d, radius);
-        }
-    }
-
-    query(t: T, radius: number): T[] {
-        const result: T[] = [];
-        if (!this.contains(t, radius)) {
-            return result;
-        }
-
-        this.appendPoints(result, t, radius);
-        this.chidlren?.forEach(child => child.appendPoints(result, t, radius));
-        return result;
-    }
-
-    private appendPoints(results: T[], t: T, radius: number) {
-        if (!this.contains(t, radius)) {
-            return;
-        }
-        const r2 = radius * radius;
-        for (const d of this.data) {
-            if (distSqr(d.position, t.position) < r2) {
-                results.push(d);
-            }
-        }
-    }
-}
-
 export class Game {
     flashes: Flash[];
     suns: Sun[];
@@ -121,7 +33,6 @@ export class Game {
     gameTime = 0.0;
     lastTick = 0.0;
     pulsed = 0;
-    qTree: QuadTree<Star>;
 
     constructor() {
         this.flashes = [];
@@ -130,7 +41,7 @@ export class Game {
             new Sun(this, point(0, 0), 3),
             new Sun(this, point(200, 600), 3),
             new Sun(this, point(600, 100), 3),
-            new Sun(this, point(300, 300), 3),
+            // new Sun(this, point(300, 300), 3),
         ];
         this.players = [
             new Player('blue', 0x0000aa),
@@ -142,12 +53,15 @@ export class Game {
         this.suns[1].capture(this.players[1]);
         this.suns[2].capture(this.players[2]);
 
-        for (let i = 0; i < 100; i++){
+        const initialStars = 100;
+        // const initialStars = maxStars;
+        for (let i = 0; i < initialStars; i++){
             this.pulse();
         }
     }
 
-    tick(elapsedMS: number) {
+    tick(ms: number) {
+        const elapsedMS = ms * gameSpeed;
         this.gameTime = this.gameTime + elapsedMS;
 
         const seconds = Math.floor(this.gameTime / 1000);
@@ -156,7 +70,7 @@ export class Game {
             this.pulse();
         }
 
-        const radius = 5;
+        const radius = 8;
         const starSpaceTL = originPoint();
         const starSpaceBR = originPoint();
         for (const flash of this.flashes) {
@@ -173,20 +87,36 @@ export class Game {
             sun.tick(elapsedMS);
         }
 
-        const qt = new QuadTree<Star>(starSpaceTL, starSpaceBR);
-        this.qTree = qt;
+        // _way_ more efficient to use a separate tree per team
+        // TODO: don't throw away trees every frame? (high gc load?)
+        const treeSize = 10;
+        const quadTrees = {
+            'red': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
+            'green': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
+            'blue': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
+        }
         for (const star of this.stars) {
-            qt.insert(star, radius);
+            quadTrees[star.owner.id].insert(star, radius);
         }
 
         for (const star of this.stars) {
-            const nearbyStarts = qt.query(star, radius);
-            for (const s of nearbyStarts) {
-                if (s.owner !== star.owner) {
-                    this.destroy(s);
-                    this.destroy(star)
-                    break;
+            for (const [team, tree] of Object.entries(quadTrees)) {
+                if (team === star.owner.id) {
+                    continue;
                 }
+                this.collideStars(star, radius, tree);
+            }
+        }
+    }
+
+    private collideStars(star: Star, radius: number, qt: QuadTree<Star>) {
+        const r2 = radius * radius;
+        const nearbyStarts = qt.query(star, radius);
+        for (const s of nearbyStarts) {
+            if (distSqr(s.position, star.position) < r2) {
+                this.destroy(s);
+                this.destroy(star)
+                return;
             }
         }
     }
@@ -231,7 +161,7 @@ export class Game {
     destroy(star: Star) {
         this.stars = this.stars.filter(s => s !== star);
         this.flashes.push(new Flash(this, star.position, star.velocity));
-        star.destroy();
+        star.destroy?.();
     }
 }
 
@@ -272,6 +202,7 @@ class Sun implements Renderable {
     }
 
     hit(star: Star) {
+        // kind of a mess...
         if (!this.owner) {
             if (!this._candidateOwner) {
                 this._candidateOwner = star.owner;
@@ -351,7 +282,7 @@ class NullMover implements Mover {
 }
 
 class OrbitMover implements Mover {
-    private orbitSpeed = Math.random() * Math.PI * 2 / 40000;
+    private orbitSpeed = Math.random() * Math.PI * 2 * 0.000025 + (Math.PI * 2 * 0.00001);
     private orbitRotationOffset = Math.random() * Math.PI * 2;
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private positionNoise = targetOffsetNoise();
@@ -360,10 +291,9 @@ class OrbitMover implements Mover {
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
-        const target = {
-            x: Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
-            y: Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,
-        };
+        const target = point(
+            Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
+            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x);
         this.star.updateVelocity(target, elapsedMS * this.moveNoise);
         return this;
     }
@@ -377,10 +307,7 @@ class PointMover implements Mover {
     evaluate(elapsedMS: number) {
         // why compute this every frame? If this.target is a reference to a sun, then
         // the sun could be moving so we have a moving target
-        const target = {
-            x: this.target.x + this.positionNoise.x,
-            y: this.target.y + this.positionNoise.y,
-        }
+        const target = point(this.target.x + this.positionNoise.x, this.target.y + this.positionNoise.y);
         this.star.updateVelocity(target, elapsedMS * this.moveNoise);
         return this;
     }
@@ -399,10 +326,10 @@ class MoveSequence implements Mover {
 }
 
 class Star implements Renderable {
-    readonly position: Point;
     render: Function;
     destroy: Function;
     mover: Mover;
+    readonly position: Point;
     readonly velocity: Point;
 
     constructor(readonly owner: Player, position: Point) {
@@ -411,10 +338,7 @@ class Star implements Renderable {
         const angle = Math.random() * Math.PI * 2;
         this.mover = new NullMover();
         const speed = Math.random() * maxStarVelocity;
-        this.velocity = {
-            x: Math.cos(angle) * speed,
-            y: Math.sin(angle) * speed,
-        };
+        this.velocity = point(Math.cos(angle) * speed, Math.sin(angle) * speed);
     }
 
     tick(elapsedMS: number) {
@@ -425,10 +349,7 @@ class Star implements Renderable {
 
     updateVelocity(target: Point, rate: number) {
         // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
-        const direction = {
-            x: target.x - this.position.x,
-            y: target.y - this.position.y,
-        }
+        const direction = point(target.x - this.position.x, target.y - this.position.y);
         normalizeVector(direction);
 
         const targetVelocity = copyPoint(direction);

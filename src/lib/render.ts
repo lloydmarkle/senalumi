@@ -175,11 +175,6 @@ export function run(game: Game) {
     viewport.addChild(flashContainer);
     viewport.addChild(interactionContainer);
 
-    let qTree = new PIXI.Graphics();
-    let b = new PIXI.Container();
-    b.addChild(qTree);
-    viewport.addChild(b);
-
     // const cull = new Simple();
     // cull.addList(viewport.children);
     // cull.cull(viewport.getVisibleBounds());
@@ -208,9 +203,8 @@ export function run(game: Game) {
             sprite.y = sun.position.y;
             sprite.filters = sun.owner ? [teamColours[sun.owner.id]] : [greyTeamMatrix];
         };
-
         sprite.anchor.set(0.5, 0.5);
-        sprite.interactive = true;
+        sun.render();
     }
 
     const basicText = new PIXI.Text('');
@@ -225,27 +219,6 @@ export function run(game: Game) {
             + app.ticker.elapsedMS.toFixed(2) + 'ms';
         // game.tick(app.ticker.elapsedMS * 8);
         game.tick(app.ticker.elapsedMS);
-
-        const now = new Date();
-        if (game.qTree && now.getTime() - last.getTime() > 500) {
-            last = now;
-            qTree.removeChildren();
-            qTree.clear();
-            qTree.lineStyle(3, 0x00ffaa);
-
-            let q: any[] = [];
-            q.push(game.qTree);
-            while (q.length){
-                const qt = q.shift();
-                qt.chidlren?.forEach(c => q.push(c));
-                const t = new PIXI.Text(qt.data.length);
-                t.x = (qt.topLeft.x + qt.bottomRight.x) / 2;
-                t.y = (qt.topLeft.y + qt.bottomRight.y) / 2;
-                t.style.fill = 0x00dddd;
-                qTree.addChild(t);
-                qTree.drawRect(qt.topLeft.x, qt.topLeft.y, qt.bottomRight.x - qt.topLeft.x, qt.bottomRight.y - qt.topLeft.y);
-            }
-        }
 
         for (const sun of game.suns) {
             sun.render();
@@ -268,6 +241,7 @@ export function run(game: Game) {
                 sprite.y = flash.position.y;
             };
             sprite.anchor.set(0.5, 0.5);
+            flash.render();
         }
 
         for (const star of game.stars) {
@@ -280,9 +254,7 @@ export function run(game: Game) {
             let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
             const sprite = PIXI.Sprite.from(starTexture);
             starsContainer.addChild(sprite);
-            star.destroy = () => {
-                starsContainer.removeChild(sprite);
-            }
+            star.destroy = () => starsContainer.removeChild(sprite);
             star.render = () => {
                 rotation += rotationSpeed * app.ticker.elapsedMS;
                 sprite.rotation = rotation;
@@ -292,6 +264,7 @@ export function run(game: Game) {
                 sprite.tint = isPlayerStar(star) ? 0xaaaaaa : star.owner.starColor;
             };
             sprite.anchor.set(0.5, 0.5);
+            star.render();
         }
     });
 }
