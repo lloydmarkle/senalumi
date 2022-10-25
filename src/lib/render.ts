@@ -98,7 +98,7 @@ export function run(game: Game) {
     }
 
     const player = game.players[0];
-    const isPlayerStar = (star: any) =>  selector.contains(star.position);
+    const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
     app = new PIXI.Application({
         view: document.querySelector("#game") as HTMLCanvasElement,
         autoDensity: true,
@@ -139,13 +139,13 @@ export function run(game: Game) {
     }
 
     // Create the sprite and add it to the stage
-    let starTexture = PIXI.Texture.from('star.png');
-    let sunTexture = PIXI.Texture.from('sun.png');
+    let satelliteTexture = PIXI.Texture.from('star.png');
+    let planetTexture = PIXI.Texture.from('sun.png');
 
     let bgContainer = new PIXI.Container();
-    let sunsContainer = new PIXI.Container();
-    let starsContainer = new PIXI.ParticleContainer(constants.maxStars, { rotation: true, tint: true });
-    let flashContainer = new PIXI.ParticleContainer(constants.maxStars, { scale: true, rotation: true, alpha: true });
+    let planetContainer = new PIXI.Container();
+    let satellieContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
+    let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
     let interactionContainer = new PIXI.Container();
 
     viewport.plugins.pause('drag');
@@ -162,16 +162,16 @@ export function run(game: Game) {
     viewport.on('pointerup', ev => {
         if (selector.mode === 'none') {
             const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            const selectedStars = game.stars.filter(isPlayerStar);
-            game.moveStars(player, selectedStars, point);
+            const selection = game.satellites.filter(isPlayerSatellite);
+            game.moveSatellites(player, selection, point);
         }
         selector.pointerup();
     });
     // app.ticker.maxFPS = 10;
 
     viewport.addChild(bgContainer);
-    viewport.addChild(sunsContainer);
-    viewport.addChild(starsContainer);
+    viewport.addChild(planetContainer);
+    viewport.addChild(satellieContainer);
     viewport.addChild(flashContainer);
     viewport.addChild(interactionContainer);
 
@@ -185,26 +185,26 @@ export function run(game: Game) {
     //     }
     // });
 
-    for (const sun of game.suns) {
-        const sprite = PIXI.Sprite.from(sunTexture);
-        sunsContainer.addChild(sprite);
+    for (const planet of game.planets) {
+        const sprite = PIXI.Sprite.from(planetTexture);
+        planetContainer.addChild(sprite);
 
         const text = new PIXI.Text('');
         text.style.fill = 0xffffff;
-        text.position.x = sun.position.x;
-        text.position.y = sun.position.y;
-        sunsContainer.addChild(text)
-        sun.destroy = () => sunsContainer.removeChild(sprite);
-        sun.render = () => {
-            text.text = sun.health + ':' + sun.upgrade + (sun.candidateOwner?.id[0] ?? '') + ':' + sun.level;
-            sprite.rotation = sun.rotation;
-            sprite.scale.set(sun.radius);
-            sprite.x = sun.position.x;
-            sprite.y = sun.position.y;
-            sprite.filters = sun.owner ? [teamColours[sun.owner.id]] : [greyTeamMatrix];
+        text.position.x = planet.position.x;
+        text.position.y = planet.position.y;
+        planetContainer.addChild(text)
+        planet.destroy = () => planetContainer.removeChild(sprite);
+        planet.render = () => {
+            text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
+            sprite.rotation = planet.rotation;
+            sprite.scale.set(planet.radius);
+            sprite.x = planet.position.x;
+            sprite.y = planet.position.y;
+            sprite.filters = planet.owner ? [teamColours[planet.owner.id]] : [greyTeamMatrix];
         };
         sprite.anchor.set(0.5, 0.5);
-        sun.render();
+        planet.render();
     }
 
     const basicText = new PIXI.Text('');
@@ -220,8 +220,8 @@ export function run(game: Game) {
         // game.tick(app.ticker.elapsedMS * 8);
         game.tick(app.ticker.elapsedMS);
 
-        for (const sun of game.suns) {
-            sun.render();
+        for (const planet of game.planets) {
+            planet.render();
         }
 
         for (const flash of game.flashes) {
@@ -230,7 +230,7 @@ export function run(game: Game) {
                 continue;
             }
 
-            const sprite = PIXI.Sprite.from(starTexture);
+            const sprite = PIXI.Sprite.from(satelliteTexture);
             flashContainer.addChild(sprite);
             flash.destroy = () => flashContainer.removeChild(sprite);
             flash.render = () => {
@@ -244,27 +244,27 @@ export function run(game: Game) {
             flash.render();
         }
 
-        for (const star of game.stars) {
-            if (star.render) {
-                star.render();
+        for (const satellite of game.satellites) {
+            if (satellite.render) {
+                satellite.render();
                 continue;
             }
 
             let rotation = Math.random() * Math.PI * 2;
             let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
-            const sprite = PIXI.Sprite.from(starTexture);
-            starsContainer.addChild(sprite);
-            star.destroy = () => starsContainer.removeChild(sprite);
-            star.render = () => {
+            const sprite = PIXI.Sprite.from(satelliteTexture);
+            satellieContainer.addChild(sprite);
+            satellite.destroy = () => satellieContainer.removeChild(sprite);
+            satellite.render = () => {
                 rotation += rotationSpeed * app.ticker.elapsedMS;
                 sprite.rotation = rotation;
-                sprite.x = star.position.x;
-                sprite.y = star.position.y;
+                sprite.x = satellite.position.x;
+                sprite.y = satellite.position.y;
 
-                sprite.tint = isPlayerStar(star) ? 0xaaaaaa : star.owner.starColor;
+                sprite.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
             };
             sprite.anchor.set(0.5, 0.5);
-            star.render();
+            satellite.render();
         }
     });
 }

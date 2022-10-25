@@ -1,15 +1,15 @@
 import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from "./math";
 
 const gameSpeed = 1;
-const maxStarVelocity = 0.015;
-const maxStars = 3000;
+const maxSatelliteVelocity = 0.015;
+const maxSatellites = 3000;
 const forceStiffness = 0.0000005;
 const forceDamping = 0.0004;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
-export const constants = { maxStarVelocity, maxStars, forceStiffness, forceDamping, gameSpeed };
+export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed };
 
 export type Team = 'red' | 'green' | 'blue';
 
@@ -19,16 +19,49 @@ interface Renderable {
 }
 
 class Player {
-    readonly starColor: number;
+    readonly satelliteColor: number;
     constructor(readonly id: Team, readonly color: number) {
-        this.starColor  = color | 0x777777;
+        this.satelliteColor  = color | 0x777777;
+    }
+}
+
+interface AIConfig {
+    // time between evaluating the map
+    thinkTime: number;
+    // move satellites between planets
+    transferChance: number;
+    // upgrade a planet
+    upgradeChance: number;
+    // attack the closest, weakest, enemy
+    attackChance: number;
+    // conquer a vacant planet
+    conquerChance: number;
+}
+class AI {
+    private elapsedFromLastThink: number
+    constructor(readonly player: Player, readonly game: Game, readonly config: AIConfig) {}
+
+    tick(ms: number) {
+        this.elapsedFromLastThink += ms;
+        if (this.elapsedFromLastThink < this.config.thinkTime) {
+            return;
+        }
+        this.elapsedFromLastThink = 0;
+
+        const satellites = this.game.satellites.filter(e => e.owner === this.player);
+        const planets = this.game.planets.filter(e => e.owner === this.player);
+
+        // Do I have enough satellites to conquer a planet?
+        // Can I upgrade? Should I?
+        // Do I have enough satellites to attack someone else?
+        // Am I under attack and need to setup defense?
     }
 }
 
 export class Game {
     flashes: Flash[];
-    suns: Sun[];
-    stars: Star[];
+    planets: Planet[];
+    satellites: Satellite[];
     players: Player[];
     gameTime = 0.0;
     lastTick = 0.0;
@@ -36,12 +69,12 @@ export class Game {
 
     constructor() {
         this.flashes = [];
-        this.stars = [];
-        this.suns = [
-            new Sun(this, point(0, 0), 3),
-            new Sun(this, point(200, 600), 3),
-            new Sun(this, point(600, 100), 3),
-            // new Sun(this, point(300, 300), 3),
+        this.satellites = [];
+        this.planets = [
+            new Planet(this, point(0, 0), 3),
+            new Planet(this, point(200, 600), 3),
+            new Planet(this, point(600, 100), 3),
+            new Planet(this, point(300, 300), 3),
         ];
         this.players = [
             new Player('blue', 0x0000aa),
@@ -49,13 +82,13 @@ export class Game {
             new Player('red', 0xaa0000),
         ];
 
-        this.suns[0].capture(this.players[0]);
-        this.suns[1].capture(this.players[1]);
-        this.suns[2].capture(this.players[2]);
+        this.planets[0].capture(this.players[0]);
+        this.planets[1].capture(this.players[1]);
+        this.planets[2].capture(this.players[2]);
 
-        const initialStars = 100;
-        // const initialStars = maxStars;
-        for (let i = 0; i < initialStars; i++){
+        const initialSatellites = 100;
+        // const initialSatellites = maxSatellites;
+        for (let i = 0; i < initialSatellites; i++){
             this.pulse();
         }
     }
@@ -71,102 +104,102 @@ export class Game {
         }
 
         const radius = 8;
-        const starSpaceTL = originPoint();
-        const starSpaceBR = originPoint();
+        const spaceTL = originPoint();
+        const spaceBR = originPoint();
         for (const flash of this.flashes) {
             flash.tick(elapsedMS);
         }
-        for (const star of this.stars) {
-            star.tick(elapsedMS);
-            starSpaceTL.x = Math.min(starSpaceTL.x, star.position.x - radius - 1);
-            starSpaceTL.y = Math.min(starSpaceTL.y, star.position.y - radius - 1);
-            starSpaceBR.x = Math.max(starSpaceBR.x, star.position.x + radius + 1);
-            starSpaceBR.y = Math.max(starSpaceBR.y, star.position.y + radius + 1);
+        for (const sat of this.satellites) {
+            sat.tick(elapsedMS);
+            spaceTL.x = Math.min(spaceTL.x, sat.position.x - radius - 1);
+            spaceTL.y = Math.min(spaceTL.y, sat.position.y - radius - 1);
+            spaceBR.x = Math.max(spaceBR.x, sat.position.x + radius + 1);
+            spaceBR.y = Math.max(spaceBR.y, sat.position.y + radius + 1);
         }
-        for (const sun of this.suns) {
-            sun.tick(elapsedMS);
+        for (const planet of this.planets) {
+            planet.tick(elapsedMS);
         }
 
         // _way_ more efficient to use a separate tree per team
         // TODO: don't throw away trees every frame? (high gc load?)
         const treeSize = 10;
         const quadTrees = {
-            'red': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
-            'green': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
-            'blue': new QuadTree<Star>(starSpaceTL, starSpaceBR, treeSize),
+            'red': new QuadTree<Satellite>(spaceTL, spaceBR, treeSize),
+            'green': new QuadTree<Satellite>(spaceTL, spaceBR, treeSize),
+            'blue': new QuadTree<Satellite>(spaceTL, spaceBR, treeSize),
         }
-        for (const star of this.stars) {
-            quadTrees[star.owner.id].insert(star, radius);
+        for (const sat of this.satellites) {
+            quadTrees[sat.owner.id].insert(sat, radius);
         }
 
-        for (const star of this.stars) {
+        for (const sat of this.satellites) {
             for (const [team, tree] of Object.entries(quadTrees)) {
-                if (team === star.owner.id) {
+                if (team === sat.owner.id) {
                     continue;
                 }
-                this.collideStars(star, radius, tree);
+                this.collideSatellites(sat, radius, tree);
             }
         }
     }
 
-    private collideStars(star: Star, radius: number, qt: QuadTree<Star>) {
+    private collideSatellites(satellite: Satellite, radius: number, qt: QuadTree<Satellite>) {
         const r2 = radius * radius;
-        const nearbyStarts = qt.query(star, radius);
-        for (const s of nearbyStarts) {
-            if (distSqr(s.position, star.position) < r2) {
-                this.destroy(s);
-                this.destroy(star)
+        const nearbySatellites = qt.query(satellite, radius);
+        for (const sat of nearbySatellites) {
+            if (distSqr(sat.position, satellite.position) < r2) {
+                this.destroy(sat);
+                this.destroy(satellite)
                 return;
             }
         }
     }
 
-    moveStars(player: Player, stars: Star[], point: Point) {
-        for (const sun of this.suns) {
-            const ds = distSqr(sun.position, point);
+    moveSatellites(player: Player, satellites: Satellite[], point: Point) {
+        for (const planet of this.planets) {
+            const ds = distSqr(planet.position, point);
             if (ds < 400) {
-                stars.forEach(s => s.mover = new MoveSequence(s, [
-                    [new PointMover(s, sun.position), () => arrived(s, sun.position)],
-                    [new SunMover(s, sun), () => arrived(s, sun.position)],
-                    [new OrbitMover(s, sun), () => false],
+                satellites.forEach(s => s.mover = new MoveSequence([
+                    [new PointMover(s, planet.position), () => arrived(s, planet.position)],
+                    [new PlanetMover(s, planet), () => arrived(s, planet.position)],
+                    [new OrbitMover(s, planet), () => false],
                 ]));
                 return;
             }
         }
-        stars.forEach(s => s.mover = new MoveSequence(s, [
+        satellites.forEach(s => s.mover = new MoveSequence([
             [new PointMover(s, point), () => arrived(s, point)],
             [new OrbitMover(s, { orbitDistance: Math.random() * 20, position: point }), () => false],
         ]));
     }
 
     private pulse() {
-        if (this.stars.length >= maxStars) {
+        if (this.satellites.length >= maxSatellites) {
             return;
         }
-        for (const sun of this.suns) {
-            if (sun.owner) {
-                for (let i = 0; i < sun.level; i++) {
-                    this.spawnStar(sun);
+        for (const planet of this.planets) {
+            if (planet.owner) {
+                for (let i = 0; i < planet.level; i++) {
+                    this.spawnSatellite(planet);
                 }
             }
         }
     }
 
-    private spawnStar(sun: Sun) {
-        const star = new Star(sun.owner, sun.position);
-        star.mover = new OrbitMover(star, sun);
-        this.stars.push(star);
+    private spawnSatellite(planet: Planet) {
+        const sat = new Satellite(planet.owner, planet.position);
+        sat.mover = new OrbitMover(sat, planet);
+        this.satellites.push(sat);
     }
 
-    destroy(star: Star) {
-        this.stars = this.stars.filter(s => s !== star);
-        this.flashes.push(new Flash(this, star.position, star.velocity));
-        star.destroy?.();
+    destroy(satellite: Satellite) {
+        this.satellites = this.satellites.filter(s => s !== satellite);
+        this.flashes.push(new Flash(this, satellite.position, satellite.velocity));
+        satellite.destroy?.();
     }
 }
 
-type SunLevel = 0 | 1 | 2 | 3;
-class Sun implements Renderable {
+type PlanetLevel = 0 | 1 | 2 | 3;
+class Planet implements Renderable {
     private _candidateOwner?: Player;
     private _owner?: Player;
     private _rotation: number = Math.random() * Math.PI * 2;
@@ -176,7 +209,7 @@ class Sun implements Renderable {
 
     render: Function;
     destroy: Function;
-    level: SunLevel = 0;
+    level: PlanetLevel = 0;
     get rotation() { return this._rotation; }
     get owner(): Player | undefined { return this._owner; }
     get candidateOwner(): Player | undefined { return this._candidateOwner; }
@@ -187,7 +220,7 @@ class Sun implements Renderable {
     get health() { return this._health; }
     get upgrade() { return this._upgrade; }
 
-    constructor(readonly game: Game, readonly position: Point, readonly maxLevel: SunLevel) {}
+    constructor(readonly game: Game, readonly position: Point, readonly maxLevel: PlanetLevel) {}
 
     capture(owner: Player) {
         this._health = 100;
@@ -201,14 +234,14 @@ class Sun implements Renderable {
         this._rotation += this.rotationSpeed * elapsedMS;
     }
 
-    hit(star: Star) {
+    hit(sat: Satellite) {
         // kind of a mess...
         if (!this.owner) {
             if (!this._candidateOwner) {
-                this._candidateOwner = star.owner;
+                this._candidateOwner = sat.owner;
             }
-            this._upgrade += (this._candidateOwner === star.owner) ? 1 : -1;
-            star.destroy();
+            this._upgrade += (this._candidateOwner === sat.owner) ? 1 : -1;
+            sat.destroy();
 
             if (this._upgrade === 0) {
                 this._candidateOwner = null;
@@ -216,13 +249,13 @@ class Sun implements Renderable {
             if (this._upgrade === 100) {
                 this.capture(this._candidateOwner);
             }
-        } else if (star.owner === this.owner) {
+        } else if (sat.owner === this.owner) {
             if (this.level < this.maxLevel && this._health === 100) {
                 this._upgrade += 1;
-                this.game.destroy(star);
+                this.game.destroy(sat);
             } else if (this._health < 100) {
                 this._health += 1;
-                this.game.destroy(star);
+                this.game.destroy(sat);
             }
             if (this._upgrade === 100) {
                 this.level += 1;
@@ -230,7 +263,7 @@ class Sun implements Renderable {
             }
         } else {
             this._health -= 1;
-            this.game.destroy(star);
+            this.game.destroy(sat);
             if (this._health === 0) {
                 this.capture(null);
                 this.level = 0;
@@ -239,8 +272,8 @@ class Sun implements Renderable {
     }
 }
 
-const arrived = (star: Star, point: Point) => {
-    return distSqr(star.position, point) < 400;
+const arrived = (sat: Satellite, point: Point) => {
+    return distSqr(sat.position, point) < 400;
 }
 
 interface Mover {
@@ -248,28 +281,28 @@ interface Mover {
 }
 
 type Missions = 'hurt' | 'heal' | 'take' | 'upgrade' | 'none';
-class SunMover implements Mover {
+class PlanetMover implements Mover {
     private mission: Missions;
-    private sunLevel: SunLevel;
-    constructor(readonly star: Star, readonly sun: Sun) {
-        this.sunLevel = sun.level;
+    private planetLevel: PlanetLevel;
+    constructor(readonly satellite: Satellite, readonly planet: Planet) {
+        this.planetLevel = planet.level;
         this.mission = this.computeMission();
     }
 
     evaluate(elapsedMS: number) {
         const mission = this.computeMission();
         if (mission === this.mission) {
-            this.sun.hit(this.star);
+            this.planet.hit(this.satellite);
         }
         return this;
     }
 
     private computeMission(): Missions {
         return (
-            !this.sun.owner ? 'take'
-            : (this.star.owner !== this.sun.owner) ? 'hurt'
-            : (this.sun.health < 100) ? 'heal'
-            : (this.sun.upgrade < 100 && this.sunLevel === this.sun.level) ? 'upgrade'
+            !this.planet.owner ? 'take'
+            : (this.satellite.owner !== this.planet.owner) ? 'hurt'
+            : (this.planet.health < 100) ? 'heal'
+            : (this.planet.upgrade < 100 && this.planetLevel === this.planet.level) ? 'upgrade'
             : 'none'
         );
     }
@@ -287,14 +320,14 @@ class OrbitMover implements Mover {
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private positionNoise = targetOffsetNoise();
     private moveNoise = moveNoise();
-    constructor(readonly star: Star, readonly orbit: { orbitDistance: number, position: Point }) {}
+    constructor(readonly satellite: Satellite, readonly orbit: { orbitDistance: number, position: Point }) {}
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
         const target = point(
             Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
             Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x);
-        this.star.updateVelocity(target, elapsedMS * this.moveNoise);
+        this.satellite.updateVelocity(target, elapsedMS * this.moveNoise);
         return this;
     }
 }
@@ -302,20 +335,20 @@ class OrbitMover implements Mover {
 class PointMover implements Mover {
     private moveNoise = moveNoise();
     private positionNoise = targetOffsetNoise();
-    constructor(readonly star: Star, readonly target: Point) {}
+    constructor(readonly satellite: Satellite, readonly target: Point) {}
 
     evaluate(elapsedMS: number) {
-        // why compute this every frame? If this.target is a reference to a sun, then
-        // the sun could be moving so we have a moving target
+        // why compute this every frame? If this.target is a reference to a planet, then
+        // the planet could be moving so we have a moving target
         const target = point(this.target.x + this.positionNoise.x, this.target.y + this.positionNoise.y);
-        this.star.updateVelocity(target, elapsedMS * this.moveNoise);
+        this.satellite.updateVelocity(target, elapsedMS * this.moveNoise);
         return this;
     }
 }
 
 type MovePair = [Mover, () => boolean];
 class MoveSequence implements Mover {
-    constructor(readonly star: Star, readonly movers: MovePair[]) {}
+    constructor(readonly movers: MovePair[]) {}
     evaluate(elapsedMS: number) {
         if (this.movers[0][1]()) {
             this.movers.shift();
@@ -325,7 +358,7 @@ class MoveSequence implements Mover {
     }
 }
 
-class Star implements Renderable {
+class Satellite implements Renderable {
     render: Function;
     destroy: Function;
     mover: Mover;
@@ -337,7 +370,7 @@ class Star implements Renderable {
         this.position = copyPoint(position);
         const angle = Math.random() * Math.PI * 2;
         this.mover = new NullMover();
-        const speed = Math.random() * maxStarVelocity;
+        const speed = Math.random() * maxSatelliteVelocity;
         this.velocity = point(Math.cos(angle) * speed, Math.sin(angle) * speed);
     }
 
@@ -353,7 +386,7 @@ class Star implements Renderable {
         normalizeVector(direction);
 
         const targetVelocity = copyPoint(direction);
-        scaleVector(targetVelocity, maxStarVelocity);
+        scaleVector(targetVelocity, maxSatelliteVelocity);
 
         this.velocity.x += (forceStiffness * direction.x + forceDamping * (targetVelocity.x - this.velocity.x)) * rate;
         this.velocity.y += (forceStiffness * direction.y + forceDamping * (targetVelocity.y - this.velocity.y)) * rate;
