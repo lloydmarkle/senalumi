@@ -98,7 +98,8 @@ export function run(game: Game) {
     }
 
     const player = game.players[0];
-    const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
+    const isPlayerSatellite = (sat: any) => sat.owner === player && selector.contains(sat.position);
+    // const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
     app = new PIXI.Application({
         view: document.querySelector("#game") as HTMLCanvasElement,
         autoDensity: true,

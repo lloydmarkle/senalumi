@@ -18,6 +18,7 @@ export const normalizeVector = (p: Point) => scaleVector(p, 1 / vectorLength(p))
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
 
+const sinQuarterPi = Math.sin(Math.PI * 0.25);
 // Mostly based on https://en.wikipedia.org/wiki/Quadtree
 // but adapted for circles (xy + radius) based on some suggestions
 // from https://gamedev.stackexchange.com/questions/175799
@@ -30,27 +31,26 @@ export class QuadTree<T extends { position: Point }> {
         }
     }
 
-    private contains(t: T, radiusSqrt: number) {
+    private containsCorner(point: Point, cornerDist: number) {
         return (
-            this.containsPoint(t.position.x - radiusSqrt, t.position.y - radiusSqrt)
-            || this.containsPoint(t.position.x + radiusSqrt, t.position.y - radiusSqrt)
-            || this.containsPoint(t.position.x - radiusSqrt, t.position.y + radiusSqrt)
-            || this.containsPoint(t.position.x + radiusSqrt, t.position.y + radiusSqrt)
+            this.containsPoint(point.x - cornerDist, point.y - cornerDist)
+            || this.containsPoint(point.x + cornerDist, point.y - cornerDist)
+            || this.containsPoint(point.x - cornerDist, point.y + cornerDist)
+            || this.containsPoint(point.x + cornerDist, point.y + cornerDist)
         );
     }
 
     private containsPoint(x: number, y: number) {
         return x > this.topLeft.x && x < this.bottomRight.x
             && y > this.topLeft.y && y < this.bottomRight.y;
-
     }
 
     insert(t: T, radius: number) {
-        return this._insert(t, Math.sqrt(radius));
+        return this._insert(t, sinQuarterPi * radius);
     }
 
-    _insert(t: T, radiusSqrt: number) {
-        if (!this.contains(t, radiusSqrt)) {
+    _insert(t: T, cornerDist: number) {
+        if (!this.containsCorner(t.position, cornerDist)) {
             return false;
         }
 
@@ -64,15 +64,15 @@ export class QuadTree<T extends { position: Point }> {
         let data = this.data;
         this.data = [];
         for (const d of data) {
-            this.insertData(d, radiusSqrt);
+            this.insertData(d, cornerDist);
         }
 
-        return this.insertData(t, radiusSqrt);
+        return this.insertData(t, cornerDist);
     }
 
-    private insertData(t: T, radiusSqrt: number) {
+    private insertData(t: T, cornerDist: number) {
         let inserted = this.chidlren
-            .reduce((acc, child) => acc = acc || child._insert(t, radiusSqrt), false);
+            .reduce((acc, child) => acc = acc || child._insert(t, cornerDist), false);
         if (!inserted) {
             // point stradles a boundary(?) so allow it to overfill this tree
             this.data.push(t);
@@ -96,19 +96,24 @@ export class QuadTree<T extends { position: Point }> {
         ];
     }
 
-    query(t: T, radius: number): T[] {
+    query(point: Point, radius: number): T[] {
         const result: T[] = [];
-        this.appendPoints(result, t, Math.sqrt(radius));
+        this.appendPoints(result, point, sinQuarterPi * radius);
         return result;
     }
 
-    private appendPoints(results: T[], t: T, radiusSqrt: number) {
-        if (!this.contains(t, radiusSqrt)) {
+    private appendPoints(results: T[], point: Point, cornerDist: number) {
+        if (!this.containsCorner(point, cornerDist) && !this.covered(point, cornerDist)) {
             return;
         }
         for (const d of this.data) {
             results.push(d);
         }
-        this.chidlren?.forEach(child => child.appendPoints(results, t, radiusSqrt));
+        this.chidlren?.forEach(child => child.appendPoints(results, point, cornerDist));
+    }
+
+    private covered(point: Point, cornerDist: number) {
+        return (point.x - cornerDist) < this.topLeft.x && (point.x + cornerDist) > this.bottomRight.x
+            && (point.y - cornerDist) < this.topLeft.y && (point.y + cornerDist) > this.bottomRight.y;
     }
 }
