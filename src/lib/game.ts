@@ -1,8 +1,11 @@
 import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from "./math";
+import { hex, hsl } from 'color-convert';
 
-const gameSpeed = 4;
+const minWorld = -10000;
+const maxWorld = 10000;
+const gameSpeed = 12;
 const maxSatelliteVelocity = 0.015;
-const maxSatellites = 5000;
+const maxSatellites = 10000;
 const forceStiffness = 0.0000005;
 const forceDamping = 0.0004;
 // sprite is (currently) 300px
@@ -26,7 +29,12 @@ abstract class Player {
     satelliteTree: QuadTree<Satellite>;
     readonly satelliteColor: number;
     constructor(readonly game: Game, readonly id: Team, readonly color: number) {
-        this.satelliteColor  = color | 0x777777;
+        const c1 = hex.hsl(color.toString(16));
+        c1[2] = 50;
+        this.color = parseInt(hsl.hex(c1), 16);
+        const c2 = hex.hsl(color.toString(16));
+        c2[2] = 75;
+        this.satelliteColor = parseInt(hsl.hex(c2), 16);
     }
 
     abstract tick(ms: number): void;
@@ -44,6 +52,8 @@ interface AIConfig {
     thinkTimeMS: number;
     // min satellites before moving
     minSatellies: number;
+    // chance to heal
+    healChance: number;
     // move satellites between planets
     transferChance: number;
     // upgrade a planet
@@ -70,8 +80,17 @@ class AIPlayer extends Player {
         this.elapsedFromLastThink = 0;
 
         // take action based on the satellites around each planet
-        // TODO do I have stars near an open planet?
         const planets = this.game.planets.filter(e => e.owner === this);
+        // const unownedPlanets = this.game.planets.filter(e => !e.owner);
+        // for (const planet of unownedPlanets) {
+        //     const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3);
+        //     if (sats.length < this.config.minSatellies && Math.random() > this.config.conquerChance) {
+        //         // planets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
+        //         this.moveToPlanet(satellites, planet);
+        //     }
+        // }
+
+        // TODO do I have stars near an open planet?
         for (const planet of planets) {
             // *1.3 because of orbitDistanceOffset
             const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3);
@@ -91,17 +110,19 @@ class AIPlayer extends Player {
         // TODO Am I under attack and need to setup defense?
         const canUpgrade = planet.level < planet.maxLevel;
         const openPlanets = this.game.planets.filter(p => !p.owner);
-        const enemyPlanets = this.game.planets.filter(p => p.owner !== this);
+        const enemyPlanets = this.game.planets.filter(p => p.owner && p.owner !== this);
 
-        if (canUpgrade && Math.random() > this.config.upgradeChance) {
+        if (canUpgrade && Math.random() < this.config.upgradeChance) {
             this.moveToPlanet(satellites, planet);
-        } else if(openPlanets.length && Math.random() > this.config.conquerChance) {
+        } else if(planet.health < 100 && Math.random() < this.config.healChance) {
+            this.moveToPlanet(satellites, planet);
+        } else if(openPlanets.length && Math.random() < this.config.conquerChance) {
             openPlanets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
             this.moveToPlanet(satellites, openPlanets[0]);
-        } else if (enemyPlanets.length && Math.random() > this.config.attackChance) {
+        } else if (enemyPlanets.length && Math.random() < this.config.attackChance) {
             enemyPlanets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
             this.moveToPlanet(satellites, enemyPlanets[0]);
-        } else if (planets.length && Math.random() > this.config.transferChance) {
+        } else if (planets.length && Math.random() < this.config.transferChance) {
             planets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
             this.moveToPlanet(satellites, planets[0]);
         }
@@ -156,7 +177,7 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
     for (let i = 0; i < colours; i++) {
         const angle = Math.PI * 2 * (i / colours);
         const position = point(Math.cos(angle) * worldSize, Math.sin(angle) * worldSize);
-        planets.push(new Planet(game, position, 4));
+        planets.push(new Planet(game, position, 3));
         tree.insert(planets[planets.length - 1], planetRadius);
     }
     for (let i = 0; i < (colours * 0.5); i++) {
@@ -166,7 +187,7 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
     }
     for (let i = 0; i < colours; i++) {
         const position = positionPlanet();
-        planets.push(new Planet(game, position, 2));
+        planets.push(new Planet(game, position, 1));
         tree.insert(planets[planets.length - 1], planetRadius);
     }
     return  planets;
@@ -184,27 +205,29 @@ export class Game {
     constructor() {
         this.flashes = [];
         this.satellites = [];
-        this.planets = generateWorld(this, 7, 1000);
 
         const aiStats: AIConfig = {
             thinkTimeMS: 5000,
-            minSatellies: 120,
-            attackChance: 0.7,
-            conquerChance: 0.5,
-            transferChance: 0.4,
-            upgradeChance: 0.6,
+            minSatellies: 110,
+            healChance: 0.95,
+            attackChance: 0.40,
+            conquerChance: 0.45,
+            transferChance: 0.85,
+            upgradeChance: 0.65,
         };
         this.players = [
             // new HumanPlayer('blue', 0xDE3163),
-            new AIPlayer(this, 'red', 0xD22B2B, aiStats),
-            new AIPlayer(this, 'orange', 0xFFA500, aiStats),
+            new AIPlayer(this, 'red', 0xD2042D, aiStats),
+            new AIPlayer(this, 'orange', 0xCC5500, aiStats),
             new AIPlayer(this, 'yellow', 0xFFF44F, aiStats),
             new AIPlayer(this, 'green', 0x7CFC00, aiStats),
             new AIPlayer(this, 'blue', 0x1111DD, aiStats),
-            new AIPlayer(this, 'violet', 0x7f00ff, aiStats),
-            new AIPlayer(this, 'pink', 0xDE3163, aiStats),
+            new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
+            new AIPlayer(this, 'pink', 0xFF10F0, aiStats),
         ]
         this.players.forEach((player, i) => this.planets[i].capture(player));
+
+        this.planets = generateWorld(this, this.players.length, 1000);
 
         const initialSatellites = 100;
         // const initialSatellites = maxSatellites;
@@ -227,6 +250,11 @@ export class Game {
             flash.tick(elapsedMS);
         }
         for (const sat of this.satellites) {
+            if (sat.position.x < minWorld || sat.position.x > maxWorld || sat.position.y < minWorld || sat.position.y > maxWorld) {
+                console.warn('sat oob', sat);
+                this.destroy(sat);
+                continue;
+            }
             sat.tick(elapsedMS);
         }
         for (const planet of this.planets) {
@@ -347,7 +375,7 @@ class Planet implements Renderable {
                 this._candidateOwner = sat.owner;
             }
             this._upgrade += (this._candidateOwner === sat.owner) ? 1 : -1;
-            sat.destroy();
+            this.game.destroy(sat);
 
             if (this._upgrade === 0) {
                 this._candidateOwner = null;

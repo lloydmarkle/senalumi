@@ -116,13 +116,15 @@ export function run(game: Game) {
         interaction: app.renderer.plugins.interaction,
     });
     app.stage.addChild(viewport);
-    // activate plugins
-    viewport.moveCenter(300,300)
     viewport
         .drag()
         .pinch()
         .wheel()
         .decelerate();
+
+    // activate plugins
+    viewport.moveCenter(0, 0);
+    viewport.setZoom(.4);
 
     let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
     greyTeamMatrix.tint(0x222222, true);
@@ -206,13 +208,41 @@ export function run(game: Game) {
     basicText.x = 50;
     basicText.y = 100;
     basicText.style.fill = 0xffffff;
+    basicText.scale.set(0.5);
     app.stage.addChild(basicText)
 
     let last = new Date();
+    let fps = 0;
+    let frames = 0;
     app.ticker.add((delta) => {
-        basicText.text = app.ticker.FPS.toFixed(2) + ' fps\n'
-            + app.ticker.elapsedMS.toFixed(2) + 'ms';
-        // game.tick(app.ticker.elapsedMS * 8);
+        const now = new Date();
+        frames += 1;
+        fps += app.ticker.FPS;
+        if (now.getTime() - last.getTime() > 500) {
+            last = now;
+
+            const sats = game.satellites.reduce((map, s) => {
+                map[s.owner.id] = (map[s.owner.id] ?? 0) + 1;
+                return map;
+            }, {});
+            const planets = game.planets.reduce((map, p) => {
+                if (p.owner) {
+                    map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
+                }
+                return map;
+            }, {});
+            const stats = Object.keys(sats)
+                .sort((a, b) => sats[b] - sats[a])
+                .map(team => `${team}: ${sats[team]} satellites, ${planets[team] ?? 0}/s`);
+            basicText.text = [
+                (fps / frames).toFixed(2) + 'fps',
+                game.satellites.length + ' satellites',
+                'stats: [', stats.join('\n'), ']',
+            ].join('\n');
+            fps = 0;
+            frames = 0;
+        }
+
         game.tick(app.ticker.elapsedMS);
 
         for (const planet of game.planets) {
