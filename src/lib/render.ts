@@ -124,20 +124,14 @@ export function run(game: Game) {
         .wheel()
         .decelerate();
 
-    let greenTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-    greenTeamMatrix.tint(0x00aa00, true);
-    let blueTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-    blueTeamMatrix.tint(0x0000ff, true);
-    let redTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-    redTeamMatrix.tint(0xaa0000, true);
     let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
     greyTeamMatrix.tint(0x222222, true);
-
-    let teamColours = {
-        'red': redTeamMatrix,
-        'blue': blueTeamMatrix,
-        'green': greenTeamMatrix,
-    }
+    let teamColours = game.players.reduce((map, player) => {
+        let filter = new PIXI.filters.ColorMatrixFilter();
+        filter.tint(player.color, true);
+        map[player.id] = filter;
+        return map;
+    }, {})
 
     // Create the sprite and add it to the stage
     let satelliteTexture = PIXI.Texture.from('star.png');
