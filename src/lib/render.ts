@@ -1,5 +1,5 @@
-import { type Point, distSqr } from './math';
-import { Game, constants } from './game';
+import { type Point, distSqr, QuadTree } from './math';
+import { Game, constants, type Player, setLightness } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
@@ -91,136 +91,26 @@ class Selector {
     }
 }
 
-export function run(game: Game) {
-    let app: PIXI.Application;
-    if (import.meta.hot && app) {
-        app.destroy(true, { baseTexture: true, children: true, texture: true });
-    }
+class DebugRender {
+    private overlayInfo = {
+        lastTime: new Date(),
+        fps: 0,
+        frames: 0,
+    };
+    private dbg: PIXI.Container;
+    private updateOverlayText: Function;
+    private dbgFns: Function[] = [];
+    updateFrequencyMS = 500;
 
-    const player = game.players[0];
-    const isPlayerSatellite = (sat: any) => sat.owner === player && selector.contains(sat.position);
-    // const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
-    app = new PIXI.Application({
-        view: document.querySelector("#game") as HTMLCanvasElement,
-        autoDensity: true,
-        resizeTo: window,
-    });
+    constructor(private game: Game, container: PIXI.Container, gameview: PIXI.Container) {
+        const overlayText = new PIXI.Text('');
+        overlayText.x = 50;
+        overlayText.y = 100;
+        overlayText.style.fill = 0xffffff;
+        overlayText.scale.set(0.5);
+        container.addChild(overlayText);
 
-    // create viewport
-    const viewport = new Viewport({
-        screenWidth: window.innerWidth,
-        screenHeight: window.innerHeight,
-        worldWidth: 100000,
-        worldHeight: 100000,
-        // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
-        interaction: app.renderer.plugins.interaction,
-    });
-    app.stage.addChild(viewport);
-    viewport
-        .drag()
-        .pinch()
-        .wheel()
-        .decelerate();
-
-    // activate plugins
-    viewport.moveCenter(0, 0);
-    viewport.setZoom(.4);
-
-    let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-    greyTeamMatrix.tint(0x222222, true);
-    let teamColours = game.players.reduce((map, player) => {
-        let filter = new PIXI.filters.ColorMatrixFilter();
-        filter.tint(player.color, true);
-        map[player.id] = filter;
-        return map;
-    }, {})
-
-    // Create the sprite and add it to the stage
-    let satelliteTexture = PIXI.Texture.from('star.png');
-    let planetTexture = PIXI.Texture.from('sun.png');
-
-    let bgContainer = new PIXI.Container();
-    let planetContainer = new PIXI.Container();
-    let satellieContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
-    let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
-    let interactionContainer = new PIXI.Container();
-
-    viewport.plugins.pause('drag');
-    let selector = new Selector(viewport);
-    interactionContainer.addChild(selector.gfx);
-    viewport.on('pointerdown', ev => {
-        const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        selector.pointerdown(point);
-    });
-    viewport.on('pointermove', ev => {
-        const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        selector.pointermove(point);
-    });
-    viewport.on('pointerup', ev => {
-        if (selector.mode === 'none') {
-            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            const selection = game.satellites.filter(isPlayerSatellite);
-            game.moveSatellites(player, selection, point);
-        }
-        selector.pointerup();
-    });
-    // app.ticker.maxFPS = 10;
-
-    viewport.addChild(bgContainer);
-    viewport.addChild(planetContainer);
-    viewport.addChild(satellieContainer);
-    viewport.addChild(flashContainer);
-    viewport.addChild(interactionContainer);
-
-    // const cull = new Simple();
-    // cull.addList(viewport.children);
-    // cull.cull(viewport.getVisibleBounds());
-    // app.ticker.add(() => {
-    //     if (viewport.dirty) {
-    //         cull.cull(viewport.getVisibleBounds());
-    //         viewport.dirty = false;
-    //     }
-    // });
-
-    for (const planet of game.planets) {
-        const sprite = PIXI.Sprite.from(planetTexture);
-        planetContainer.addChild(sprite);
-
-        const text = new PIXI.Text('');
-        text.style.fill = 0xffffff;
-        text.position.x = planet.position.x;
-        text.position.y = planet.position.y;
-        planetContainer.addChild(text)
-        planet.destroy = () => planetContainer.removeChild(sprite);
-        planet.render = () => {
-            text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
-            sprite.rotation = planet.rotation;
-            sprite.scale.set(planet.radius);
-            sprite.x = planet.position.x;
-            sprite.y = planet.position.y;
-            sprite.filters = planet.owner ? [teamColours[planet.owner.id]] : [greyTeamMatrix];
-        };
-        sprite.anchor.set(0.5, 0.5);
-        planet.render();
-    }
-
-    const basicText = new PIXI.Text('');
-    basicText.x = 50;
-    basicText.y = 100;
-    basicText.style.fill = 0xffffff;
-    basicText.scale.set(0.5);
-    app.stage.addChild(basicText)
-
-    let last = new Date();
-    let fps = 0;
-    let frames = 0;
-    app.ticker.add((delta) => {
-        const now = new Date();
-        frames += 1;
-        fps += app.ticker.FPS;
-        if (now.getTime() - last.getTime() > 500) {
-            last = now;
-
+        this.updateOverlayText = () => {
             const sats = game.satellites.reduce((map, s) => {
                 map[s.owner.id] = (map[s.owner.id] ?? 0) + 1;
                 return map;
@@ -234,68 +124,262 @@ export function run(game: Game) {
             const stats = Object.keys(sats)
                 .sort((a, b) => sats[b] - sats[a])
                 .map(team => `${team}: ${sats[team]} satellites, ${planets[team] ?? 0}/s`);
-            basicText.text = [
-                (fps / frames).toFixed(2) + 'fps',
+            overlayText.text = [
+                (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
                 game.satellites.length + ' satellites',
                 'stats: [', stats.join('\n'), ']',
             ].join('\n');
-            fps = 0;
-            frames = 0;
+            this.overlayInfo.fps = 0;
+            this.overlayInfo.frames = 0;
         }
 
-        game.tick(app.ticker.elapsedMS);
+        this.dbg = new PIXI.Container();
+        gameview.addChild(this.dbg);
+    }
+
+    tick(app: PIXI.Application) {
+        const now = new Date();
+        this.overlayInfo.frames += 1;
+        this.overlayInfo.fps += app.ticker.FPS;
+        if (now.getTime() - this.overlayInfo.lastTime.getTime() > this.updateFrequencyMS) {
+            this.overlayInfo.lastTime = now;
+            this.dbgFns.forEach(fn => fn());
+            this.updateOverlayText();
+        }
+    }
+
+    clear() {
+        this.dbgFns = [];
+        this.dbg.removeChildren();
+    }
+
+    quadTree(player: Player) {
+        let gfx = new PIXI.Graphics();
+        this.dbg.addChild(gfx);
+
+        this.dbgFns.push(() => {
+            gfx.clear();
+            gfx.removeChildren();
+            let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
+
+            let q: Array<[number, QuadTree<any>]> = [];
+            q.push([0, player.satelliteTree]);
+            while (q.length){
+                const [ci, item] = q.shift();
+                let color = colors[ci % colors.length];
+                item.chidlren?.forEach(e => q.push([ci + 1, e]));
+                gfx.lineStyle(4 / (ci + 1), color);
+                gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
+
+                // gfx.lineStyle(0.25, color);
+                // gfx.beginFill(color);
+                // item.data.forEach(e => gfx.drawCircle(e.position.x, e.position.y, this.game.constants.satelliteRadius));
+                // gfx.endFill();
+
+                const itemCount = new PIXI.Text(item.data.length);
+                itemCount.scale.set(0.25);
+                itemCount.x = (item.topLeft.x + item.bottomRight.x) / 2;
+                itemCount.y = (item.topLeft.y + item.bottomRight.y) / 2;
+                itemCount.style.fill = color;
+                gfx.addChild(itemCount);
+            }
+        });
+    }
+
+    planetSelections(player: Player) {
+        let gfx = new PIXI.Graphics();
+        this.dbg.addChild(gfx);
+
+        this.dbgFns.push(() => {
+            gfx.clear();
+            gfx.removeChildren();
+            gfx.lineStyle(0.5, setLightness(player.color, 90));
+
+            const planets = this.game.planets.filter(e => e.owner === player);
+            for (const planet of planets) {
+                gfx.drawCircle(planet.position.x, planet.position.y, this.game.constants.planetRadius * 1.3);
+                const sats = player.satelliteTree.query(planet.position, this.game.constants.planetRadius * 1.3);
+                sats.forEach(sat => gfx.drawCircle(sat.position.x, sat.position.y, this.game.constants.satelliteRadius));
+
+                const itemCount = new PIXI.Text(sats.length);
+                itemCount.x = planet.position.x;
+                itemCount.y = planet.position.y - 30;
+                itemCount.style.fill = setLightness(player.satelliteColor, 100);
+                gfx.addChild(itemCount);
+            }
+        });
+    }
+}
+
+export class Renderer {
+    readonly dbg: DebugRender;
+    readonly app: PIXI.Application;
+    constructor(game: Game) {
+        if (import.meta.hot && this.app) {
+            this.app.destroy(true, { baseTexture: true, children: true, texture: true });
+        }
+
+        const player = game.players[0];
+        const isPlayerSatellite = (sat: any) => sat.owner === player && selector.contains(sat.position);
+        // const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
+        let app = new PIXI.Application({
+            view: document.querySelector("#game") as HTMLCanvasElement,
+            autoDensity: true,
+            resizeTo: window,
+        });
+        this.app = app;
+
+        // create viewport
+        const viewport = new Viewport({
+            screenWidth: window.innerWidth,
+            screenHeight: window.innerHeight,
+            worldWidth: 100000,
+            worldHeight: 100000,
+            // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
+            interaction: app.renderer.plugins.interaction,
+        });
+        app.stage.addChild(viewport);
+        viewport
+            .drag()
+            .pinch()
+            .wheel()
+            .decelerate();
+
+        // activate plugins
+        viewport.moveCenter(0, 0);
+        viewport.setZoom(.4);
+
+        let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
+        greyTeamMatrix.tint(0x222222, true);
+        let teamColours = game.players.reduce((map, player) => {
+            let filter = new PIXI.filters.ColorMatrixFilter();
+            filter.tint(player.color, true);
+            map[player.id] = filter;
+            return map;
+        }, {})
+
+        // Create the sprite and add it to the stage
+        let satelliteTexture = PIXI.Texture.from('star.png');
+        let planetTexture = PIXI.Texture.from('sun.png');
+
+        let bgContainer = new PIXI.Container();
+        let planetContainer = new PIXI.Container();
+        let satellieContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
+        let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
+        let interactionContainer = new PIXI.Container();
+
+        let selector = new Selector(viewport);
+        interactionContainer.addChild(selector.gfx);
+        // viewport.plugins.pause('drag');
+        // viewport.on('pointerdown', ev => {
+        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        //     selector.pointerdown(point);
+        // });
+        // viewport.on('pointermove', ev => {
+        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        //     selector.pointermove(point);
+        // });
+        // viewport.on('pointerup', ev => {
+        //     if (selector.mode === 'none') {
+        //         const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        //         const selection = game.satellites.filter(isPlayerSatellite);
+        //         game.moveSatellites(player, selection, point);
+        //     }
+        //     selector.pointerup();
+        // });
+        // app.ticker.maxFPS = 10;
+
+        viewport.addChild(bgContainer);
+        viewport.addChild(planetContainer);
+        viewport.addChild(satellieContainer);
+        viewport.addChild(flashContainer);
+        viewport.addChild(interactionContainer);
+
+        // dbg view (always add this last)
+        this.dbg = new DebugRender(game, app.stage, viewport);
+
+        // const cull = new Simple();
+        // cull.addList(viewport.children);
+        // cull.cull(viewport.getVisibleBounds());
+        // app.ticker.add(() => {
+        //     if (viewport.dirty) {
+        //         cull.cull(viewport.getVisibleBounds());
+        //         viewport.dirty = false;
+        //     }
+        // });
 
         for (const planet of game.planets) {
+            const sprite = PIXI.Sprite.from(planetTexture);
+            planetContainer.addChild(sprite);
+
+            const text = new PIXI.Text('');
+            text.style.fill = 0xffffff;
+            text.position.x = planet.position.x;
+            text.position.y = planet.position.y;
+            planetContainer.addChild(text)
+            planet.destroy = () => planetContainer.removeChild(sprite);
+            planet.render = () => {
+                text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
+                sprite.rotation = planet.rotation;
+                sprite.scale.set(planet.radius);
+                sprite.x = planet.position.x;
+                sprite.y = planet.position.y;
+                sprite.filters = planet.owner ? [teamColours[planet.owner.id]] : [greyTeamMatrix];
+            };
+            sprite.anchor.set(0.5, 0.5);
             planet.render();
         }
 
-        for (const flash of game.flashes) {
-            if (flash.render) {
+        app.ticker.add((delta) => {
+            this.dbg.tick(app);
+            game.tick(app.ticker.elapsedMS);
+
+            for (const planet of game.planets) {
+                planet.render();
+            }
+
+            for (const flash of game.flashes) {
+                if (flash.render) {
+                    flash.render();
+                    continue;
+                }
+
+                const sprite = PIXI.Sprite.from(satelliteTexture);
+                flashContainer.addChild(sprite);
+                flash.destroy = () => flashContainer.removeChild(sprite);
+                flash.render = () => {
+                    sprite.rotation = flash.rotation;
+                    sprite.scale.set(flash.size);
+                    sprite.alpha = flash.alpha;
+                    sprite.x = flash.position.x;
+                    sprite.y = flash.position.y;
+                };
+                sprite.anchor.set(0.5, 0.5);
                 flash.render();
-                continue;
             }
 
-            const sprite = PIXI.Sprite.from(satelliteTexture);
-            flashContainer.addChild(sprite);
-            flash.destroy = () => flashContainer.removeChild(sprite);
-            flash.render = () => {
-                sprite.rotation = flash.rotation;
-                sprite.scale.set(flash.size);
-                sprite.alpha = flash.alpha;
-                sprite.x = flash.position.x;
-                sprite.y = flash.position.y;
-            };
-            sprite.anchor.set(0.5, 0.5);
-            flash.render();
-        }
+            for (const satellite of game.satellites) {
+                if (satellite.render) {
+                    satellite.render();
+                    continue;
+                }
 
-        for (const satellite of game.satellites) {
-            if (satellite.render) {
+                let rotation = Math.random() * Math.PI * 2;
+                let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
+                const sprite = PIXI.Sprite.from(satelliteTexture);
+                satellieContainer.addChild(sprite);
+                satellite.destroy = () => satellieContainer.removeChild(sprite);
+                satellite.render = () => {
+                    rotation += rotationSpeed * app.ticker.elapsedMS;
+                    sprite.rotation = rotation;
+                    sprite.x = satellite.position.x;
+                    sprite.y = satellite.position.y;
+
+                    sprite.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
+                };
+                sprite.anchor.set(0.5, 0.5);
                 satellite.render();
-                continue;
             }
-
-            let rotation = Math.random() * Math.PI * 2;
-            let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
-            const sprite = PIXI.Sprite.from(satelliteTexture);
-            satellieContainer.addChild(sprite);
-            satellite.destroy = () => satellieContainer.removeChild(sprite);
-            satellite.render = () => {
-                rotation += rotationSpeed * app.ticker.elapsedMS;
-                sprite.rotation = rotation;
-                sprite.x = satellite.position.x;
-                sprite.y = satellite.position.y;
-
-                sprite.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
-            };
-            sprite.anchor.set(0.5, 0.5);
-            satellite.render();
-        }
-    });
+        });
+    }
 }
-
-// const xstars = stars.reduce((m, s) => {
-//     let l = m[s.owner.id] ?? 0;
-//     m[s.owner.id] = l + 1;
-//     return m;
-// }, {})

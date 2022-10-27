@@ -46,7 +46,7 @@ export class QuadTree<T extends { position: Point }> {
     }
 
     insert(t: T, radius: number) {
-        return this._insert(t, sinQuarterPi * radius);
+        return this._insert(t, radius);
     }
 
     _insert(t: T, cornerDist: number) {
@@ -98,18 +98,18 @@ export class QuadTree<T extends { position: Point }> {
 
     query(point: Point, radius: number): T[] {
         const result: T[] = [];
-        this.appendPoints(result, point, sinQuarterPi * radius);
+        this.appendPoints(result, point, radius);
         return result;
     }
 
-    private appendPoints(results: T[], point: Point, cornerDist: number) {
-        if (!this.containsCorner(point, cornerDist) && !this.covered(point, cornerDist)) {
+    private appendPoints(results: T[], pt: Point, cornerDist: number) {
+        if (!this.containsCorner(pt, cornerDist) && !this.covered(pt, cornerDist)) {
             return;
         }
         for (const d of this.data) {
             results.push(d);
         }
-        this.chidlren?.forEach(child => child.appendPoints(results, point, cornerDist));
+        this.chidlren?.forEach(e => e.appendPoints(results, pt, cornerDist));
     }
 
     private covered(point: Point, cornerDist: number) {

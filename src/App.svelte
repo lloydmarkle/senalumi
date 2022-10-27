@@ -1,14 +1,27 @@
 <script lang="ts">
   import DebugInfo from "./lib/DebugInfo.svelte";
   import { Game } from './lib/game';
-  import { run } from './lib/render';
+  import { Renderer } from './lib/render';
 
   const game = new Game();
-  run(game);
+  (window as any)._game = game;
+  (window as any)._gfx = new Renderer(game);
+
+  let showDebug = false;
+  function keypress(ev: KeyboardEvent) {
+    if (ev.key === '`' || ev.key === '~') {
+      showDebug = !showDebug;
+      game.paused = showDebug;
+    }
+  }
 </script>
 
+<svelte:body on:keypress={keypress} />
+
 <main>
-  <!-- <DebugInfo {game} /> -->
+  {#if showDebug}
+    <DebugInfo />
+  {/if}
 </main>
 
 <style>

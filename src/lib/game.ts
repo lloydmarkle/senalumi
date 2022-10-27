@@ -16,7 +16,7 @@ const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
-export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed };
+export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed, satelliteRadius, planetRadius };
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
@@ -25,16 +25,17 @@ interface Renderable {
     destroy: Function;
 }
 
-abstract class Player {
+export const setLightness = (color: number, lightness: number) => {
+    const c = hex.hsl(color.toString(16));
+    c[2] = lightness;
+    return parseInt(hsl.hex(c), 16);
+}
+export abstract class Player {
     satelliteTree: QuadTree<Satellite>;
     readonly satelliteColor: number;
     constructor(readonly game: Game, readonly id: Team, readonly color: number) {
-        const c1 = hex.hsl(color.toString(16));
-        c1[2] = 50;
-        this.color = parseInt(hsl.hex(c1), 16);
-        const c2 = hex.hsl(color.toString(16));
-        c2[2] = 75;
-        this.satelliteColor = parseInt(hsl.hex(c2), 16);
+        this.color = setLightness(color, 50);
+        this.satelliteColor = setLightness(color, 75);
     }
 
     abstract tick(ms: number): void;
@@ -96,7 +97,7 @@ class AIPlayer extends Player {
             const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3);
             // we have 100 so we can do something...
             if (sats.length > this.config.minSatellies) {
-                this.takeAction(planets, planet, sats);
+                // this.takeAction(planets, planet, sats);
             }
         }
     }
@@ -151,10 +152,10 @@ const boundingBox = (satellites: Satellite[], radius: number) => {
     const spaceTL = copyPoint(satellites[0].position);
     const spaceBR = copyPoint(satellites[0].position);
     for (const sat of satellites) {
-        spaceTL.x = Math.min(spaceTL.x, sat.position.x - satelliteRadius - 1);
-        spaceTL.y = Math.min(spaceTL.y, sat.position.y - satelliteRadius - 1);
-        spaceBR.x = Math.max(spaceBR.x, sat.position.x + satelliteRadius + 1);
-        spaceBR.y = Math.max(spaceBR.y, sat.position.y + satelliteRadius + 1);
+        spaceTL.x = Math.min(spaceTL.x, sat.position.x - radius - 1);
+        spaceTL.y = Math.min(spaceTL.y, sat.position.y - radius - 1);
+        spaceBR.x = Math.max(spaceBR.x, sat.position.x + radius + 1);
+        spaceBR.y = Math.max(spaceBR.y, sat.position.y + radius + 1);
     }
     return { spaceTL, spaceBR };
 };
@@ -201,6 +202,8 @@ export class Game {
     gameTime = 0.0;
     lastTick = 0.0;
     pulsed = 0;
+    paused = false;
+    readonly constants = constants;
 
     constructor() {
         this.flashes = [];
@@ -218,16 +221,16 @@ export class Game {
         this.players = [
             // new HumanPlayer('blue', 0xDE3163),
             new AIPlayer(this, 'red', 0xD2042D, aiStats),
-            new AIPlayer(this, 'orange', 0xCC5500, aiStats),
-            new AIPlayer(this, 'yellow', 0xFFF44F, aiStats),
-            new AIPlayer(this, 'green', 0x7CFC00, aiStats),
-            new AIPlayer(this, 'blue', 0x1111DD, aiStats),
-            new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
-            new AIPlayer(this, 'pink', 0xFF10F0, aiStats),
+            // new AIPlayer(this, 'orange', 0xCC5500, aiStats),
+            // new AIPlayer(this, 'yellow', 0xFFF44F, aiStats),
+            // new AIPlayer(this, 'green', 0x7CFC00, aiStats),
+            // new AIPlayer(this, 'blue', 0x1111DD, aiStats),
+            // new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
+            // new AIPlayer(this, 'pink', 0xFF10F0, aiStats),
         ]
-        this.players.forEach((player, i) => this.planets[i].capture(player));
 
         this.planets = generateWorld(this, this.players.length, 1000);
+        this.players.forEach((player, i) => this.planets[i].capture(player));
 
         const initialSatellites = 100;
         // const initialSatellites = maxSatellites;
@@ -237,6 +240,9 @@ export class Game {
     }
 
     tick(ms: number) {
+        if (this.paused) {
+            return;
+        }
         const elapsedMS = ms * gameSpeed;
         this.gameTime = this.gameTime + elapsedMS;
 

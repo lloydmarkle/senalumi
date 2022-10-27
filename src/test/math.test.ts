@@ -21,6 +21,14 @@ describe('quad tree', () => {
         qt.insert(star(75, 75), radius);
         qPrint(qt);
 
-        console.log(qt.query({ position: point(3, 3) }, radius));
+        console.log(qt.query(point(3, 3), radius));
     });
 });
+
+
+/*
+
+_gfx.dbg.planetSelections(_game.players[0])
+_gfx.dbg.quadTree(_game.players[0])
+
+*/
