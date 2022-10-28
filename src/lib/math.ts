@@ -1,10 +1,4 @@
 import { create } from 'deepool';
-export function createPool<T>(creator: () => T) {
-    return create(creator) as {
-        use: () => T;
-        recycle: (item: T) => void;
-    };
-}
 
 export interface Point {
     x: number;
@@ -33,15 +27,11 @@ class Box {
     }
 
     intersectBox(box: Box) {
-        return this.intersect(box.left, box.top, box.right, box.bottom);
-    }
-
-    intersect(x1: number, y1: number, x2: number, y2: number) {
         return (
-            this.contains(x1, y1)
-            || this.contains(x2, y1)
-            || this.contains(x1, y2)
-            || this.contains(x2, y2)
+            this.contains(box.left, box.top)
+            || this.contains(box.right, box.top)
+            || this.contains(box.left, box.bottom)
+            || this.contains(box.right, box.bottom)
         );
     }
 
@@ -146,10 +136,10 @@ export class QuadTree<T extends { position: Point }> {
 
     query(point: Point, radius: number, fn: (t: T) => void) {
         const box = new Box(point.x - radius, point.y - radius, point.x + radius, point.y + radius);
-        this.appendPoints(box, fn);
+        this.findPoints(box, fn);
     }
 
-    private appendPoints(box: Box, fn: (t :T) => void) {
+    private findPoints(box: Box, fn: (t :T) => void) {
         if (!this.box) {
             return;
         }
@@ -157,12 +147,73 @@ export class QuadTree<T extends { position: Point }> {
             return;
         }
         if (this.nw) {
-            this.nw.appendPoints(box, fn);
-            this.ne.appendPoints(box, fn);
-            this.se.appendPoints(box, fn);
-            this.sw.appendPoints(box, fn);
+            this.nw.findPoints(box, fn);
+            this.ne.findPoints(box, fn);
+            this.se.findPoints(box, fn);
+            this.sw.findPoints(box, fn);
         } else {
             this.data.forEach(fn);
+        }
+    }
+}
+
+
+interface Pool<T> {
+    use: () => T;
+    recycle: (item: T) => void;
+}
+function createPool<T>(creator: () => T): Pool<T> {
+    return create(creator);
+}
+
+export class ArrayPool<T> {
+    private pool: Pool<T>;
+    private items: T[] = [];
+    private count = 0;
+
+    constructor(itemFactory: () => T) {
+        this.pool = createPool(itemFactory);
+    }
+
+    forEach(fn: (item: T) => void) {
+        this.items.forEach(e => {
+            if (e) {
+                fn(e);
+            }
+        });
+    }
+
+    get length () { return this.count; }
+
+    take() {
+        const sat = this.pool.use();
+        const idx = this.items.findIndex(e => !e);
+        if (idx === -1) {
+            this.grow();
+            this.items[this.count] = sat;
+        } else {
+            this.items[idx] = sat;
+        }
+        this.count += 1;
+        return sat;
+    }
+
+    release(item: T) {
+        const idx = this.items.findIndex(e => e === item);
+        if (idx === -1) {
+            return false;
+        }
+        this.items[idx] = null;
+        this.count -= 1;
+        this.pool.recycle(item);
+        return true;
+    }
+
+    private grow() {
+        let len = this.items.length;
+        this.items.length += (len ?? 10);
+        for (let i = len; i < this.items.length; i++) {
+            this.items[i] = null;
         }
     }
 }

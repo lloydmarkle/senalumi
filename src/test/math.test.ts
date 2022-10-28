@@ -1,3 +1,4 @@
+import { removeItems } from '@pixi/utils';
 import { type Point, QuadTree, point } from '../lib/math.js';
 
 type Star = { position: Point };
@@ -24,7 +25,9 @@ describe('quad tree', () => {
         // qt.insert(star(575, 75), radius);
         qPrint(qt);
 
-        console.log(qt.query(point(3, 3), radius));
+        const items = [];
+        qt.query(point(3, 3), radius, e => items.push(e));
+        console.log(items);
     });
 });
 

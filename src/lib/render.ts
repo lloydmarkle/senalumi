@@ -133,34 +133,38 @@ class DebugRender {
 
     showOverlayInfo() {
         this.dbgFns.push(() => {
-            const sats = this.game.satellites.reduce((map, s) => {
-                map[s.owner.id] = (map[s.owner.id] ?? 0) + 1;
-                return map;
-            }, {});
+            const satStats = {};
+            this.game.satellites.forEach(sat => {
+                satStats[sat.owner.id] = (satStats[sat.owner.id] ?? 0) + 1;
+            });
             const planets = this.game.planets.reduce((map, p) => {
                 if (p.owner) {
                     map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
                 }
                 return map;
             }, {});
-            const stats = Object.keys(sats)
-                .sort((a, b) => sats[b] - sats[a])
-                .map(team => `${team}: ${sats[team]} satellites, ${planets[team] ?? 0}/s`);
+            const stats = Object.keys(satStats)
+                .sort((a, b) => satStats[b] - satStats[a])
+                .map(team => `${team}: ${satStats[team]} satellites, ${planets[team] ?? 0}/s`);
 
             const perfStats = [];
-            this.game.players.forEach(player => {
-                perfStats.push(`${player.id}: ${this.game.stats.playerTime[player.id]}ms think, ${this.game.stats.collisionTime[player.id]}ms collide`);
+            Object.keys(this.game.stats.playerTime).forEach(player => {
+                perfStats.push(`${player}: ${this.game.stats.playerTime[player].toFixed(2)}ms think, ${this.game.stats.collisionTime[player].toFixed(2)}ms collide`);
             });
             Object.keys(this.game.stats.collisionStages).forEach(stage => {
-                perfStats.push(`collision-${stage}: ${this.game.stats.collisionStages[stage]}`);
+                perfStats.push(`collision-${stage}: ${this.game.stats.collisionStages[stage].toFixed(2)}`);
             });
-            perfStats.push(`moveTime: ${this.game.stats.moveTime}ms`);
+            perfStats.push(`moveTime: ${this.game.stats.moveTime.toFixed(2)}ms`);
+            perfStats.push(`collideTime: ${this.game.stats.collideTime.toFixed(2)}ms`);
+            perfStats.push(`pulseTime: ${this.game.stats.pulseTime.toFixed(2)}ms`);
+            perfStats.push(`thinkTime: ${this.game.stats.thinkTime.toFixed(2)}ms`);
+            perfStats.push(`gameTime: ${this.game.stats.gameTime.toFixed(2)}ms`);
 
             this.overlayText.text = [
                 (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
                 this.game.satellites.length + ' satellites',
-                'stats: [', stats.join('\n'), ']',
-                'perf: [', perfStats.join('\n'), ']',
+                'stats: [', '  ' + stats.join('\n  '), ']',
+                'perf: [', '  ' + perfStats.join('\n  '), ']',
             ].join('\n');
             this.overlayInfo.fps = 0;
             this.overlayInfo.frames = 0;
@@ -255,8 +259,18 @@ export class Renderer {
             .decelerate();
 
         // activate plugins
+        viewport.clampZoom({
+            maxScale: 1.8,
+            minScale: 0.2,
+        })
+        viewport.clamp({
+            top: -game.constants.maxWorld,
+            bottom: game.constants.maxWorld,
+            left: -game.constants.maxWorld,
+            right: game.constants.maxWorld,
+        })
         viewport.moveCenter(0, 0);
-        viewport.setZoom(.4);
+        viewport.setZoom(0.4);
 
         let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
         greyTeamMatrix.tint(0x222222, true);
@@ -367,10 +381,10 @@ export class Renderer {
                 flash.render();
             }
 
-            for (const satellite of game.satellites) {
+            game.satellites.forEach(satellite => {
                 if (satellite.render) {
                     satellite.render();
-                    continue;
+                    return;
                 }
 
                 let rotation = Math.random() * Math.PI * 2;
@@ -388,7 +402,7 @@ export class Renderer {
                 };
                 sprite.anchor.set(0.5, 0.5);
                 satellite.render();
-            }
+            });
         });
     }
 }
