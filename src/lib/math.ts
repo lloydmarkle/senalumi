@@ -17,40 +17,44 @@ export const normalizeVector = (p: Point) => scaleVector(p, 1 / vectorLength(p))
 
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
+class Box {
+    constructor(readonly x1: number, readonly y1: number, readonly x2: number, readonly y2: number) {
+        if (x1 > x2 || y1 > y2)  {
+            throw new Error('invalid box ' + JSON.stringify({ x1, y1, x2, y2 }));
+        }
+    }
 
-const sinQuarterPi = Math.sin(Math.PI * 0.25);
+    intersectBox(box: Box) {
+        return this.intersect(box.x1, box.y1, box.x2, box.y2);
+    }
+
+    intersect(x1: number, y1: number, x2: number, y2: number) {
+        return (
+            this.contains(x1, y1)
+            || this.contains(x2, y1)
+            || this.contains(x1, y2)
+            || this.contains(x2, y2)
+        );
+    }
+
+    contains(x: number, y: number) {
+        return x > this.x1 && x < this.x2 && y > this.y1 && y < this.y2;
+    }
+}
+
 // Mostly based on https://en.wikipedia.org/wiki/Quadtree
 // but adapted for circles (xy + radius) based on some suggestions
 // from https://gamedev.stackexchange.com/questions/175799
 export class QuadTree<T extends { position: Point }> {
+    private box: Box;
     chidlren: QuadTree<T>[];
     data: T[] = [];
     constructor(readonly topLeft: Point, readonly bottomRight: Point, readonly capacity = 10) {
-        if (topLeft.x > bottomRight.x || topLeft.y > bottomRight.y)  {
-            throw new Error('invalid tree ' + JSON.stringify([topLeft, bottomRight]));
-        }
-    }
-
-    private containsCorner(point: Point, cornerDist: number) {
-        return (
-            this.containsPoint(point.x - cornerDist, point.y - cornerDist)
-            || this.containsPoint(point.x + cornerDist, point.y - cornerDist)
-            || this.containsPoint(point.x - cornerDist, point.y + cornerDist)
-            || this.containsPoint(point.x + cornerDist, point.y + cornerDist)
-        );
-    }
-
-    private containsPoint(x: number, y: number) {
-        return x > this.topLeft.x && x < this.bottomRight.x
-            && y > this.topLeft.y && y < this.bottomRight.y;
+        this.box = new Box(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y);
     }
 
     insert(t: T, radius: number) {
-        return this._insert(t, radius);
-    }
-
-    _insert(t: T, cornerDist: number) {
-        if (!this.containsCorner(t.position, cornerDist)) {
+        if (!this.box.intersect(t.position.x - radius, t.position.y - radius, t.position.x + radius, t.position.y - radius)) {
             return false;
         }
 
@@ -64,15 +68,15 @@ export class QuadTree<T extends { position: Point }> {
         let data = this.data;
         this.data = [];
         for (const d of data) {
-            this.insertData(d, cornerDist);
+            this.insertData(d, radius);
         }
 
-        return this.insertData(t, cornerDist);
+        return this.insertData(t, radius);
     }
 
-    private insertData(t: T, cornerDist: number) {
+    private insertData(t: T, radius: number) {
         let inserted = this.chidlren
-            .reduce((acc, child) => acc = acc || child._insert(t, cornerDist), false);
+            .reduce((acc, child) => acc = acc || child.insert(t, radius), false);
         if (!inserted) {
             // point stradles a boundary(?) so allow it to overfill this tree
             this.data.push(t);
@@ -98,22 +102,18 @@ export class QuadTree<T extends { position: Point }> {
 
     query(point: Point, radius: number): T[] {
         const result: T[] = [];
-        this.appendPoints(result, point, radius);
+        const box = new Box(point.x - radius, point.y - radius, point.x + radius, point.y + radius);
+        this.appendPoints(result, box);
         return result;
     }
 
-    private appendPoints(results: T[], pt: Point, cornerDist: number) {
-        if (!this.containsCorner(pt, cornerDist) && !this.covered(pt, cornerDist)) {
+    private appendPoints(results: T[], box: Box) {
+        if (!this.box.intersectBox(box) && !box.intersectBox(this.box)) {
             return;
         }
         for (const d of this.data) {
             results.push(d);
         }
-        this.chidlren?.forEach(e => e.appendPoints(results, pt, cornerDist));
-    }
-
-    private covered(point: Point, cornerDist: number) {
-        return (point.x - cornerDist) < this.topLeft.x && (point.x + cornerDist) > this.bottomRight.x
-            && (point.y - cornerDist) < this.topLeft.y && (point.y + cornerDist) > this.bottomRight.y;
+        this.chidlren?.forEach(e => e.appendPoints(results, box));
     }
 }

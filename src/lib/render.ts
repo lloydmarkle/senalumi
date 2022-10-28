@@ -171,11 +171,6 @@ class DebugRender {
                 gfx.lineStyle(4 / (ci + 1), color);
                 gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
 
-                // gfx.lineStyle(0.25, color);
-                // gfx.beginFill(color);
-                // item.data.forEach(e => gfx.drawCircle(e.position.x, e.position.y, this.game.constants.satelliteRadius));
-                // gfx.endFill();
-
                 const itemCount = new PIXI.Text(item.data.length);
                 itemCount.scale.set(0.25);
                 itemCount.x = (item.topLeft.x + item.bottomRight.x) / 2;
@@ -197,8 +192,8 @@ class DebugRender {
 
             const planets = this.game.planets.filter(e => e.owner === player);
             for (const planet of planets) {
-                gfx.drawCircle(planet.position.x, planet.position.y, this.game.constants.planetRadius * 1.3);
-                const sats = player.satelliteTree.query(planet.position, this.game.constants.planetRadius * 1.3);
+                gfx.drawCircle(planet.position.x, planet.position.y, this.game.constants.planetRadius);
+                const sats = player.selection(planet);
                 sats.forEach(sat => gfx.drawCircle(sat.position.x, sat.position.y, this.game.constants.satelliteRadius));
 
                 const itemCount = new PIXI.Text(sats.length);

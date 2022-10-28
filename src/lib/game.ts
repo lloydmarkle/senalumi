@@ -39,6 +39,13 @@ export abstract class Player {
     }
 
     abstract tick(ms: number): void;
+
+    selection(planet: Planet) {
+        const radiusSqr = planetRadius * planetRadius;
+        const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3)
+            .filter(sat => distSqr(sat.position, planet.position) < radiusSqr);
+        return sats;
+    }
 }
 
 class HumanPlayer extends Player {
@@ -93,11 +100,10 @@ class AIPlayer extends Player {
 
         // TODO do I have stars near an open planet?
         for (const planet of planets) {
-            // *1.3 because of orbitDistanceOffset
-            const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3);
+            const sats = this.selection(planet);
             // we have 100 so we can do something...
             if (sats.length > this.config.minSatellies) {
-                // this.takeAction(planets, planet, sats);
+                this.takeAction(planets, planet, sats);
             }
         }
     }
@@ -210,7 +216,7 @@ export class Game {
         this.satellites = [];
 
         const aiStats: AIConfig = {
-            thinkTimeMS: 5000,
+            thinkTimeMS: 10000,
             minSatellies: 110,
             healChance: 0.95,
             attackChance: 0.40,
@@ -221,12 +227,12 @@ export class Game {
         this.players = [
             // new HumanPlayer('blue', 0xDE3163),
             new AIPlayer(this, 'red', 0xD2042D, aiStats),
-            // new AIPlayer(this, 'orange', 0xCC5500, aiStats),
-            // new AIPlayer(this, 'yellow', 0xFFF44F, aiStats),
-            // new AIPlayer(this, 'green', 0x7CFC00, aiStats),
-            // new AIPlayer(this, 'blue', 0x1111DD, aiStats),
-            // new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
-            // new AIPlayer(this, 'pink', 0xFF10F0, aiStats),
+            new AIPlayer(this, 'orange', 0xCC5500, aiStats),
+            new AIPlayer(this, 'yellow', 0xFFF44F, aiStats),
+            new AIPlayer(this, 'green', 0x7CFC00, aiStats),
+            new AIPlayer(this, 'blue', 0x1111DD, aiStats),
+            new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
+            new AIPlayer(this, 'pink', 0xFF10F0, aiStats),
         ]
 
         this.planets = generateWorld(this, this.players.length, 1000);
