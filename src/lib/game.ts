@@ -1,6 +1,42 @@
 import { hex, hsl } from 'color-convert';
 import { createPool, copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from './math';
 
+export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
+
+type CollisionStages = 'distance' | 'destroy1' | 'destroy2' | 'filter' | 'remove';
+type TeamStats = { [key in Team]?: number };
+class Stats {
+    public collisionStages: { [key in CollisionStages]?: number } = {};
+    public collisionTime: TeamStats = {};
+    public playerTime: TeamStats = {};
+    public moveTime: number;
+
+    markStart(team: Team, field: TeamStats) {
+        return this.timeField(team, field);
+    }
+
+    collideTimer(stage: CollisionStages) {
+        return this.timeField(stage, this.collisionStages);
+    }
+
+    private timeField(key: string, field: any) {
+        let elapsed = this.timer();
+        return () => field[key] = (field[key] ?? 0) + elapsed();
+    }
+
+    timer() {
+        let start = performance.now();
+        return () => (performance.now() - start);
+    }
+
+    clear() {
+        this.collisionStages = {};
+        this.collisionTime = {};
+        this.playerTime = {};
+        this.moveTime = 0;
+    }
+}
+
 const pulseRate = 5; // stars per pulse
 const minWorld = -10000;
 const maxWorld = 10000;
@@ -21,8 +57,6 @@ export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, 
 
 const satellitePool = createPool(() => new Satellite());
 const flashPool = createPool(() => new Flash());
-
-export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
 interface Renderable {
     render: Function;
@@ -198,6 +232,7 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
 }
 
 export class Game {
+    stats = new Stats();
     flashes: Flash[];
     planets: Planet[];
     satellites: Satellite[];
@@ -248,6 +283,7 @@ export class Game {
         }
         const elapsedMS = ms * gameSpeed;
         this.gameTime = this.gameTime + elapsedMS;
+        this.stats.clear();
 
         const seconds = Math.floor(this.gameTime / 1000);
         if (seconds > this.lastTick) {
@@ -255,6 +291,7 @@ export class Game {
             this.pulse();
         }
 
+        const moveTimer = this.stats.timer();
         this.planets.forEach(planet => planet.tick(elapsedMS));
         this.flashes.forEach(flash => flash.tick(elapsedMS));
         this.satellites.forEach(sat => {
@@ -264,17 +301,24 @@ export class Game {
             }
             sat.tick(elapsedMS);
         });
+        this.stats.moveTime = moveTimer();
 
         // needs to be after satellites otherwise the quad trees explode
         // TODO: don't throw away trees every frame? (high gc load?)
-        this.players.forEach(player => player.tick(elapsedMS));
+        this.players.forEach(player => {
+            let timer = this.stats.markStart(player.id, this.stats.playerTime);
+            player.tick(elapsedMS);
+            timer();
+        });
 
         for (const sat of this.satellites) {
             for (const player of this.players) {
                 if (player === sat.owner) {
                     continue;
                 }
+                let timer = this.stats.markStart(player.id, this.stats.collisionTime);
                 this.collideSatellites(sat, satelliteRadius, player.satelliteTree);
+                timer();
             }
         }
     }
@@ -282,9 +326,17 @@ export class Game {
     private collideSatellites(satellite: Satellite, radius: number, qt: QuadTree<Satellite>) {
         const r2 = radius * radius;
         qt.query(satellite.position, radius, sat => {
-            if (distSqr(sat.position, satellite.position) < r2) {
+            const distTimer = this.stats.collideTimer('distance');
+            const dist = distSqr(sat.position, satellite.position);
+            distTimer();
+
+            if (dist < r2) {
+                const d1 = this.stats.collideTimer('destroy1');
                 this.destroy(sat);
+                d1();
+                const d2 = this.stats.collideTimer('destroy2');
                 this.destroy(satellite);
+                d2();
             }
         });
     }
@@ -327,13 +379,17 @@ export class Game {
     }
 
     destroy(satellite: Satellite) {
+        const filter = this.stats.collideTimer('filter');
         const len = this.satellites.length;
         this.satellites = this.satellites.filter(s => s !== satellite);
+        filter();
         // TODO: can we not destry a satellite multiple times?
         if (len !== this.satellites.length) {
+            const remove = this.stats.collideTimer('remove');
             satellitePool.recycle(satellite);
             this.flashes.push(flashPool.use().init(this, satellite.position, satellite.velocity));
             satellite.destroy?.();
+            remove();
         }
     }
 }

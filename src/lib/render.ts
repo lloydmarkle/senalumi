@@ -98,40 +98,18 @@ class DebugRender {
         frames: 0,
     };
     private dbg: PIXI.Container;
-    private updateOverlayText: Function;
+    private overlayText: PIXI.Text;
     private dbgFns: Function[] = [];
     updateFrequencyMS = 500;
 
     constructor(private game: Game, container: PIXI.Container, gameview: PIXI.Container) {
-        const overlayText = new PIXI.Text('');
-        overlayText.x = 50;
-        overlayText.y = 100;
-        overlayText.style.fill = 0xffffff;
-        overlayText.scale.set(0.5);
-        container.addChild(overlayText);
-
-        this.updateOverlayText = () => {
-            const sats = game.satellites.reduce((map, s) => {
-                map[s.owner.id] = (map[s.owner.id] ?? 0) + 1;
-                return map;
-            }, {});
-            const planets = game.planets.reduce((map, p) => {
-                if (p.owner) {
-                    map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
-                }
-                return map;
-            }, {});
-            const stats = Object.keys(sats)
-                .sort((a, b) => sats[b] - sats[a])
-                .map(team => `${team}: ${sats[team]} satellites, ${planets[team] ?? 0}/s`);
-            overlayText.text = [
-                (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
-                game.satellites.length + ' satellites',
-                'stats: [', stats.join('\n'), ']',
-            ].join('\n');
-            this.overlayInfo.fps = 0;
-            this.overlayInfo.frames = 0;
-        }
+        this.overlayText = new PIXI.Text('');
+        this.overlayText.x = 50;
+        this.overlayText.y = 100;
+        this.overlayText.style.fill = 0xffffff;
+        this.overlayText.scale.set(0.5);
+        container.addChild(this.overlayText);
+        this.showOverlayInfo();
 
         this.dbg = new PIXI.Container();
         gameview.addChild(this.dbg);
@@ -144,13 +122,49 @@ class DebugRender {
         if (now.getTime() - this.overlayInfo.lastTime.getTime() > this.updateFrequencyMS) {
             this.overlayInfo.lastTime = now;
             this.dbgFns.forEach(fn => fn());
-            this.updateOverlayText();
         }
     }
 
     clear() {
         this.dbgFns = [];
         this.dbg.removeChildren();
+        this.showOverlayInfo();
+    }
+
+    showOverlayInfo() {
+        this.dbgFns.push(() => {
+            const sats = this.game.satellites.reduce((map, s) => {
+                map[s.owner.id] = (map[s.owner.id] ?? 0) + 1;
+                return map;
+            }, {});
+            const planets = this.game.planets.reduce((map, p) => {
+                if (p.owner) {
+                    map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
+                }
+                return map;
+            }, {});
+            const stats = Object.keys(sats)
+                .sort((a, b) => sats[b] - sats[a])
+                .map(team => `${team}: ${sats[team]} satellites, ${planets[team] ?? 0}/s`);
+
+            const perfStats = [];
+            this.game.players.forEach(player => {
+                perfStats.push(`${player.id}: ${this.game.stats.playerTime[player.id]}ms think, ${this.game.stats.collisionTime[player.id]}ms collide`);
+            });
+            Object.keys(this.game.stats.collisionStages).forEach(stage => {
+                perfStats.push(`collision-${stage}: ${this.game.stats.collisionStages[stage]}`);
+            });
+            perfStats.push(`moveTime: ${this.game.stats.moveTime}ms`);
+
+            this.overlayText.text = [
+                (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
+                this.game.satellites.length + ' satellites',
+                'stats: [', stats.join('\n'), ']',
+                'perf: [', perfStats.join('\n'), ']',
+            ].join('\n');
+            this.overlayInfo.fps = 0;
+            this.overlayInfo.frames = 0;
+        });
     }
 
     quadTree(player: Player) {
