@@ -1,12 +1,18 @@
 import { create } from 'deepool';
+export function createPool<T>(creator: () => T) {
+    return create(creator) as {
+        use: () => T;
+        recycle: (item: T) => void;
+    };
+}
 
 export interface Point {
     x: number;
     y: number;
 }
-export const originPoint = () => ({ x: 0, y: 0 });
-export const copyPoint = (p: Point) => ({ x: p.x, y: p.y });
 export const point = (x: number, y: number) => ({ x, y });
+export const originPoint = () => point(0, 0);
+export const copyPoint = (p: Point) => ({ x: p.x, y: p.y });
 
 
 // Vector math
@@ -45,10 +51,7 @@ class Box {
 }
 
 // Use a growing pool of quad tree for less gc
-const pool = create(() => new QuadTree<any>()) as {
-    use: () => QuadTree<any>;
-    recycle: (tree: QuadTree<any>) => void;
-};
+const pool = createPool(() => new QuadTree<any>());
 
 // Much more memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
@@ -141,14 +144,12 @@ export class QuadTree<T extends { position: Point }> {
             : ((t.position.x < this.nw.box.right) ? this.sw : this.se);
     }
 
-    query(point: Point, radius: number): T[] {
-        const result: T[] = [];
+    query(point: Point, radius: number, fn: (t: T) => void) {
         const box = new Box(point.x - radius, point.y - radius, point.x + radius, point.y + radius);
-        this.appendPoints(result, box);
-        return result;
+        this.appendPoints(box, fn);
     }
 
-    private appendPoints(results: T[], box: Box) {
+    private appendPoints(box: Box, fn: (t :T) => void) {
         if (!this.box) {
             return;
         }
@@ -156,14 +157,12 @@ export class QuadTree<T extends { position: Point }> {
             return;
         }
         if (this.nw) {
-            this.nw.appendPoints(results, box);
-            this.ne.appendPoints(results, box);
-            this.se.appendPoints(results, box);
-            this.sw.appendPoints(results, box);
+            this.nw.appendPoints(box, fn);
+            this.ne.appendPoints(box, fn);
+            this.se.appendPoints(box, fn);
+            this.sw.appendPoints(box, fn);
         } else {
-            for (const d of this.data) {
-                results.push(d);
-            }
+            this.data.forEach(fn);
         }
     }
 }

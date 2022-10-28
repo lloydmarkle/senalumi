@@ -1,7 +1,7 @@
-import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from "./math";
 import { hex, hsl } from 'color-convert';
+import { createPool, copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from './math';
 
-const pulseRate = 1; // stars per pulse
+const pulseRate = 5; // stars per pulse
 const minWorld = -10000;
 const maxWorld = 10000;
 const gameSpeed = 12;
@@ -18,6 +18,9 @@ const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
 export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed, satelliteRadius, planetRadius, pulseRate };
+
+const satellitePool = createPool(() => new Satellite());
+const flashPool = createPool(() => new Flash());
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
@@ -43,8 +46,12 @@ export abstract class Player {
 
     selection(planet: Planet) {
         const radiusSqr = planetRadius * planetRadius;
-        const sats = this.satelliteTree.query(planet.position, planetRadius * 1.3)
-            .filter(sat => distSqr(sat.position, planet.position) < radiusSqr);
+        const sats = [];
+        this.satelliteTree.query(planet.position, planetRadius * 1.3, sat => {
+            if (distSqr(sat.position, planet.position) < radiusSqr) {
+                sats.push(sat);
+            }
+        })
         return sats;
     }
 
@@ -162,8 +169,10 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
     const positionPlanet = () => {
         while (true)  {
             let position = point(Math.random() * worldSize2x - worldSize, Math.random() * worldSize2x - worldSize);
-            const dists = tree.query(position, planetRadius).map(e => distSqr(position, e.position));
-            if (dists.every(d => d > minDistance)) {
+            let use = true;
+            tree.query(position, planetRadius,
+                p => use = use && distSqr(position, p.position) > minDistance);
+            if (use) {
                 return position;
             }
         }
@@ -246,26 +255,19 @@ export class Game {
             this.pulse();
         }
 
-        for (const flash of this.flashes) {
-            flash.tick(elapsedMS);
-        }
-        for (const sat of this.satellites) {
+        this.planets.forEach(planet => planet.tick(elapsedMS));
+        this.flashes.forEach(flash => flash.tick(elapsedMS));
+        this.satellites.forEach(sat => {
             if (sat.position.x < minWorld || sat.position.x > maxWorld || sat.position.y < minWorld || sat.position.y > maxWorld) {
                 console.warn('sat oob', sat);
                 this.destroy(sat);
-                continue;
             }
             sat.tick(elapsedMS);
-        }
-        for (const planet of this.planets) {
-            planet.tick(elapsedMS);
-        }
+        });
 
         // needs to be after satellites otherwise the quad trees explode
         // TODO: don't throw away trees every frame? (high gc load?)
-        for (const player of this.players) {
-            player.tick(elapsedMS);
-        }
+        this.players.forEach(player => player.tick(elapsedMS));
 
         for (const sat of this.satellites) {
             for (const player of this.players) {
@@ -279,14 +281,12 @@ export class Game {
 
     private collideSatellites(satellite: Satellite, radius: number, qt: QuadTree<Satellite>) {
         const r2 = radius * radius;
-        const nearbySatellites = qt.query(satellite.position, radius);
-        for (const sat of nearbySatellites) {
+        qt.query(satellite.position, radius, sat => {
             if (distSqr(sat.position, satellite.position) < r2) {
                 this.destroy(sat);
-                this.destroy(satellite)
-                return;
+                this.destroy(satellite);
             }
-        }
+        });
     }
 
     moveSatellites(player: Player, satellites: Satellite[], point: Point) {
@@ -308,28 +308,33 @@ export class Game {
     }
 
     private pulse() {
-        if (this.satellites.length >= maxSatellites) {
-            return;
-        }
-        for (const planet of this.planets) {
+        this.planets.forEach(planet => {
             if (planet.owner) {
                 for (let i = 0; i < planet.level * pulseRate; i++) {
                     this.spawnSatellite(planet);
                 }
             }
-        }
+        });
     }
 
     private spawnSatellite(planet: Planet) {
-        const sat = new Satellite(planet.owner, planet.position);
+        if (this.satellites.length >= maxSatellites) {
+            return;
+        }
+        const sat = satellitePool.use().init(planet.owner, planet.position);
         sat.mover = new OrbitMover(sat, planet);
         this.satellites.push(sat);
     }
 
     destroy(satellite: Satellite) {
+        const len = this.satellites.length;
         this.satellites = this.satellites.filter(s => s !== satellite);
-        this.flashes.push(new Flash(this, satellite.position, satellite.velocity));
-        satellite.destroy?.();
+        // TODO: can we not destry a satellite multiple times?
+        if (len !== this.satellites.length) {
+            satellitePool.recycle(satellite);
+            this.flashes.push(flashPool.use().init(this, satellite.position, satellite.velocity));
+            satellite.destroy?.();
+        }
     }
 }
 
@@ -447,6 +452,7 @@ class NullMover implements Mover {
         return this;
     }
 }
+const nullMover = new NullMover();
 
 class OrbitMover implements Mover {
     private orbitSpeed = Math.random() * Math.PI * 2 * 0.000025 + (Math.PI * 2 * 0.00001);
@@ -496,16 +502,24 @@ class Satellite implements Renderable {
     render: Function;
     destroy: Function;
     mover: Mover;
-    readonly position: Point;
-    readonly velocity: Point;
+    readonly position: Point = originPoint();
+    readonly velocity: Point = originPoint();
+    readonly owner: Player;
 
-    constructor(readonly owner: Player, position: Point) {
-        this.owner = owner;
-        this.position = copyPoint(position);
+    constructor() {}
+
+    init(owner: Player, position: Point) {
+        this.render = null;
+        this.destroy = null;
+        let self = this as any;
+        self.owner = owner;
+        self.position.x = position.x;
+        self.position.y = position.y;
+        this.mover = nullMover;
         const angle = Math.random() * Math.PI * 2;
-        this.mover = new NullMover();
         const speed = Math.random() * maxSatelliteVelocity;
-        this.velocity = point(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        self.velocity = point(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        return this;
     }
 
     tick(elapsedMS: number) {
@@ -529,17 +543,36 @@ class Satellite implements Renderable {
 
 class Flash implements Renderable {
     private rotationSpeed = Math.random() * Math.PI / 200;
-    private timeleftMS = (Math.random() * 300 + 200) * 1;
-    size: number = 1;
-    alpha: number = 1;
+    private timeleftMS: number;
+    size: number;
+    alpha: number;
     rotation: number = Math.random() * Math.PI * 2;
     render: Function;
     destroy: Function;
-    constructor(readonly game: Game, readonly position: Point, readonly velocity: Point) {}
+
+    readonly game: Game;
+    readonly position: Point;
+    readonly velocity: Point;
+    constructor() {}
+
+    init(game: Game, position: Point, velocity: Point) {
+        this.render = null;
+        this.destroy = null;
+        this.size = 1;
+        this.alpha = 1;
+        this.timeleftMS = (Math.random() * 300 + 200) * 1;
+
+        let self = this as any;
+        self.game = game;
+        self.position = position;
+        self.velocity = velocity;
+        return this;
+    }
 
     tick(elapsedMS: number) {
         this.timeleftMS -= elapsedMS;
         if (this.timeleftMS < 0) {
+            flashPool.recycle(this);
             this.destroy();
             this.game.flashes = this.game.flashes.filter(e => e !== this);
         }
