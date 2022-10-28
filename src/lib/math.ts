@@ -1,3 +1,5 @@
+import { create } from 'deepool';
+
 export interface Point {
     x: number;
     y: number;
@@ -18,14 +20,14 @@ export const normalizeVector = (p: Point) => scaleVector(p, 1 / vectorLength(p))
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
 class Box {
-    constructor(readonly x1: number, readonly y1: number, readonly x2: number, readonly y2: number) {
-        if (x1 > x2 || y1 > y2)  {
-            throw new Error('invalid box ' + JSON.stringify({ x1, y1, x2, y2 }));
+    constructor(public left: number, public top: number, public right: number, public bottom: number) {
+        if (left > right || top > bottom)  {
+            throw new Error('invalid box ' + JSON.stringify({ x1: left, y1: top, x2: right, y2: bottom }));
         }
     }
 
     intersectBox(box: Box) {
-        return this.intersect(box.x1, box.y1, box.x2, box.y2);
+        return this.intersect(box.left, box.top, box.right, box.bottom);
     }
 
     intersect(x1: number, y1: number, x2: number, y2: number) {
@@ -38,66 +40,105 @@ class Box {
     }
 
     contains(x: number, y: number) {
-        return x > this.x1 && x < this.x2 && y > this.y1 && y < this.y2;
+        return x > this.left && x < this.right && y > this.top && y < this.bottom;
     }
 }
 
-// Mostly based on https://en.wikipedia.org/wiki/Quadtree
-// but adapted for circles (xy + radius) based on some suggestions
-// from https://gamedev.stackexchange.com/questions/175799
+// Use a growing pool of quad tree for less gc
+const pool = create(() => new QuadTree<any>()) as {
+    use: () => QuadTree<any>;
+    recycle: (tree: QuadTree<any>) => void;
+};
+
+// Much more memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
-    private box: Box;
-    chidlren: QuadTree<T>[];
+    private nw: QuadTree<T>;
+    private ne: QuadTree<T>;
+    private se: QuadTree<T>;
+    private sw: QuadTree<T>;
     data: T[] = [];
-    constructor(readonly topLeft: Point, readonly bottomRight: Point, readonly capacity = 10) {
-        this.box = new Box(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y);
+    constructor(readonly capacity = 10, private box: Box = null) {}
+
+    get topLeft() { return point(this.box.left, this.box.top); }
+    get bottomRight() { return point(this.box.right, this.box.bottom); }
+    get children() { return this.nw ? [this.nw, this.ne, this.se, this.sw] : []; }
+
+    clean() {
+        this.data = [];
+        if (this.nw) {
+            const isLeaf = this.nw || !(
+                this.nw.data.length || this.ne.data.length ||
+                this.sw.data.length || this.se.data.length);
+
+            this.nw.clean();
+            this.ne.clean();
+            this.se.clean();
+            this.sw.clean();
+
+            if (isLeaf) {
+                pool.recycle(this.nw);
+                pool.recycle(this.ne);
+                pool.recycle(this.se);
+                pool.recycle(this.sw);
+                this.nw = this.ne = this.se = this.sw = null;
+            }
+        }
     }
 
     insert(t: T, radius: number) {
-        if (!this.box.intersect(t.position.x - radius, t.position.y - radius, t.position.x + radius, t.position.y - radius)) {
-            return false;
+        if (!this.box) {
+            this.box = new Box(t.position.x - radius, t.position.y - radius, t.position.x + radius, t.position.y + radius);
         }
+        this.box.left = Math.min(this.box.left, t.position.x - radius);
+        this.box.top = Math.min(this.box.top, t.position.y - radius);
+        this.box.right = Math.max(this.box.right, t.position.x + radius);
+        this.box.bottom = Math.max(this.box.bottom, t.position.y + radius);
+        this.add(t, radius);
+    }
 
+    private add(t: T, radius: number) {
+        if (this.nw) {
+            return this.child(t).insert(t, radius);
+        }
         if (this.data.length < this.capacity) {
-            this.data.push(t);
-            return true;
+            return this.data.push(t);
         }
+        this.subdivide(radius);
+        this.child(t).add(t, radius);
+    }
 
-        this.subdivide();
+    private subdivide(radius: number) {
+        const halfx = (this.box.left + this.box.right) / 2;
+        const halfy = (this.box.top + this.box.bottom) / 2;
+        this.nw = this.setup(pool.use(), this.box.left, this.box.top, halfx, halfy);
+        this.ne = this.setup(pool.use(), halfx, this.box.top, this.box.right, halfy);
+        this.se = this.setup(pool.use(), halfx, halfy, this.box.right, this.box.bottom);
+        this.sw = this.setup(pool.use(), this.box.left, halfy, halfx, this.box.bottom);
+
         // push points to children
-        let data = this.data;
+        for (const d of this.data) {
+            this.child(d).add(d, radius);
+        }
         this.data = [];
-        for (const d of data) {
-            this.insertData(d, radius);
-        }
-
-        return this.insertData(t, radius);
     }
 
-    private insertData(t: T, radius: number) {
-        let inserted = this.chidlren
-            .reduce((acc, child) => acc = acc || child.insert(t, radius), false);
-        if (!inserted) {
-            // point stradles a boundary(?) so allow it to overfill this tree
-            this.data.push(t);
+    private setup(tree: QuadTree<T>, x1: number, y1: number, x2: number, y2: number) {
+        (tree as any).capacity = this.capacity;
+        if (tree.box) {
+            tree.box.left = x1;
+            tree.box.top = y1;
+            tree.box.right = x2;
+            tree.box.bottom = y2;
+        } else {
+            tree.box = new Box(x1, y1, x2, y2);
         }
-        return inserted;
+        return tree;
     }
 
-    private subdivide() {
-        if (this.chidlren) {
-            return;
-        }
-        const { x: left, y: top } = this.topLeft;
-        const { x: right, y: bottom } = this.bottomRight;
-        const halfx = (left + right) / 2;
-        const halfy = (top + bottom) / 2;
-        this.chidlren = [
-            new QuadTree(this.topLeft, point(halfx, halfy), this.capacity),
-            new QuadTree(point(halfx, top), point(right, halfy), this.capacity),
-            new QuadTree(point(halfx, halfy), this.bottomRight, this.capacity),
-            new QuadTree(point(left, halfy), point(halfx, bottom), this.capacity),
-        ];
+    private child(t: T) {
+        return (t.position.y < this.nw.box.bottom)
+            ? ((t.position.x < this.nw.box.right) ? this.nw : this.ne)
+            : ((t.position.x < this.nw.box.right) ? this.sw : this.se);
     }
 
     query(point: Point, radius: number): T[] {
@@ -108,12 +149,21 @@ export class QuadTree<T extends { position: Point }> {
     }
 
     private appendPoints(results: T[], box: Box) {
+        if (!this.box) {
+            return;
+        }
         if (!this.box.intersectBox(box) && !box.intersectBox(this.box)) {
             return;
         }
-        for (const d of this.data) {
-            results.push(d);
+        if (this.nw) {
+            this.nw.appendPoints(results, box);
+            this.ne.appendPoints(results, box);
+            this.se.appendPoints(results, box);
+            this.sw.appendPoints(results, box);
+        } else {
+            for (const d of this.data) {
+                results.push(d);
+            }
         }
-        this.chidlren?.forEach(e => e.appendPoints(results, box));
     }
 }

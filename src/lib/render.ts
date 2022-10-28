@@ -167,7 +167,7 @@ class DebugRender {
             while (q.length){
                 const [ci, item] = q.shift();
                 let color = colors[ci % colors.length];
-                item.chidlren?.forEach(e => q.push([ci + 1, e]));
+                item.children.forEach(e => q.push([ci + 1, e]));
                 gfx.lineStyle(4 / (ci + 1), color);
                 gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
 

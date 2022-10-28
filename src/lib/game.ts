@@ -1,6 +1,7 @@
 import { copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from "./math";
 import { hex, hsl } from 'color-convert';
 
+const pulseRate = 1; // stars per pulse
 const minWorld = -10000;
 const maxWorld = 10000;
 const gameSpeed = 12;
@@ -16,7 +17,7 @@ const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
-export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed, satelliteRadius, planetRadius };
+export const constants = { maxSatelliteVelocity, maxSatellites, forceStiffness, forceDamping, gameSpeed, satelliteRadius, planetRadius, pulseRate };
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
@@ -31,7 +32,7 @@ export const setLightness = (color: number, lightness: number) => {
     return parseInt(hsl.hex(c), 16);
 }
 export abstract class Player {
-    satelliteTree: QuadTree<Satellite>;
+    readonly satelliteTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly satelliteColor: number;
     constructor(readonly game: Game, readonly id: Team, readonly color: number) {
         this.color = setLightness(color, 50);
@@ -46,12 +47,20 @@ export abstract class Player {
             .filter(sat => distSqr(sat.position, planet.position) < radiusSqr);
         return sats;
     }
+
+    updateSatelitteTree(radius: number) {
+        this.satelliteTree.clean();
+        this.game.satellites.forEach(sat => {
+            if (sat.owner === this) {
+                this.satelliteTree.insert(sat, radius);
+            }
+        });
+    };
 }
 
 class HumanPlayer extends Player {
     tick(ms: number) {
-        const satellites = this.game.satellites.filter(e => e.owner === this);
-        this.satelliteTree = buildSatelliteTree(satellites, satelliteRadius);
+        this.updateSatelitteTree(satelliteRadius);
     }
 }
 
@@ -78,8 +87,7 @@ class AIPlayer extends Player {
     }
 
     tick(ms: number) {
-        const satellites = this.game.satellites.filter(e => e.owner === this);
-        this.satelliteTree = buildSatelliteTree(satellites, satelliteRadius);
+        this.updateSatelitteTree(satelliteRadius);
 
         this.elapsedFromLastThink += ms;
         if (this.elapsedFromLastThink < this.config.thinkTimeMS) {
@@ -118,20 +126,22 @@ class AIPlayer extends Player {
         const canUpgrade = planet.level < planet.maxLevel;
         const openPlanets = this.game.planets.filter(p => !p.owner);
         const enemyPlanets = this.game.planets.filter(p => p.owner && p.owner !== this);
+        const someSatellites = () => satellites.slice(0,
+            Math.max(Math.random() * satellites.length, 100))
 
         if (canUpgrade && Math.random() < this.config.upgradeChance) {
             this.moveToPlanet(satellites, planet);
         } else if(planet.health < 100 && Math.random() < this.config.healChance) {
-            this.moveToPlanet(satellites, planet);
+            this.moveToPlanet(someSatellites(), planet);
         } else if(openPlanets.length && Math.random() < this.config.conquerChance) {
             openPlanets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
-            this.moveToPlanet(satellites, openPlanets[0]);
+            this.moveToPlanet(someSatellites(), openPlanets[0]);
         } else if (enemyPlanets.length && Math.random() < this.config.attackChance) {
             enemyPlanets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
-            this.moveToPlanet(satellites, enemyPlanets[0]);
+            this.moveToPlanet(someSatellites(), enemyPlanets[0]);
         } else if (planets.length && Math.random() < this.config.transferChance) {
             planets.sort((a, b) => distSqr(a.position, planet.position) - distSqr(b.position, planet.position));
-            this.moveToPlanet(satellites, planets[0]);
+            this.moveToPlanet(someSatellites(), planets[0]);
         }
     }
 
@@ -144,33 +154,11 @@ class AIPlayer extends Player {
     }
 }
 
-const buildSatelliteTree = (satellites: Satellite[], radius: number) => {
-    if (!satellites.length) {
-        return new QuadTree<Satellite>(originPoint(), originPoint(), quadTreeBoxCapacity);
-    }
-    const { spaceTL, spaceBR } = boundingBox(satellites, radius);
-    const tree = new QuadTree<Satellite>(spaceTL, spaceBR, quadTreeBoxCapacity);
-    satellites.forEach(sat => tree.insert(sat, radius));
-    return tree;
-}
-
-const boundingBox = (satellites: Satellite[], radius: number) => {
-    const spaceTL = copyPoint(satellites[0].position);
-    const spaceBR = copyPoint(satellites[0].position);
-    for (const sat of satellites) {
-        spaceTL.x = Math.min(spaceTL.x, sat.position.x - radius - 1);
-        spaceTL.y = Math.min(spaceTL.y, sat.position.y - radius - 1);
-        spaceBR.x = Math.max(spaceBR.x, sat.position.x + radius + 1);
-        spaceBR.y = Math.max(spaceBR.y, sat.position.y + radius + 1);
-    }
-    return { spaceTL, spaceBR };
-};
-
 const generateWorld = (game: Game, colours: number, worldSize: number) => {
     const planets = [];
     const minDistance = planetRadius * planetRadius * 4;
     const worldSize2x = worldSize * 2;
-    const tree = new QuadTree<Planet>(point(-worldSize, -worldSize), point(worldSize, worldSize), 1);
+    const tree = new QuadTree<Planet>(1);
     const positionPlanet = () => {
         while (true)  {
             let position = point(Math.random() * worldSize2x - worldSize, Math.random() * worldSize2x - worldSize);
@@ -217,7 +205,7 @@ export class Game {
 
         const aiStats: AIConfig = {
             thinkTimeMS: 10000,
-            minSatellies: 110,
+            minSatellies: 120,
             healChance: 0.95,
             attackChance: 0.40,
             conquerChance: 0.45,
@@ -325,7 +313,7 @@ export class Game {
         }
         for (const planet of this.planets) {
             if (planet.owner) {
-                for (let i = 0; i < planet.level; i++) {
+                for (let i = 0; i < planet.level * pulseRate; i++) {
                     this.spawnSatellite(planet);
                 }
             }
