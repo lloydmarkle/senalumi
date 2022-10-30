@@ -1,8 +1,8 @@
 import { hex, hsl } from 'color-convert';
-import { ArrayPool, copyPoint, distSqr, normalizeVector, originPoint, point, scaleVector, QuadTree, type Point } from './math';
+import { ArrayPool, distSqr, originPoint, point, copyPoint, QuadTree, type Point } from './math';
 
-const pulseRate = 5; // stars per pulse
-const maxSatellites = 8000;
+const pulseRate = 4; // stars per pulse
+const maxSatellites = 25000;
 const maxWorld = 4000;
 const gameSpeed = 12;
 const maxSatelliteVelocity = 0.015;
@@ -11,7 +11,7 @@ const forceDamping = 0.0004;
 // sprite is (currently) 300px
 const planetRadius = 150;
 const satelliteRadius = 8;
-const quadTreeBoxCapacity = 10;
+const quadTreeBoxCapacity = 5;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
@@ -27,7 +27,6 @@ type TeamStats = { [key in Team]?: number };
 let fn = () => { performance.now(); return 0 };
 class Stats {
     public collisionStages: { [key in CollisionStages]?: number } = {};
-    public collisionTime: TeamStats = {};
     public playerTime: TeamStats = {};
     public moveTime: number;
     public collideTime: number;
@@ -40,7 +39,7 @@ class Stats {
     }
 
     recordCollide(start: number, stage: CollisionStages) {
-        this.collisionTime[stage] = (this.collisionTime[stage] ?? 0) + (performance.now() - start);
+        this.collisionStages[stage] = (this.collisionStages[stage] ?? 0) + (performance.now() - start);
     }
 
     recordPlayerStat(start: number, team: Team, field: TeamStats) {
@@ -53,7 +52,6 @@ class Stats {
 
     clear() {
         this.collisionStages = {};
-        this.collisionTime = {};
         this.playerTime = {};
         this.thinkTime = this.moveTime = this.gameTime = this.collideTime = this.pulseTime = 0;
     }
@@ -70,7 +68,6 @@ export const setLightness = (color: number, lightness: number) => {
     return parseInt(hsl.hex(c), 16);
 }
 export abstract class Player {
-    readonly satelliteTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly satelliteColor: number;
     constructor(readonly game: Game, readonly id: Team, readonly color: number) {
         this.color = setLightness(color, 50);
@@ -82,27 +79,17 @@ export abstract class Player {
     selection(planet: Planet) {
         const radiusSqr = planetRadius * planetRadius;
         const sats = [];
-        this.satelliteTree.query(planet.position, planetRadius * 1.3, sat => {
-            if (distSqr(sat.position, planet.position) < radiusSqr) {
+        this.game.collisionTree.query(planet.position, planetRadius * 1.3, sat => {
+            if (sat.owner === this && distSqr(sat.position, planet.position) < radiusSqr) {
                 sats.push(sat);
             }
         })
         return sats;
     }
-
-    updateSatelitteTree(radius: number) {
-        this.satelliteTree.clean();
-        this.game.satellites.forEach(sat => {
-            if (sat.owner === this) {
-                this.satelliteTree.insert(sat, radius);
-            }
-        });
-    };
 }
 
 class HumanPlayer extends Player {
     tick(ms: number) {
-        this.updateSatelitteTree(satelliteRadius);
     }
 }
 
@@ -129,8 +116,6 @@ class AIPlayer extends Player {
     }
 
     tick(ms: number) {
-        this.updateSatelitteTree(satelliteRadius);
-
         this.elapsedFromLastThink += ms;
         if (this.elapsedFromLastThink < this.config.thinkTimeMS) {
             return;
@@ -242,7 +227,7 @@ export class Game {
     lastTick = 0.0;
     pulsed = 0;
     paused = false;
-    destroyed = new Set();
+    collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly constants = constants;
 
     constructor() {
@@ -293,6 +278,8 @@ export class Game {
             this.pulse();
         }
 
+        this.collisionTree.clean();
+
         const moveTimer = this.stats.now();
         this.planets.forEach(planet => planet.tick(elapsedMS));
         this.flashes.forEach(flash => flash.tick(elapsedMS));
@@ -300,9 +287,12 @@ export class Game {
             if (sat.position.x < -maxWorld || sat.position.x > maxWorld || sat.position.y < -maxWorld || sat.position.y > maxWorld) {
                 this.destroy(sat);
             }
+            const collideTime = this.stats.now();
+            this.collisionTree.insert(sat, satelliteRadius);
+            this.stats.collideTime += this.stats.elapsed(collideTime);
             sat.tick(elapsedMS);
         });
-        this.stats.moveTime = this.stats.elapsed(moveTimer);
+        this.stats.moveTime = this.stats.elapsed(moveTimer) - this.stats.collideTime;
 
         // needs to be after satellites otherwise the quad trees explode
         // TODO: don't throw away trees every frame? (high gc load?)
@@ -312,37 +302,35 @@ export class Game {
             player.tick(elapsedMS);
             this.stats.recordPlayerStat(timer, player.id, this.stats.playerTime);
         });
-        this.stats.thinkTime = this.stats.elapsed(thinkTime);
+        this.stats.thinkTime += this.stats.elapsed(thinkTime);
 
         const collideTime = this.stats.now();
-        this.satellites.forEach(sat => {
-            for (const player of this.players) {
-                if (player === sat.owner) {
-                    continue;
-                }
-                let timer = this.stats.now();
-                this.collideSatellites(sat, satelliteRadius, player.satelliteTree);
-                this.stats.recordPlayerStat(timer, player.id, this.stats.collisionTime);
-            }
-        });
-        this.stats.collideTime = this.stats.elapsed(collideTime);
-        this.destroyed.clear();
+        this.collisionTree.walk(sats => this.collide(sats, satelliteRadius));
+        this.stats.collideTime += this.stats.elapsed(collideTime);
 
         this.stats.gameTime = this.stats.elapsed(gameTime);
     }
 
-    private collideSatellites(satellite: Satellite, radius: number, tree: QuadTree<Satellite>) {
+    private collide(satellites: Satellite[], radius: number) {
         const r2 = radius * radius;
-        tree.query(satellite.position, radius, sat => {
-            const distTimer = this.stats.now();
-            const dist = distSqr(sat.position, satellite.position);
-            this.stats.recordCollide(distTimer, 'distance');
+        for (let i = 0; i < satellites.length; i++) {
+            for (let j = i; j < satellites.length; j++) {
+                let sat1 = satellites[i];
+                let sat2 = satellites[j];
+                if (sat1.owner === sat2.owner) {
+                    continue;
+                }
 
-            if (dist < r2) {
-                this.destroy(sat);
-                this.destroy(satellite);
+                const distTimer = this.stats.now();
+                const dist = distSqr(sat1.position, sat2.position);
+                this.stats.recordCollide(distTimer, 'distance');
+
+                if (dist < r2) {
+                    this.destroy(sat1);
+                    this.destroy(sat2);
+                }
             }
-        });
+        }
     }
 
     moveSatellites(player: Player, satellites: Satellite[], point: Point) {
@@ -523,10 +511,10 @@ class OrbitMover implements Mover {
 
     evaluate(elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
-        const target = point(
+        this.satellite.updateVelocity(
             Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
-            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x);
-        this.satellite.updateVelocity(target, elapsedMS * this.moveNoise);
+            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,
+            elapsedMS * this.moveNoise);
         return this;
     }
 }
@@ -539,8 +527,10 @@ class PointMover implements Mover {
     evaluate(elapsedMS: number) {
         // why compute this every frame? If this.target is a reference to a planet, then
         // the planet could be moving so we have a moving target
-        const target = point(this.target.x + this.positionNoise.x, this.target.y + this.positionNoise.y);
-        this.satellite.updateVelocity(target, elapsedMS * this.moveNoise);
+        this.satellite.updateVelocity(
+            this.target.x + this.positionNoise.x,
+            this.target.y + this.positionNoise.y,
+            elapsedMS * this.moveNoise);
         return this;
     }
 }
@@ -587,16 +577,19 @@ class Satellite implements Renderable {
         this.position.y += this.velocity.y * elapsedMS;
     }
 
-    updateVelocity(target: Point, rate: number) {
+    updateVelocity(x: number, y: number, rate: number) {
         // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
-        const direction = point(target.x - this.position.x, target.y - this.position.y);
-        normalizeVector(direction);
+        let dirX = x - this.position.x;
+        let dirY = y - this.position.y;
+        const normalizer = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
+        dirX *= normalizer;
+        dirY *= normalizer;
 
-        const targetVelocity = copyPoint(direction);
-        scaleVector(targetVelocity, maxSatelliteVelocity);
+        let vx = dirX * maxSatelliteVelocity;
+        let vy = dirY * maxSatelliteVelocity;
 
-        this.velocity.x += (forceStiffness * direction.x + forceDamping * (targetVelocity.x - this.velocity.x)) * rate;
-        this.velocity.y += (forceStiffness * direction.y + forceDamping * (targetVelocity.y - this.velocity.y)) * rate;
+        this.velocity.x += (forceStiffness * dirX + forceDamping * (vx - this.velocity.x)) * rate;
+        this.velocity.y += (forceStiffness * dirY + forceDamping * (vy - this.velocity.y)) * rate;
     }
 }
 
@@ -610,8 +603,8 @@ class Flash implements Renderable {
     destroy: Function;
 
     readonly game: Game;
-    readonly position: Point;
-    readonly velocity: Point;
+    readonly position = originPoint();
+    readonly velocity = originPoint();
     constructor() {}
 
     init(game: Game, position: Point, velocity: Point) {
@@ -621,10 +614,9 @@ class Flash implements Renderable {
         this.alpha = 1;
         this.timeleftMS = (Math.random() * 300 + 200) * 1;
 
-        let self = this as any;
-        self.game = game;
-        self.position = position;
-        self.velocity = velocity;
+        (this as any).game = game;
+        copyPoint(position, this.position);
+        copyPoint(velocity, this.velocity);
         return this;
     }
 

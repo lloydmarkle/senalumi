@@ -6,16 +6,11 @@ export interface Point {
 }
 export const point = (x: number, y: number) => ({ x, y });
 export const originPoint = () => point(0, 0);
-export const copyPoint = (p: Point) => ({ x: p.x, y: p.y });
-
-
-// Vector math
-export const scaleVector = (p: Point, scalar: number) => {
-    p.x *= scalar;
-    p.y *= scalar;
+export const copyPoint = (src: Point, tgt: Point) => {
+    tgt.x = src.x;
+    tgt.y = src.y;
 };
-export const vectorLength = (p: Point) => Math.sqrt(p.x * p.x + p.y * p.y);
-export const normalizeVector = (p: Point) => scaleVector(p, 1 / vectorLength(p));
+
 
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
@@ -55,6 +50,17 @@ export class QuadTree<T extends { position: Point }> {
     get topLeft() { return point(this.box.left, this.box.top); }
     get bottomRight() { return point(this.box.right, this.box.bottom); }
     get children() { return this.nw ? [this.nw, this.ne, this.se, this.sw] : []; }
+
+    walk(fn: (items: T[]) => void) {
+        if (this.nw) {
+            this.nw.walk(fn);
+            this.ne.walk(fn);
+            this.se.walk(fn);
+            this.sw.walk(fn);
+        } else {
+            fn(this.data);
+        }
+    }
 
     clean() {
         this.data = [];

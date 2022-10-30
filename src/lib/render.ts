@@ -148,9 +148,9 @@ class DebugRender {
                 .map(team => `${team}: ${satStats[team]} satellites, ${planets[team] ?? 0}/s`);
 
             const perfStats = [];
-            Object.keys(this.game.stats.playerTime).forEach(player => {
-                perfStats.push(`${player}: ${this.game.stats.playerTime[player].toFixed(2)}ms think, ${this.game.stats.collisionTime[player].toFixed(2)}ms collide`);
-            });
+            // Object.keys(this.game.stats.playerTime).forEach(player => {
+            //     perfStats.push(`${player}: ${this.game.stats.playerTime[player].toFixed(2)}ms think, ${this.game.stats.collisionTime[player].toFixed(2)}ms collide`);
+            // });
             Object.keys(this.game.stats.collisionStages).forEach(stage => {
                 perfStats.push(`collision-${stage}: ${this.game.stats.collisionStages[stage].toFixed(2)}`);
             });
@@ -175,28 +175,28 @@ class DebugRender {
         let gfx = new PIXI.Graphics();
         this.dbg.addChild(gfx);
 
-        this.dbgFns.push(() => {
-            gfx.clear();
-            gfx.removeChildren();
-            let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
+        // this.dbgFns.push(() => {
+        //     gfx.clear();
+        //     gfx.removeChildren();
+        //     let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
 
-            let q: Array<[number, QuadTree<any>]> = [];
-            q.push([0, player.satelliteTree]);
-            while (q.length){
-                const [ci, item] = q.shift();
-                let color = colors[ci % colors.length];
-                item.children.forEach(e => q.push([ci + 1, e]));
-                gfx.lineStyle(4 / (ci + 1), color);
-                gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
+        //     let q: Array<[number, QuadTree<any>]> = [];
+        //     q.push([0, player.satelliteTree]);
+        //     while (q.length){
+        //         const [ci, item] = q.shift();
+        //         let color = colors[ci % colors.length];
+        //         item.children.forEach(e => q.push([ci + 1, e]));
+        //         gfx.lineStyle(4 / (ci + 1), color);
+        //         gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
 
-                const itemCount = new PIXI.Text(item.data.length);
-                itemCount.scale.set(0.25);
-                itemCount.x = (item.topLeft.x + item.bottomRight.x) / 2;
-                itemCount.y = (item.topLeft.y + item.bottomRight.y) / 2;
-                itemCount.style.fill = color;
-                gfx.addChild(itemCount);
-            }
-        });
+        //         const itemCount = new PIXI.Text(item.data.length);
+        //         itemCount.scale.set(0.25);
+        //         itemCount.x = (item.topLeft.x + item.bottomRight.x) / 2;
+        //         itemCount.y = (item.topLeft.y + item.bottomRight.y) / 2;
+        //         itemCount.style.fill = color;
+        //         gfx.addChild(itemCount);
+        //     }
+        // });
     }
 
     planetSelections(player: Player) {
