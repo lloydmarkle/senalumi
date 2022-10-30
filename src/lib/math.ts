@@ -205,6 +205,8 @@ export class ArrayPool<T> {
     }
 
     release(item: T) {
+        // inspired by https://github.com/pixijs/pixijs/blob/dev/packages/display/src/Container.ts#L292 and
+        // https://github.com/pixijs/pixijs/blob/4cbadba3e46c4987f505e76a7f4e844d95a120cc/packages/utils/src/data/removeItems.ts#L9
         const idx = this.items.findIndex(e => e === item);
         if (idx === -1) {
             return false;
