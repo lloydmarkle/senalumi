@@ -1,4 +1,4 @@
-import { type Point, distSqr, QuadTree } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint } from './math';
 import { Game, constants, type Player, setLightness } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -173,7 +173,6 @@ class DebugRender {
         this.dbg.addChild(gfx);
 
         this.dbgFns.push(() => {
-            gfx.clear();
             gfx.removeChildren();
             let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
 
@@ -183,8 +182,10 @@ class DebugRender {
                 const [ci, item] = q.shift();
                 let color = colors[ci % colors.length];
                 item.children.forEach(e => q.push([ci + 1, e]));
-                gfx.lineStyle(4 / (ci + 1), color);
-                gfx.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
+                const box = new PIXI.Graphics();
+                box.lineStyle(8 / (ci + 1), color);
+                box.drawRect(item.topLeft.x, item.topLeft.y, item.bottomRight.x - item.topLeft.x, item.bottomRight.y - item.topLeft.y);
+                gfx.addChild(box);
 
                 const itemCount = new PIXI.Text(item.data.length);
                 itemCount.scale.set(0.25);
@@ -207,7 +208,7 @@ class DebugRender {
 
             const planets = this.game.planets.filter(e => e.owner === player);
             for (const planet of planets) {
-                gfx.drawCircle(planet.position.x, planet.position.y, this.game.constants.planetRadius);
+                gfx.drawCircle(planet.position.x, planet.position.y, planet.orbitDistance * 1.6);
                 const sats = player.selection(planet);
                 sats.forEach(sat => gfx.drawCircle(sat.position.x, sat.position.y, this.game.constants.satelliteRadius));
 
@@ -257,7 +258,7 @@ export class Renderer {
 
         // activate plugins
         viewport.clampZoom({
-            maxScale: 1.8,
+            maxScale: 2.8,
             minScale: 0.2,
         })
         viewport.clamp({
@@ -271,7 +272,7 @@ export class Renderer {
 
         let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
         greyTeamMatrix.tint(0x222222, true);
-        let teamColours = game.players.reduce((map, player) => {
+        let colorMap = game.players.reduce((map, player) => {
             let filter = new PIXI.filters.ColorMatrixFilter();
             filter.tint(player.color, true);
             map[player.id] = filter;
@@ -283,37 +284,48 @@ export class Renderer {
         let planetTexture = PIXI.Texture.from('sun.png');
 
         let bgContainer = new PIXI.Container();
+        let pulseContainer = new PIXI.Container();
         let planetContainer = new PIXI.Container();
-        let satellieContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
+        let satelliteContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
         let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
         let interactionContainer = new PIXI.Container();
 
         let selector = new Selector(viewport);
         interactionContainer.addChild(selector.gfx);
-        // viewport.plugins.pause('drag');
-        // viewport.on('pointerdown', ev => {
-        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        //     selector.pointerdown(point);
-        // });
-        // viewport.on('pointermove', ev => {
-        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        //     selector.pointermove(point);
-        // });
-        // viewport.on('pointerup', ev => {
-        //     if (selector.mode === 'none') {
-        //         const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        //         const selection = game.satellites.filter(isPlayerSatellite);
-        //         game.moveSatellites(player, selection, point);
-        //     }
-        //     selector.pointerup();
-        // });
+        viewport.plugins.pause('drag');
+        viewport.on('pointerdown', ev => {
+            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+            selector.pointerdown(point);
+        });
+        viewport.on('pointermove', ev => {
+            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+            selector.pointermove(point);
+        });
+        viewport.on('pointerup', ev => {
+            if (selector.mode === 'none') {
+                const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+                const selection = []
+                game.satellites.forEach(sat => {
+                    if (isPlayerSatellite(sat)) {
+                        selection.push(sat);
+                    }
+                });
+                game.moveSatellites(player, selection, point);
+            }
+            selector.pointerup();
+        });
         // app.ticker.maxFPS = 10;
 
         viewport.addChild(bgContainer);
+        viewport.addChild(pulseContainer);
         viewport.addChild(planetContainer);
-        viewport.addChild(satellieContainer);
+        viewport.addChild(satelliteContainer);
         viewport.addChild(flashContainer);
         viewport.addChild(interactionContainer);
+
+        pulseContainer.filters = [
+            new PIXI.filters.BlurFilter(),
+        ]
 
         // dbg view (always add this last)
         this.dbg = new DebugRender(game, app.stage, viewport);
@@ -344,15 +356,43 @@ export class Renderer {
                 sprite.scale.set(planet.radius);
                 sprite.x = planet.position.x;
                 sprite.y = planet.position.y;
-                sprite.filters = planet.owner ? [teamColours[planet.owner.id]] : [greyTeamMatrix];
+                sprite.filters = planet.owner ? [colorMap[planet.owner.id]] : [greyTeamMatrix];
             };
             sprite.anchor.set(0.5, 0.5);
             planet.render();
         }
 
+        let pulses = new ArrayPool(() => new Pulse())
+
         app.ticker.add((delta) => {
             this.dbg.tick(app);
-            game.tick(app.ticker.elapsedMS);
+            const state = game.tick(app.ticker.elapsedMS);
+
+            if (state.pulsed && game.constants.gameSpeed <= 1) {
+                for (const planet of game.planets) {
+                    if (planet.owner) {
+                        const pulse = pulses.take().init(planet.position);
+
+                        const gfx = new PIXI.Graphics();
+                        gfx.position = pulse.position;
+                        gfx.lineStyle(40, planet.owner.color);
+                        gfx.drawCircle(0, 0, planet.orbitDistance);
+                        gfx.lineStyle(10, planet.owner.satelliteColor);
+                        gfx.drawCircle(0, 0, planet.orbitDistance - 13);
+                        pulseContainer.addChild(gfx);
+
+                        pulse.destroy = () => {
+                            pulses.release(pulse);
+                            pulseContainer.removeChild(gfx);
+                        };
+                        pulse.render = () => {
+                            gfx.alpha = pulse.alpha;
+                            gfx.scale.set(pulse.scale);
+                        };
+                    }
+                }
+            }
+            pulses.forEach(p => p.tick(app.ticker.elapsedMS * game.constants.gameSpeed));
 
             for (const planet of game.planets) {
                 planet.render();
@@ -387,8 +427,8 @@ export class Renderer {
                 let rotation = Math.random() * Math.PI * 2;
                 let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
                 const sprite = PIXI.Sprite.from(satelliteTexture);
-                satellieContainer.addChild(sprite);
-                satellite.destroy = () => satellieContainer.removeChild(sprite);
+                satelliteContainer.addChild(sprite);
+                satellite.destroy = () => satelliteContainer.removeChild(sprite);
                 satellite.render = () => {
                     rotation += rotationSpeed * app.ticker.elapsedMS;
                     sprite.rotation = rotation;
@@ -401,5 +441,36 @@ export class Renderer {
                 satellite.render();
             });
         });
+    }
+}
+
+class Pulse {
+    static maxTime = 2000;
+    private timeleftMS: number;
+
+    render: Function;
+    destroy: Function;
+
+    alpha: number = 1;
+    scale: number = 1;
+    position = originPoint();
+    init(position: Point) {
+        this.render = null;
+        this.destroy = null;
+        this.alpha = 1;
+        this.scale = 1;
+        this.timeleftMS = Pulse.maxTime;
+        copyPoint(position, this.position);
+        return this;
+    }
+
+    tick(elapsedMS: number) {
+        this.timeleftMS -= elapsedMS;
+        if (this.timeleftMS < 0) {
+            this.destroy?.();
+        }
+        this.alpha = 0.1 * (this.timeleftMS / Pulse.maxTime);
+        this.scale = 4 * (1 - (this.timeleftMS / Pulse.maxTime));
+        this.render?.();
     }
 }
