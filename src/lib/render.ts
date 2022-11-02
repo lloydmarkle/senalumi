@@ -3,8 +3,10 @@ import { Game, constants, type Player, setLightness } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
+import type { ListenerFn } from 'eventemitter3';
 
 class Selector {
+    private dragMove: ListenerFn;
     mid: Point = { x:0, y:0 };
     radius: number = 0;
     radiusSqr: number = 0;
@@ -16,6 +18,10 @@ class Selector {
 
     constructor(readonly viewport: Viewport) {
         this.gfx = new PIXI.Graphics();
+        this.dragMove = ev => {
+            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+            this.pointermove(point);
+        };
     }
 
     contains(point: Point) {
@@ -53,6 +59,7 @@ class Selector {
     pointerdown(point: Point) {
         this.downStart = new Date().getTime();
         this.downPoint = point;
+        this.viewport.on('pointermove', this.dragMove);
     }
 
     pointermove(point: Point) {
@@ -67,12 +74,12 @@ class Selector {
                 if (now - this.downStart > 200) {
                     this._mode = 'drag';
                     this.clearGfx();
-                    // this.viewport.plugins.resume('drag');
                 } else {
-                    // this.viewport.plugins.pause('drag');
                     this._mode = 'select';
+                    this.viewport.plugins.pause('drag');
+                    // this.viewport.off('pointermove', this.dragMove);
                 }
-                console.log('set',this._mode)
+                console.log('set-mode',this._mode)
             }
 
             if (this._mode !== 'drag') {
@@ -82,11 +89,12 @@ class Selector {
     }
 
     pointerup() {
+        this.viewport.plugins.resume('drag');
+        // this.viewport.off('pointermove', this.dragMove);
         if (this._mode === 'none') {
             this.clearGfx();
         }
         this._mode = 'none';
-        // this.viewport.plugins.resume('drag');
         this.downStart = 0;
     }
 }
@@ -292,28 +300,23 @@ export class Renderer {
 
         let selector = new Selector(viewport);
         interactionContainer.addChild(selector.gfx);
-        viewport.plugins.pause('drag');
-        viewport.on('pointerdown', ev => {
-            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            selector.pointerdown(point);
-        });
-        viewport.on('pointermove', ev => {
-            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            selector.pointermove(point);
-        });
-        viewport.on('pointerup', ev => {
-            if (selector.mode === 'none') {
-                const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-                const selection = []
-                game.satellites.forEach(sat => {
-                    if (isPlayerSatellite(sat)) {
-                        selection.push(sat);
-                    }
-                });
-                game.moveSatellites(player, selection, point);
-            }
-            selector.pointerup();
-        });
+        // viewport.on('pointerdown', ev => {
+        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        //     selector.pointerdown(point);
+        // });
+        // viewport.on('pointerup', ev => {
+        //     if (selector.mode === 'none') {
+        //         const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        //         const selection = []
+        //         game.satellites.forEach(sat => {
+        //             if (isPlayerSatellite(sat)) {
+        //                 selection.push(sat);
+        //             }
+        //         });
+        //         game.moveSatellites(player, selection, point);
+        //     }
+        //     selector.pointerup();
+        // });
         // app.ticker.maxFPS = 10;
 
         viewport.addChild(bgContainer);
