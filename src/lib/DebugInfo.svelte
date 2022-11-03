@@ -3,7 +3,7 @@
 </script>
 
 <div transition:fly={{ y: -50 }}>
-    <p>Paused</p>
+    <p>Debug</p>
 </div>
 
 <style>

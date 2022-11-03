@@ -76,7 +76,7 @@ class Selector {
                     this.clearGfx();
                 } else {
                     this._mode = 'select';
-                    this.viewport.plugins.pause('drag');
+                    // this.viewport.plugins.pause('drag');
                     // this.viewport.off('pointermove', this.dragMove);
                 }
                 console.log('set-mode',this._mode)
@@ -89,8 +89,8 @@ class Selector {
     }
 
     pointerup() {
-        this.viewport.plugins.resume('drag');
-        // this.viewport.off('pointermove', this.dragMove);
+        // this.viewport.plugins.resume('drag');
+        this.viewport.off('pointermove', this.dragMove);
         if (this._mode === 'none') {
             this.clearGfx();
         }
@@ -117,7 +117,7 @@ class DebugRender {
         this.overlayText.style.fill = 0xffffff;
         this.overlayText.scale.set(0.5);
         container.addChild(this.overlayText);
-        this.showOverlayInfo();
+        // this.showOverlayInfo();
 
         this.dbg = new PIXI.Container();
         gameview.addChild(this.dbg);
@@ -141,19 +141,15 @@ class DebugRender {
 
     showOverlayInfo() {
         this.dbgFns.push(() => {
-            const satStats = {};
-            this.game.satellites.forEach(sat => {
-                satStats[sat.owner.id] = (satStats[sat.owner.id] ?? 0) + 1;
-            });
             const planets = this.game.planets.reduce((map, p) => {
                 if (p.owner) {
                     map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
                 }
                 return map;
             }, {});
-            const stats = Object.keys(satStats)
-                .sort((a, b) => satStats[b] - satStats[a])
-                .map(team => `${team}: ${satStats[team]} satellites, ${planets[team] ?? 0}/s`);
+            const stats = Array.from(this.game.log.at(-1).satelliteCounts.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(([team, count]) => `${team}: ${count} satellites, ${planets[team] ?? 0}/s`);
 
             const perfStats = [];
             Object.keys(this.game.stats.collisionStages).forEach(stage => {
@@ -238,7 +234,7 @@ export class Renderer {
             this.app.destroy(true, { baseTexture: true, children: true, texture: true });
         }
 
-        const player = game.players[0];
+        const player = game.players.find(p => !('elapsedFromLastThink' in p));
         const isPlayerSatellite = (sat: any) => sat.owner === player && selector.contains(sat.position);
         // const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
         let app = new PIXI.Application({
@@ -259,7 +255,7 @@ export class Renderer {
         });
         app.stage.addChild(viewport);
         viewport
-            .drag()
+            // .drag()
             .pinch()
             .wheel()
             .decelerate();
@@ -300,23 +296,23 @@ export class Renderer {
 
         let selector = new Selector(viewport);
         interactionContainer.addChild(selector.gfx);
-        // viewport.on('pointerdown', ev => {
-        //     const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        //     selector.pointerdown(point);
-        // });
-        // viewport.on('pointerup', ev => {
-        //     if (selector.mode === 'none') {
-        //         const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-        //         const selection = []
-        //         game.satellites.forEach(sat => {
-        //             if (isPlayerSatellite(sat)) {
-        //                 selection.push(sat);
-        //             }
-        //         });
-        //         game.moveSatellites(player, selection, point);
-        //     }
-        //     selector.pointerup();
-        // });
+        viewport.on('pointerdown', ev => {
+            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+            selector.pointerdown(point);
+        });
+        viewport.on('pointerup', ev => {
+            if (selector.mode === 'none') {
+                const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
+                const selection = []
+                game.satellites.forEach(sat => {
+                    if (isPlayerSatellite(sat)) {
+                        selection.push(sat);
+                    }
+                });
+                game.moveSatellites(player, selection, point);
+            }
+            selector.pointerup();
+        });
         // app.ticker.maxFPS = 10;
 
         viewport.addChild(bgContainer);

@@ -7,7 +7,7 @@ const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
 export const constants = {
-    gameSpeed: 16,
+    gameSpeed: 1,
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
@@ -337,15 +337,15 @@ class AIPlayer3 extends Player {
             const score = ({ distance, planet }: NeighbourInfo) =>
                 (distance === 0 ? 1 : (1 / distance)) * (
                     (1 * (planet.owner === this && planet.health < 100 ? maxGap(100 - planet.health, mySats.length) : -1)) +
-                    (2 * (planet.owner === this && planet.level < planet.maxLevel ? maxGap(planet.upgrade, mySats.length) : -1)) +
+                    (4 * (planet.owner === this && planet.level < planet.maxLevel ? maxGap(planet.upgrade, mySats.length) : -1)) +
                     (6 * (planet.candidateOwner === this ? maxGap(planet.upgrade, mySats.length) : -1)) +
                     (2 * (planet.candidateOwner !== this ? -planet.upgrade : 0)) +
-                    (4 * (!planet.owner ? maxGap(planet.upgrade, mySats.length) : 0)) +
-                    (4 * (!planet.owner ? planet.maxLevel : 0)) +
-                    (4 * (planet.owner !== this ? (mySats.length - gameBoard.get(planet).satellites.length) / (planet.owner ? planet.level : 1) : 0)) +
+                    (.25 * (!planet.owner ? maxGap(planet.upgrade, mySats.length) : 0)) +
+                    (1 * (!planet.owner ? planet.maxLevel : 0)) +
+                    (4 * (planet.owner !== this ? (mySats.length - gameBoard.get(planet).satellites.length) : 0)) +
                     0
                 );
-            const nn = Array.from(info.neighbours).slice(0, 5).sort((a, b) => score(b) - score(a));
+            const nn = Array.from(info.neighbours).sort((a, b) => score(b) - score(a));
             this.moveToPlanet(someSatellites(mySats), nn[0].planet);
         }
     }
@@ -397,12 +397,30 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
     return  planets;
 }
 
+interface GameEvent {
+    type: 'planet-upgrade' | 'planet-capture' | 'planet-lost';
+    team: Team;
+}
+export interface GameStateSnapshot {
+    time: number;
+    satelliteCounts: Map<Team, number>;
+    events: GameEvent[];
+}
+const createSnapshot = (time: number): GameStateSnapshot => ({
+    time,
+    satelliteCounts: new Map(),
+    events: [],
+});
+
 export class Game {
     private state = {
         completed: false,
         pulsed: false,
     };
     stats = new Stats();
+    private snapshot: GameStateSnapshot;
+    readonly log: GameStateSnapshot[] = [];
+    readonly constants = constants;
     flashes: Flash[];
     planets: Planet[];
     satellites = new ArrayPool(() => new Satellite());
@@ -412,10 +430,10 @@ export class Game {
     pulsed = 0;
     paused = false;
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
-    readonly constants = constants;
 
     constructor() {
         this.flashes = [];
+        this.snapshot = createSnapshot(0);
 
         const aiStats: AIConfig = {
             thinkTimeMS: 10000,
@@ -431,8 +449,8 @@ export class Game {
             new AIPlayer3(this, 'yellow', 0xFFF44F, aiStats),
             new AIPlayer(this, 'orange', 0xCC5500, aiStats),
             new AIPlayer2(this, 'green', 0x7CFC00, aiStats),
-            new AIPlayer(this, 'blue', 0x1111DD, aiStats),
-            // new HumanPlayer(this, 'blue', 0x1111DD),
+            // new AIPlayer(this, 'blue', 0x1111DD, aiStats),
+            new HumanPlayer(this, 'blue', 0x1111DD),
             new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
             new AIPlayer2(this, 'pink', 0xFF10F0, aiStats),
         ]
@@ -463,6 +481,11 @@ export class Game {
             this.lastTick = seconds;
             this.pulse();
             this.state.pulsed = true;
+
+            const map = this.snapshot.satelliteCounts;
+            this.satellites.forEach(sat => map.set(sat.owner.id, (map.get(sat.owner.id) ?? 0) + 1));
+            this.log.push(this.snapshot);
+            this.snapshot = createSnapshot(seconds);
         }
 
         this.collisionTree.clean();
@@ -559,6 +582,10 @@ export class Game {
         sat.mover = new OrbitMover(sat, planet);
     }
 
+    recordEvent(ev: GameEvent) {
+        this.snapshot.events.push(ev);
+    }
+
     destroy(satellite: Satellite) {
         const filter = this.stats.now();
         const released = this.satellites.release(satellite);
@@ -622,6 +649,7 @@ class Planet implements Renderable {
             }
             if (this._upgrade === 100) {
                 this.capture(this._candidateOwner);
+                this.game.recordEvent({ type: 'planet-capture', team: this.owner.id });
             }
         } else if (sat.owner === this.owner) {
             if (this.level < this.maxLevel && this._health === 100) {
@@ -632,6 +660,7 @@ class Planet implements Renderable {
                 this.game.destroy(sat);
             }
             if (this._upgrade === 100) {
+                this.game.recordEvent({ type: 'planet-upgrade', team: this.owner.id });
                 this.level += 1;
                 this._upgrade = 0;
             }
@@ -639,6 +668,7 @@ class Planet implements Renderable {
             this._health -= 1;
             this.game.destroy(sat);
             if (this._health === 0) {
+                this.game.recordEvent({ type: 'planet-lost', team: this.owner.id });
                 this.capture(null);
                 this.level = 0;
             }
