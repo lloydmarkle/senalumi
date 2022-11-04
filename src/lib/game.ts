@@ -10,7 +10,7 @@ export const constants = {
     gameSpeed: 1,
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
-    maxSatelliteVelocity: 0.05,
+    maxSatelliteVelocity: 0.10,
     maxSatellites: 15000,
     forceStiffness: 0.000007,
     forceDamping: 0.0008,

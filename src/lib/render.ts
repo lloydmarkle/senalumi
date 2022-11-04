@@ -343,11 +343,29 @@ export class Renderer {
             const sprite = PIXI.Sprite.from(planetTexture);
             planetContainer.addChild(sprite);
 
+            let ringContainer = new PIXI.Container();
+            pulseContainer.addChild(ringContainer);
+            let rings: PIXI.Graphics[] = [];
+            for (let i = 1; i < planet.maxLevel; i++) {
+                const gfx = new PIXI.Graphics();
+                ringContainer.addChild(gfx);
+                rings.push(gfx);
+
+                const radius = planet.orbitDistance + (40 * i) - 30;
+                gfx.alpha = 0.4;
+                gfx.lineStyle(30, 0x606060);
+                gfx.drawCircle(0, 0, radius);
+                gfx.lineStyle(5, 0xa0a0a0);
+                gfx.drawCircle(0, 0, radius - 5);
+            }
+
             const text = new PIXI.Text('');
+            planetContainer.addChild(text)
             text.style.fill = 0xffffff;
             text.position.x = planet.position.x;
             text.position.y = planet.position.y;
-            planetContainer.addChild(text)
+
+            sprite.anchor.set(0.5, 0.5);
             planet.destroy = () => planetContainer.removeChild(sprite);
             planet.render = () => {
                 text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
@@ -356,8 +374,13 @@ export class Renderer {
                 sprite.x = planet.position.x;
                 sprite.y = planet.position.y;
                 sprite.filters = planet.owner ? [colorMap[planet.owner.id]] : [greyTeamMatrix];
+
+                for (let i = 0; i < rings.length; i++) {
+                    rings[i].visible = (planet.level <= i + 1);
+                }
+                ringContainer.x = planet.position.x;
+                ringContainer.y = planet.position.y;
             };
-            sprite.anchor.set(0.5, 0.5);
             planet.render();
         }
 
@@ -373,12 +396,12 @@ export class Renderer {
                         const pulse = pulses.take().init(planet.position);
 
                         const gfx = new PIXI.Graphics();
+                        pulseContainer.addChild(gfx);
                         gfx.position = pulse.position;
                         gfx.lineStyle(40, planet.owner.color);
                         gfx.drawCircle(0, 0, planet.orbitDistance);
                         gfx.lineStyle(10, planet.owner.satelliteColor);
                         gfx.drawCircle(0, 0, planet.orbitDistance - 13);
-                        pulseContainer.addChild(gfx);
 
                         pulse.destroy = () => {
                             pulses.release(pulse);
