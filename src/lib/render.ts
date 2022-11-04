@@ -323,7 +323,7 @@ export class Renderer {
         viewport.addChild(interactionContainer);
 
         pulseContainer.filters = [
-            new PIXI.filters.BlurFilter(),
+            new PIXI.filters.BlurFilter(50, 16),
         ]
 
         // dbg view (always add this last)
@@ -351,12 +351,11 @@ export class Renderer {
                 ringContainer.addChild(gfx);
                 rings.push(gfx);
 
-                const radius = planet.orbitDistance + (40 * i) - 30;
-                gfx.alpha = 0.4;
-                gfx.lineStyle(30, 0x606060);
-                gfx.drawCircle(0, 0, radius);
-                gfx.lineStyle(5, 0xa0a0a0);
-                gfx.drawCircle(0, 0, radius - 5);
+                const step = game.constants.planetRadius / 8;
+                const radius = i * step + step;
+                gfx.alpha = 0.5;
+                gfx.lineStyle(step, 0x777777);
+                gfx.drawCircle(0, 0, radius * 3);
             }
 
             const text = new PIXI.Text('');
@@ -398,10 +397,8 @@ export class Renderer {
                         const gfx = new PIXI.Graphics();
                         pulseContainer.addChild(gfx);
                         gfx.position = pulse.position;
-                        gfx.lineStyle(40, planet.owner.color);
-                        gfx.drawCircle(0, 0, planet.orbitDistance);
-                        gfx.lineStyle(10, planet.owner.satelliteColor);
-                        gfx.drawCircle(0, 0, planet.orbitDistance - 13);
+                        gfx.lineStyle(planet.orbitDistance, planet.owner.satelliteColor);
+                        gfx.drawCircle(0, 0, planet.orbitDistance * 2.5);
 
                         pulse.destroy = () => {
                             pulses.release(pulse);
@@ -491,8 +488,8 @@ class Pulse {
         if (this.timeleftMS < 0) {
             this.destroy?.();
         }
-        this.alpha = 0.1 * (this.timeleftMS / Pulse.maxTime);
-        this.scale = 4 * (1 - (this.timeleftMS / Pulse.maxTime));
+        this.alpha = 0.5 * (this.timeleftMS / Pulse.maxTime);
+        this.scale = 1 - (this.timeleftMS / Pulse.maxTime);
         this.render?.();
     }
 }
