@@ -95,7 +95,6 @@ class HumanPlayer extends Player {
     }
 }
 
-
 interface AIConfig {
     // max and min time between evaluating the map
     maxThinkGapMS: number;

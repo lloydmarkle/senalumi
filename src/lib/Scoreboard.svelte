@@ -34,6 +34,7 @@
     }
 
     let highlights = data.filter(e => e.events.length);
+    let blurBackground = false;
 
     function formatMinute(n: number) {
         let seconds = n % 60;
@@ -42,7 +43,12 @@
     }
 </script>
 
-<div class="container" transition:fly={{ y: (window.innerHeight * -0.5) }}>
+<div class="container"
+    class:container-visible={blurBackground}
+    on:introstart={() => blurBackground = true}
+    on:outrostart={() => blurBackground = false}
+    transition:fly={{ y: (window.innerHeight * -0.8) }}
+    >
     <div class="chart">
         <Pancake.Chart x1={minx} x2={maxx} y1={miny} y2={maxy}>
             <Pancake.Grid horizontal count={5} let:value let:last>
@@ -97,8 +103,9 @@
         align-items: center;
         justify-content: center;
 
-        background: linear-gradient(to bottom, rgb(200, 200, 200, 0.3), rgb(200, 200, 200, 0.5));
-        /* background: white; */
+        transition: backdrop-filter 2s;
+        backdrop-filter: blur(5px) opacity(0);
+        background: linear-gradient(to bottom, rgb(200, 200, 200, 0.1), rgb(200, 200, 200, 0.3));
         position: absolute;
         top: 0;
         left: 0;
@@ -106,7 +113,9 @@
         /* width: 100vw; */
         height: 100vh;
     }
-
+    .container-visible {
+        backdrop-filter: blur(5px) opacity(1);
+    }
 
     .chart {
         width: 80vw;

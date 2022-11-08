@@ -1,31 +1,30 @@
 <script lang="ts">
-  import DebugInfo from "./lib/DebugInfo.svelte";
+  import DebugOptions from "./lib/DebugOptions.svelte";
   import { Game } from './lib/game';
   import { Renderer } from './lib/render';
   import Scoreboard from "./lib/Scoreboard.svelte";
 
   const game = new Game();
-  (window as any)._game = game;
-  (window as any)._gfx = new Renderer(game);
+  const gfx = new Renderer(game);
 
   let showScore = false;
-  let showDebug = false;
+  let showDebugOptions = false;
   function keypress(ev: KeyboardEvent) {
     if (ev.key === '`' || ev.key === '~') {
-      showDebug = !showDebug;
+      showDebugOptions = !showDebugOptions;
     }
     if (ev.key === ' ') {
       showScore = !showScore;
     }
-    game.paused = showScore || showDebug;
+    game.paused = showScore || showDebugOptions;
   }
 </script>
 
 <svelte:body on:keypress={keypress} />
 
 <main>
-  {#if showDebug}
-    <DebugInfo />
+  {#if showDebugOptions}
+    <DebugOptions {game} {gfx} />
   {/if}
   {#if showScore}
     <Scoreboard data={game.log} />

@@ -106,41 +106,48 @@ class DebugRender {
         frames: 0,
     };
     private dbg: PIXI.Container;
-    private overlayText: PIXI.Text;
-    private dbgFns: Function[] = [];
-    updateFrequencyMS = 500;
+    private updateFns: Function[] = [];
+
+    readonly config = {
+        updateFrequencyMS: 500,
+        showStats: false,
+        showQuadTree: false,
+        showPlanetSelection: {},
+    };
 
     constructor(private game: Game, container: PIXI.Container, gameview: PIXI.Container) {
-        this.overlayText = new PIXI.Text('');
-        this.overlayText.x = 50;
-        this.overlayText.y = 100;
-        this.overlayText.style.fill = 0xffffff;
-        this.overlayText.scale.set(0.5);
-        container.addChild(this.overlayText);
-        // this.showOverlayInfo();
-
         this.dbg = new PIXI.Container();
         gameview.addChild(this.dbg);
+
+        const text = this.setupStatsDisplay();
+        container.addChild(text);
+        this.setupQuadTreeDisplay();
+        game.players.forEach(p => this.setupPlanetSelectionHighlight(p));
     }
 
     tick(app: PIXI.Application) {
         const now = new Date();
         this.overlayInfo.frames += 1;
         this.overlayInfo.fps += app.ticker.FPS;
-        if (now.getTime() - this.overlayInfo.lastTime.getTime() > this.updateFrequencyMS) {
+        if (now.getTime() - this.overlayInfo.lastTime.getTime() > this.config.updateFrequencyMS) {
             this.overlayInfo.lastTime = now;
-            this.dbgFns.forEach(fn => fn());
+            this.updateFns.forEach(fn => fn());
         }
     }
 
-    clear() {
-        this.dbgFns = [];
-        this.dbg.removeChildren();
-        this.showOverlayInfo();
-    }
+    private setupStatsDisplay() {
+        const overlayText = new PIXI.Text('');
+        overlayText.x = 50;
+        overlayText.y = 100;
+        overlayText.style.fill = 0xffffff;
+        overlayText.scale.set(0.5);
 
-    showOverlayInfo() {
-        this.dbgFns.push(() => {
+        this.updateFns.push(() => {
+            overlayText.visible = this.config.showStats;
+            if (!overlayText.visible) {
+                return;
+            }
+
             const planets = this.game.planets.reduce((map, p) => {
                 if (p.owner) {
                     map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
@@ -161,7 +168,7 @@ class DebugRender {
             perfStats.push(`thinkTime: ${this.game.stats.thinkTime.toFixed(2)}ms`);
             perfStats.push(`gameTime: ${this.game.stats.gameTime.toFixed(2)}ms`);
 
-            this.overlayText.text = [
+            overlayText.text = [
                 (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
                 this.game.satellites.length + ' satellites',
                 'stats: [', '  ' + stats.join('\n  '), ']',
@@ -170,14 +177,20 @@ class DebugRender {
             this.overlayInfo.fps = 0;
             this.overlayInfo.frames = 0;
         });
+        return overlayText;
     }
 
-    quadTree() {
+    private setupQuadTreeDisplay() {
         let gfx = new PIXI.Graphics();
         this.dbg.addChild(gfx);
 
-        this.dbgFns.push(() => {
+        this.updateFns.push(() => {
             gfx.removeChildren();
+            gfx.visible = this.config.showQuadTree;
+            if (!gfx.visible) {
+                return;
+            }
+
             let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
 
             let q: Array<[number, QuadTree<any>]> = [];
@@ -201,13 +214,18 @@ class DebugRender {
         });
     }
 
-    planetSelections(player: Player) {
+    private setupPlanetSelectionHighlight(player: Player) {
         let gfx = new PIXI.Graphics();
         this.dbg.addChild(gfx);
 
-        this.dbgFns.push(() => {
+        this.updateFns.push(() => {
             gfx.clear();
             gfx.removeChildren();
+            gfx.visible = this.config.showPlanetSelection[player.id] ?? false;
+            if (!gfx.visible) {
+                return;
+            }
+
             gfx.lineStyle(0.5, setLightness(player.color, 90));
 
             const planets = this.game.planets.filter(e => e.owner === player);
