@@ -1,5 +1,5 @@
-import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint } from './math';
-import { Game, constants, type Player, setLightness } from './game';
+import { type Point, distSqr, QuadTree, ArrayPool } from './math';
+import { Game, constants, type Player, setLightness, Planet, type Renderable, Pulse, Flash, Satellite } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
@@ -109,20 +109,22 @@ class DebugRender {
     private updateFns: Function[] = [];
 
     readonly config = {
+        enablePulseAnimation: true,
         updateFrequencyMS: 500,
         showStats: false,
         showQuadTree: false,
-        showPlanetSelection: {},
+        showPlanetStats: false,
+        showPlayerSelection: {},
     };
 
-    constructor(private game: Game, container: PIXI.Container, gameview: PIXI.Container) {
+    constructor(private game: Game, app: PIXI.Application, gameview: PIXI.Container, cull: Simple) {
         this.dbg = new PIXI.Container();
         gameview.addChild(this.dbg);
 
-        const text = this.setupStatsDisplay();
-        container.addChild(text);
+        this.setupStatsDisplay(app, cull);
         this.setupQuadTreeDisplay();
-        game.players.forEach(p => this.setupPlanetSelectionHighlight(p));
+        game.players.forEach(p => this.setupPlayerSelectionHighlight(p));
+        game.planets.forEach(p => this.setupPlanetStats(p));
     }
 
     tick(app: PIXI.Application) {
@@ -135,16 +137,17 @@ class DebugRender {
         }
     }
 
-    private setupStatsDisplay() {
-        const overlayText = new PIXI.Text('');
-        overlayText.x = 50;
-        overlayText.y = 100;
-        overlayText.style.fill = 0xffffff;
-        overlayText.scale.set(0.5);
+    private setupStatsDisplay(app: PIXI.Application, cull: Simple) {
+        const text = new PIXI.Text('');
+        app.stage.addChild(text);
+        text.x = app.renderer.screen.width - 200;
+        text.y = 100;
+        text.style.fill = 0xffffff;
+        text.scale.set(0.5);
 
         this.updateFns.push(() => {
-            overlayText.visible = this.config.showStats;
-            if (!overlayText.visible) {
+            text.visible = this.config.showStats;
+            if (!text.visible) {
                 return;
             }
 
@@ -154,9 +157,12 @@ class DebugRender {
                 }
                 return map;
             }, {});
-            const stats = Array.from(this.game.log.at(-1).satelliteCounts.entries())
+            const stats = Array.from(this.game.log.at(-1)?.satelliteCounts?.entries() ?? [])
                 .sort((a, b) => b[1] - a[1])
                 .map(([team, count]) => `${team}: ${count} satellites, ${planets[team] ?? 0}/s`);
+
+            const cullStats = [];
+            Object.entries(cull.stats()).forEach(stat => cullStats.push(`${stat[0]}: ${stat[1]}`));
 
             const perfStats = [];
             Object.keys(this.game.stats.collisionStages).forEach(stage => {
@@ -168,16 +174,17 @@ class DebugRender {
             perfStats.push(`thinkTime: ${this.game.stats.thinkTime.toFixed(2)}ms`);
             perfStats.push(`gameTime: ${this.game.stats.gameTime.toFixed(2)}ms`);
 
-            overlayText.text = [
+            text.text = [
                 (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
                 this.game.satellites.length + ' satellites',
                 'stats: [', '  ' + stats.join('\n  '), ']',
                 'perf: [', '  ' + perfStats.join('\n  '), ']',
+                'cull: [', '  ' + cullStats.join('\n  '), ']',
             ].join('\n');
             this.overlayInfo.fps = 0;
             this.overlayInfo.frames = 0;
         });
-        return overlayText;
+        return text;
     }
 
     private setupQuadTreeDisplay() {
@@ -185,7 +192,7 @@ class DebugRender {
         this.dbg.addChild(gfx);
 
         this.updateFns.push(() => {
-            gfx.removeChildren();
+            this.destroyChildren(gfx);
             gfx.visible = this.config.showQuadTree;
             if (!gfx.visible) {
                 return;
@@ -214,14 +221,14 @@ class DebugRender {
         });
     }
 
-    private setupPlanetSelectionHighlight(player: Player) {
+    private setupPlayerSelectionHighlight(player: Player) {
         let gfx = new PIXI.Graphics();
         this.dbg.addChild(gfx);
 
         this.updateFns.push(() => {
             gfx.clear();
-            gfx.removeChildren();
-            gfx.visible = this.config.showPlanetSelection[player.id] ?? false;
+            this.destroyChildren(gfx);
+            gfx.visible = this.config.showPlayerSelection[player.id] ?? false;
             if (!gfx.visible) {
                 return;
             }
@@ -242,14 +249,41 @@ class DebugRender {
             }
         });
     }
+
+    private setupPlanetStats(planet: Planet) {
+        const text = new PIXI.Text('');
+        text.style.fill = 0xffffff;
+        this.dbg.addChild(text);
+
+        this.updateFns.push(() => {
+            text.visible = this.config.showPlanetStats;
+            if (!text.visible) {
+                return;
+            }
+
+            text.anchor.set(0.5, 0.5);
+            text.position.x = planet.position.x;
+            text.position.y = planet.position.y;
+            text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
+        });
+    }
+
+    private destroyChildren(container: PIXI.Container) {
+        while(container.children[0]) {
+            container.children[0].destroy();
+        }
+    }
 }
+
+const lastApp = (app?: any) =>
+    (window as any).lastApp = app ?? (window as any).lastApp;
 
 export class Renderer {
     readonly dbg: DebugRender;
     readonly app: PIXI.Application;
     constructor(game: Game) {
-        if (import.meta.hot && this.app) {
-            this.app.destroy(true, { baseTexture: true, children: true, texture: true });
+        if (import.meta.hot && lastApp()) {
+            lastApp().destroy(false, { baseTexture: true, children: true, texture: true });
         }
 
         const player = game.players.find(p => !('elapsedFromLastThink' in p));
@@ -260,7 +294,7 @@ export class Renderer {
             autoDensity: true,
             resizeTo: window,
         });
-        this.app = app;
+        lastApp(this.app = app);
 
         // create viewport
         const viewport = new Viewport({
@@ -280,7 +314,7 @@ export class Renderer {
 
         // activate plugins
         viewport.clampZoom({
-            maxScale: 2.8,
+            maxScale: 3,
             minScale: 0.2,
         })
         viewport.clamp({
@@ -292,26 +326,31 @@ export class Renderer {
         viewport.moveCenter(0, 0);
         viewport.setZoom(0.4);
 
-        let greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-        greyTeamMatrix.tint(0x222222, true);
-        let colorMap = game.players.reduce((map, player) => {
-            let filter = new PIXI.filters.ColorMatrixFilter();
-            filter.tint(player.color, true);
-            map[player.id] = filter;
-            return map;
-        }, {})
-
         // Create the sprite and add it to the stage
         let satelliteTexture = PIXI.Texture.from('star.png');
         let planetTexture = PIXI.Texture.from('sun.png');
 
         let bgContainer = new PIXI.Container();
+        viewport.addChild(bgContainer);
+        let ringContainer = new PIXI.Container();
+        ringContainer.filters = [
+            new PIXI.filters.BlurFilter(50, 16),
+        ];
+        viewport.addChild(ringContainer);
         let pulseContainer = new PIXI.Container();
+        pulseContainer.filters = [
+            new PIXI.filters.BlurFilter(50, 16),
+        ];
+        viewport.addChild(pulseContainer);
         let planetContainer = new PIXI.Container();
+        viewport.addChild(planetContainer);
         let satelliteContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
+        viewport.addChild(satelliteContainer);
         let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
-        let interactionContainer = new PIXI.Container();
+        viewport.addChild(flashContainer);
 
+        let interactionContainer = new PIXI.Container();
+        viewport.addChild(interactionContainer);
         let selector = new Selector(viewport);
         interactionContainer.addChild(selector.gfx);
         viewport.on('pointerdown', ev => {
@@ -333,22 +372,10 @@ export class Renderer {
         });
         // app.ticker.maxFPS = 10;
 
-        viewport.addChild(bgContainer);
-        viewport.addChild(pulseContainer);
-        viewport.addChild(planetContainer);
-        viewport.addChild(satelliteContainer);
-        viewport.addChild(flashContainer);
-        viewport.addChild(interactionContainer);
-
-        pulseContainer.filters = [
-            new PIXI.filters.BlurFilter(50, 16),
-        ]
-
-        // dbg view (always add this last)
-        this.dbg = new DebugRender(game, app.stage, viewport);
-
-        // const cull = new Simple();
-        // cull.addList(viewport.children);
+        const cull = new Simple();
+        // cull.addList(satelliteContainer.children);
+        // cull.addList(pulseContainer.children);
+        // cull.addList(flashContainer.children);
         // cull.cull(viewport.getVisibleBounds());
         // app.ticker.add(() => {
         //     if (viewport.dirty) {
@@ -357,157 +384,116 @@ export class Renderer {
         //     }
         // });
 
-        for (const planet of game.planets) {
-            const sprite = PIXI.Sprite.from(planetTexture);
-            planetContainer.addChild(sprite);
+        // dbg view (always add this last)
+        this.dbg = new DebugRender(game, app, viewport, cull);
 
-            let ringContainer = new PIXI.Container();
-            pulseContainer.addChild(ringContainer);
-            let rings: PIXI.Graphics[] = [];
-            for (let i = 1; i < planet.maxLevel; i++) {
+        const initPlanet = createPlanetInitializer(game.players);
+
+        const renderableInitializers = {
+            'Pulse': (pulse: Pulse) => {
                 const gfx = new PIXI.Graphics();
-                ringContainer.addChild(gfx);
-                rings.push(gfx);
+                pulseContainer.addChild(gfx);
+                gfx.position = pulse.position;
+                gfx.lineStyle(pulse.planet.orbitDistance, pulse.planet.owner.satelliteColor);
+                gfx.drawCircle(0, 0, pulse.planet.orbitDistance * 2.5);
 
-                const step = game.constants.planetRadius / 8;
-                const radius = i * step + step;
-                gfx.alpha = 0.5;
-                gfx.lineStyle(step, 0x777777);
-                gfx.drawCircle(0, 0, radius * 3);
-            }
+                pulse.destroy = () => gfx.destroy();
+                pulse.render = () => updateGfx(gfx, pulse);
+            },
 
-            const text = new PIXI.Text('');
-            planetContainer.addChild(text)
-            text.style.fill = 0xffffff;
-            text.position.x = planet.position.x;
-            text.position.y = planet.position.y;
+            'Flash': (flash: Flash) => {
+                const gfx = createGraphics(satelliteTexture, flashContainer);
+                flash.destroy = () => gfx.destroy();
+                flash.render = () => updateGfx(gfx, flash);
+            },
 
-            sprite.anchor.set(0.5, 0.5);
-            planet.destroy = () => planetContainer.removeChild(sprite);
-            planet.render = () => {
-                text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
-                sprite.rotation = planet.rotation;
-                sprite.scale.set(planet.radius);
-                sprite.x = planet.position.x;
-                sprite.y = planet.position.y;
-                sprite.filters = planet.owner ? [colorMap[planet.owner.id]] : [greyTeamMatrix];
+            'Satellite': (satellite: Satellite) => {
+                const gfx = createGraphics(satelliteTexture, satelliteContainer);
+                satellite.destroy = () => gfx.destroy();
+                satellite.render = () => {
+                    updateGfx(gfx, satellite);
+                    gfx.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
+                };
+            },
 
-                for (let i = 0; i < rings.length; i++) {
-                    rings[i].visible = (planet.level <= i + 1);
-                }
-                ringContainer.x = planet.position.x;
-                ringContainer.y = planet.position.y;
-            };
-            planet.render();
-        }
-
-        let pulses = new ArrayPool(() => new Pulse())
+            'Planet': (planet: Planet) => {
+                const rings = initRings(game, planet);
+                ringContainer.addChild(rings);
+                const gfx = createGraphics(planetTexture, planetContainer);
+                initPlanet(planet, gfx, rings);
+            },
+        };
 
         app.ticker.add((delta) => {
             this.dbg.tick(app);
-            const state = game.tick(app.ticker.elapsedMS);
+            game.tick(app.ticker.elapsedMS);
 
-            if (state.pulsed && game.constants.gameSpeed <= 1) {
-                for (const planet of game.planets) {
-                    if (planet.owner) {
-                        const pulse = pulses.take().init(planet.position);
-
-                        const gfx = new PIXI.Graphics();
-                        pulseContainer.addChild(gfx);
-                        gfx.position = pulse.position;
-                        gfx.lineStyle(planet.orbitDistance, planet.owner.satelliteColor);
-                        gfx.drawCircle(0, 0, planet.orbitDistance * 2.5);
-
-                        pulse.destroy = () => {
-                            pulses.release(pulse);
-                            pulseContainer.removeChild(gfx);
-                        };
-                        pulse.render = () => {
-                            gfx.alpha = pulse.alpha;
-                            gfx.scale.set(pulse.scale);
-                        };
-                    }
+            pulseContainer.visible = this.dbg.config.enablePulseAnimation;
+            game.forEachRenderable(r => {
+                if (!r.render) {
+                    renderableInitializers[r.constructor.name](r);
                 }
-            }
-            pulses.forEach(p => p.tick(app.ticker.elapsedMS * game.constants.gameSpeed));
-
-            for (const planet of game.planets) {
-                planet.render();
-            }
-
-            for (const flash of game.flashes) {
-                if (flash.render) {
-                    flash.render();
-                    continue;
-                }
-
-                const sprite = PIXI.Sprite.from(satelliteTexture);
-                flashContainer.addChild(sprite);
-                flash.destroy = () => flashContainer.removeChild(sprite);
-                flash.render = () => {
-                    sprite.rotation = flash.rotation;
-                    sprite.scale.set(flash.size);
-                    sprite.alpha = flash.alpha;
-                    sprite.x = flash.position.x;
-                    sprite.y = flash.position.y;
-                };
-                sprite.anchor.set(0.5, 0.5);
-                flash.render();
-            }
-
-            game.satellites.forEach(satellite => {
-                if (satellite.render) {
-                    satellite.render();
-                    return;
-                }
-
-                let rotation = Math.random() * Math.PI * 2;
-                let rotationSpeed = Math.random() * Math.PI * 2 / 4000;
-                const sprite = PIXI.Sprite.from(satelliteTexture);
-                satelliteContainer.addChild(sprite);
-                satellite.destroy = () => satelliteContainer.removeChild(sprite);
-                satellite.render = () => {
-                    rotation += rotationSpeed * app.ticker.elapsedMS;
-                    sprite.rotation = rotation;
-                    sprite.x = satellite.position.x;
-                    sprite.y = satellite.position.y;
-
-                    sprite.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
-                };
-                sprite.anchor.set(0.5, 0.5);
-                satellite.render();
-            });
+                r.render();
+            })
         });
     }
 }
 
-class Pulse {
-    static maxTime = 2000;
-    private timeleftMS: number;
+function createGraphics(texture: PIXI.Texture, container: PIXI.Container) {
+    const gfx = PIXI.Sprite.from(texture);
+    container.addChild(gfx);
+    gfx.anchor.set(0.5, 0.5);
+    return gfx;
+}
 
-    render: Function;
-    destroy: Function;
+function updateGfx(gfx: PIXI.Container, r: Renderable) {
+    if (r.alpha !== undefined) gfx.alpha = r.alpha;
+    gfx.rotation = r.rotation;
+    gfx.scale.set(r.size);
+    gfx.position = r.position;
+}
 
-    alpha: number = 1;
-    scale: number = 1;
-    position = originPoint();
-    init(position: Point) {
-        this.render = null;
-        this.destroy = null;
-        this.alpha = 1;
-        this.scale = 1;
-        this.timeleftMS = Pulse.maxTime;
-        copyPoint(position, this.position);
-        return this;
+function initRings(game: Game, planet: Planet) {
+    let container = new PIXI.Container();
+    let rings: PIXI.Graphics[] = [];
+    for (let i = 1; i < planet.maxLevel; i++) {
+        const gfx = new PIXI.Graphics();
+        container.addChild(gfx);
+        rings.push(gfx);
+
+        const step = game.constants.planetRadius / 8;
+        const radius = i * step + step;
+        gfx.alpha = 0.5;
+        gfx.lineStyle(step, 0x777777);
+        gfx.drawCircle(0, 0, radius * 3);
     }
+    return container;
+}
 
-    tick(elapsedMS: number) {
-        this.timeleftMS -= elapsedMS;
-        if (this.timeleftMS < 0) {
-            this.destroy?.();
-        }
-        this.alpha = 0.5 * (this.timeleftMS / Pulse.maxTime);
-        this.scale = 1 - (this.timeleftMS / Pulse.maxTime);
-        this.render?.();
-    }
+function createPlanetInitializer(players: Player[]) {
+    const colorMap = players.reduce((map, player) => {
+        let filter = new PIXI.filters.ColorMatrixFilter();
+        filter.tint(player.color, true);
+        map[player.id] = filter;
+        return map;
+    }, {})
+    const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
+    greyTeamMatrix.tint(0x222222, true);
+    colorMap['default'] = greyTeamMatrix;
+
+    return (planet: Planet, gfx: PIXI.Container, rings: PIXI.Container) => {
+        planet.destroy = () => {
+            gfx.destroy();
+            rings.destroy({ children: true });
+        };
+        planet.render = () => {
+            updateGfx(gfx, planet);
+            gfx.filters = [planet.owner ? colorMap[planet.owner.id] : colorMap['default']];
+
+            for (let i = 0; i < rings.children.length; i++) {
+                rings.children[i].visible = (planet.level <= i + 1);
+            }
+            rings.position = planet.position;
+        };
+    };
 }

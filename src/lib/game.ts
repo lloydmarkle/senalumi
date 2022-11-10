@@ -1,4 +1,5 @@
 import { hex, hsl } from 'color-convert';
+import type { init } from 'svelte/internal';
 import { ArrayPool, distSqr, originPoint, point, copyPoint, QuadTree, type Point } from './math';
 
 const quadTreeBoxCapacity = 5;
@@ -18,8 +19,6 @@ export const constants = {
     // sprite is (currently) 300px
     planetRadius: 150,
 };
-
-const flashPool = new ArrayPool(() => new Flash());
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
@@ -57,9 +56,19 @@ class Stats {
     }
 }
 
-interface Renderable {
+export interface Renderable {
+    position: Point;
+    size: number;
+    rotation: number;
+    alpha?: number;
+
     render: Function;
     destroy: Function;
+}
+
+export interface Entity {
+    id: number;
+    canCollide: boolean;
 }
 
 export const setLightness = (color: number, lightness: number) => {
@@ -396,16 +405,13 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
 });
 
 export class Game {
-    private state = {
-        completed: false,
-        pulsed: false,
-    };
     stats = new Stats();
     private snapshot: GameStateSnapshot;
     readonly log: GameStateSnapshot[] = [];
     readonly constants = constants;
-    flashes: Flash[];
-    planets: Planet[];
+    private pulses = new ArrayPool(() => new Pulse());
+    private flashes = new ArrayPool(() => new Flash());
+    planets: Planet[] = [];
     satellites = new ArrayPool(() => new Satellite());
     players: Player[];
     gameTime = 0.0;
@@ -415,7 +421,6 @@ export class Game {
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
 
     constructor() {
-        this.flashes = [];
         this.snapshot = createSnapshot(0);
 
         const aiStats: AIConfig = {
@@ -447,40 +452,33 @@ export class Game {
         for (let i = 0; i < initialSatellites; i++){
             this.pulse();
         }
+        // quick hack to remove all the pulse animations after initial pulse
+        this.pulses = new ArrayPool(() => new Pulse());
+    }
+
+    forEachRenderable(fn: (r: Renderable) => void) {
+        this.planets.forEach(planet => fn(planet));
+        this.pulses.forEach(pulse => fn(pulse));
+        this.flashes.forEach(flash => fn(flash));
+        this.satellites.forEach(sat => fn(sat));
     }
 
     tick(ms: number) {
-        this.state.pulsed = false;
-
         if (this.paused) {
-            return this.state;
+            return;
         }
         const elapsedMS = ms * constants.gameSpeed;
         this.gameTime = this.gameTime + elapsedMS;
         this.stats.clear();
         const gameTime = this.stats.now();
 
-        const seconds = Math.floor(this.gameTime / 1000);
-        if (seconds > this.lastTick) {
-            this.lastTick = seconds;
-            this.pulse();
-            this.state.pulsed = true;
-
-            const map = this.snapshot.satelliteCounts;
-            this.satellites.forEach(sat => map.set(sat.owner.id, (map.get(sat.owner.id) ?? 0) + 1));
-            this.log.push(this.snapshot);
-            this.snapshot = createSnapshot(seconds);
-        }
-
         this.collisionTree.clean();
 
         const moveTimer = this.stats.now();
         this.planets.forEach(planet => planet.tick(elapsedMS));
+        this.pulses.forEach(pulse => pulse.tick(elapsedMS));
         this.flashes.forEach(flash => flash.tick(elapsedMS));
         this.satellites.forEach(sat => {
-            if (sat.position.x < -constants.maxWorld || sat.position.x > constants.maxWorld || sat.position.y < -constants.maxWorld || sat.position.y > constants.maxWorld) {
-                this.destroy(sat);
-            }
             const collideTime = this.stats.now();
             this.collisionTree.insert(sat, constants.satelliteRadius);
             this.stats.collideTime += this.stats.elapsed(collideTime);
@@ -489,7 +487,6 @@ export class Game {
         this.stats.moveTime = this.stats.elapsed(moveTimer) - this.stats.collideTime;
 
         // needs to be after satellites otherwise the quad trees explode
-        // TODO: don't throw away trees every frame? (high gc load?)
         const thinkTime = this.stats.now();
         this.players.forEach(player => {
             let timer = this.stats.now();
@@ -502,8 +499,21 @@ export class Game {
         this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius));
         this.stats.collideTime += this.stats.elapsed(collideTime);
 
+        // pulse is the last thing we do because planets could have changed ownership during collision detection
+        const seconds = Math.floor(this.gameTime / 1000);
+        if (seconds > this.lastTick) {
+            this.lastTick = seconds;
+            const pulseTime = this.stats.now();
+            this.pulse();
+
+            const map = this.snapshot.satelliteCounts;
+            this.satellites.forEach(sat => map.set(sat.owner.id, (map.get(sat.owner.id) ?? 0) + 1));
+            this.log.push(this.snapshot);
+            this.snapshot = createSnapshot(seconds);
+            this.stats.pulseTime = this.stats.elapsed(pulseTime);
+        }
+
         this.stats.gameTime = this.stats.elapsed(gameTime);
-        return this.state;
     }
 
     private collide(satellites: Satellite[], radius: number) {
@@ -547,15 +557,14 @@ export class Game {
     }
 
     private pulse() {
-        const pulseTime = this.stats.now();
         this.planets.forEach(planet => {
             if (planet.owner) {
+                this.pulses.take().init(this, planet);
                 for (let i = 0; i < planet.level * constants.pulseRate; i++) {
                     this.spawnSatellite(planet);
                 }
             }
         });
-        this.stats.pulseTime = this.stats.elapsed(pulseTime);
     }
 
     private spawnSatellite(planet: Planet) {
@@ -570,22 +579,30 @@ export class Game {
         this.snapshot.events.push(ev);
     }
 
-    destroy(satellite: Satellite) {
-        const filter = this.stats.now();
-        const released = this.satellites.release(satellite);
-        if (released) {
-            satellite.destroy?.();
-        }
-        this.stats.recordCollide(filter, 'filter');
+    destroy(entity: Renderable) {
+        if (entity instanceof Satellite) {
+            const filter = this.stats.now();
+            const released = this.satellites.release(entity);
+            this.stats.recordCollide(filter, 'filter');
+            if (released) {
+                entity.destroy?.();
 
-        const remove = this.stats.now();
-        this.flashes.push(flashPool.take().init(this, satellite.position, satellite.velocity));
-        this.stats.recordCollide(remove, 'remove');
+                const remove = this.stats.now();
+                this.flashes.take().init(this, entity.position, entity.velocity);
+                this.stats.recordCollide(remove, 'remove');
+            }
+        } else if (entity instanceof Flash) {
+            this.flashes.release(entity);
+            entity.destroy?.();
+        } else if (entity instanceof Pulse) {
+            this.pulses.release(entity);
+            entity.destroy?.();
+        }
     }
 }
 
 type PlanetLevel = 0 | 1 | 2 | 3 | 4;
-class Planet implements Renderable {
+export class Planet implements Renderable {
     private _candidateOwner?: Player;
     private _owner?: Player;
     private _rotation: number = Math.random() * Math.PI * 2;
@@ -599,9 +616,8 @@ class Planet implements Renderable {
     get rotation() { return this._rotation; }
     get owner(): Player | undefined { return this._owner; }
     get candidateOwner(): Player | undefined { return this._candidateOwner; }
-    // value between 0 and 1
-    get radius() { return (this.level / 8) + .5; }
-    get orbitDistance() { return this.radius * constants.planetRadius; }
+    get size() { return (this.level / 5) + .5; }
+    get orbitDistance() { return this.size * constants.planetRadius; }
     get health() { return this._health; }
     get upgrade() { return this._upgrade; }
 
@@ -749,19 +765,24 @@ class MoveSequence implements Mover {
     }
 }
 
-class Satellite implements Renderable {
+export class Satellite implements Renderable {
     render: Function;
     destroy: Function;
     mover: Mover;
+    rotation = 0;
+    readonly size = 1;
     readonly position: Point = originPoint();
     readonly velocity: Point = originPoint();
     readonly owner: Player;
 
-    constructor() {}
+    private rotationSpeed: number;
 
     init(owner: Player, position: Point) {
         this.render = null;
         this.destroy = null;
+        this.rotation = Math.random() * Math.PI * 2;
+        this.rotationSpeed = Math.random() * Math.PI * 2 / 2000;
+
         let self = this as any;
         self.owner = owner;
         self.position.x = position.x;
@@ -774,6 +795,11 @@ class Satellite implements Renderable {
     }
 
     tick(elapsedMS: number) {
+        const outOfBounds = (this.position.x < -constants.maxWorld || this.position.x > constants.maxWorld || this.position.y < -constants.maxWorld || this.position.y > constants.maxWorld);
+        if (outOfBounds) {
+            return this.owner.game.destroy(this);
+        }
+        this.rotation += this.rotationSpeed * elapsedMS;
         this.mover = this.mover.evaluate(elapsedMS);
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
@@ -795,45 +821,79 @@ class Satellite implements Renderable {
     }
 }
 
-class Flash implements Renderable {
-    private rotationSpeed = Math.random() * Math.PI / 200;
-    private timeleftMS: number;
-    size: number;
-    alpha: number;
-    rotation: number = Math.random() * Math.PI * 2;
+abstract class SpecialEffect implements Renderable {
+    private ageMS: number;
+    private lifetimeMS: number;
+    size: number = 1;
+    alpha: number = 0;
+    rotation: number = 0;
+    readonly position = originPoint();
+
     render: Function;
     destroy: Function;
 
-    readonly game: Game;
-    readonly position = originPoint();
-    readonly velocity = originPoint();
-    constructor() {}
+    private _game: Game;
+    get game() { return this._game }
 
-    init(game: Game, position: Point, velocity: Point) {
+    protected effectInit(game: Game, timeleftMS: number) {
         this.render = null;
         this.destroy = null;
+        this._game = game;
+        this.ageMS = 0;
+        this.lifetimeMS = timeleftMS;
+    }
+
+    tick(elapsedMS: number) {
+        this.ageMS += elapsedMS;
+        if (this.ageMS > this.lifetimeMS) {
+            this.game.destroy(this);
+        } else {
+            const t = this.ageMS / this.lifetimeMS;
+            this.update(elapsedMS, t, 1 - t);
+        }
+    }
+
+    protected abstract update(elapsedMS: number, t: number, u: number);
+}
+
+export class Flash extends SpecialEffect {
+    private rotationSpeed = Math.random() * Math.PI / 200;
+
+    readonly velocity = originPoint();
+
+    init(game: Game, position: Point, velocity: Point) {
+        this.effectInit(game, Math.random() * 300 + 200);
+        this.rotation = Math.random() * Math.PI * 2;
         this.size = 1;
         this.alpha = 1;
-        this.timeleftMS = (Math.random() * 300 + 200) * 1;
-
-        (this as any).game = game;
         copyPoint(position, this.position);
         copyPoint(velocity, this.velocity);
         return this;
     }
 
-    tick(elapsedMS: number) {
-        this.timeleftMS -= elapsedMS;
-        if (this.timeleftMS < 0) {
-            flashPool.release(this);
-            this.destroy();
-            this.game.flashes = this.game.flashes.filter(e => e !== this);
-        }
-
+    protected update(elapsedMS: number) {
         this.alpha -= 0.001 * elapsedMS;
         this.size += 0.005 * elapsedMS;
         this.rotation += this.rotationSpeed * elapsedMS;
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
+    }
+}
+
+export class Pulse extends SpecialEffect {
+    planet: Planet;
+
+    init(game: Game, planet: Planet) {
+        super.effectInit(game, 2000);
+        copyPoint(planet.position, this.position);
+        this.planet = planet;
+        this.alpha = 0;
+        this.size = 1;
+        return this;
+    }
+
+    protected update(_: number, t: number, u: number) {
+        this.alpha = 0.5 * u;
+        this.size = t;
     }
 }

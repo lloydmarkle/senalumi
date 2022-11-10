@@ -1,4 +1,5 @@
 import { create } from 'deepool';
+import type { Entity } from './game';
 
 export interface Point {
     x: number;
@@ -10,7 +11,6 @@ export const copyPoint = (src: Point, tgt: Point) => {
     tgt.x = src.x;
     tgt.y = src.y;
 };
-
 
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
@@ -182,24 +182,19 @@ export class ArrayPool<T> {
     }
 
     forEach(fn: (item: T) => void) {
-        this.items.forEach(e => {
-            if (e) {
-                fn(e);
-            }
-        });
+        this.items.forEach(e => e && fn(e));
     }
 
     get length () { return this.count; }
 
     take() {
         const sat = this.pool.use();
-        const idx = this.items.findIndex(e => !e);
+        let idx = this.items.findIndex(e => !e);
         if (idx === -1) {
             this.grow();
-            this.items[this.count] = sat;
-        } else {
-            this.items[idx] = sat;
+            idx = this.count;
         }
+        this.items[idx] = sat;
         this.count += 1;
         return sat;
     }

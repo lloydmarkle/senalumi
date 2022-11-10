@@ -12,29 +12,43 @@
     <p>Debug</p>
 </div>
 
-<div class="debug-background menu" transition:fly={{ x: -100 }}>
-    <p>Debug</p>
+<div class="debug-background menu" in:fly={{ x: -200, delay: 200 }} out:fly={{ x: -200 }}>
+    <p>Settings</p>
+    <div class="option">
+        <Toggle id="show-overlay" bind:checked={gfx.dbg.config.showStats}>
+            Show Stats
+        </Toggle>
+    </div>
     <div class="opiton">
         <input type="number" name="debug-game-speed" id="debug-game-speed" bind:value={game.constants.gameSpeed}>
-        <label for="debug-game-speed">Update frequency (ms)</label>
+        <label for="debug-game-speed">Game speed</label>
+    </div>
+    <div class="option">
+        <Toggle id="show-pulse-animation" bind:checked={gfx.dbg.config.enablePulseAnimation}>
+            Pulse Animation
+        </Toggle>
+    </div>
+    <div class="opiton">
+        <input type="number" name="debug-game-pulse-rate" id="debug-game-pulse-rate" bind:value={game.constants.pulseRate}>
+        <label for="debug-game-pulse-rate">Satellites per pulse</label>
     </div>
     <div class="opiton">
         <input type="number" name="debug-update-frequency" id="debug-update-frequency" bind:value={gfx.dbg.config.updateFrequencyMS}>
         <label for="debug-update-frequency">Update frequency (ms)</label>
     </div>
     <div class="option">
-        <Toggle id="show-overlay" bind:checked={gfx.dbg.config.showStats}>
-            Show Stats
-        </Toggle>
-    </div>
-    <div class="option">
         <Toggle id="show-quad-tree" bind:checked={gfx.dbg.config.showQuadTree}>
             Show collisions
         </Toggle>
     </div>
+    <div class="option">
+        <Toggle id="show-planet-stats" bind:checked={gfx.dbg.config.showPlanetStats}>
+            Show Planet Stats
+        </Toggle>
+    </div>
     {#each game.players as player}
         <div class="option">
-            <Toggle id="show-player-selection-{player.id}" bind:checked={gfx.dbg.config.showPlanetSelection[player.id]}>
+            <Toggle id="show-player-selection-{player.id}" bind:checked={gfx.dbg.config.showPlayerSelection[player.id]}>
                 Show <span style="background:#{player.color.toString(16)}">{player.id}</span> player selection
             </Toggle>
         </div>
