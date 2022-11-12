@@ -481,7 +481,15 @@ function createPlanetInitializer(players: Player[]) {
     greyTeamMatrix.tint(0x222222, true);
     colorMap['default'] = greyTeamMatrix;
 
+    const statusBarThickness = 5;
+    const statusOffset = -Math.PI * 0.5;
+    const circlePercent = Math.PI * 2 * 0.01;
+
     return (planet: Planet, gfx: PIXI.Container, rings: PIXI.Container) => {
+        let statusBars = new PIXI.Graphics();
+        statusBars.alpha = 0.8;
+        gfx.parent.addChild(statusBars);
+
         planet.destroy = () => {
             gfx.destroy();
             rings.destroy({ children: true });
@@ -489,6 +497,22 @@ function createPlanetInitializer(players: Player[]) {
         planet.render = () => {
             updateGfx(gfx, planet);
             gfx.filters = [planet.owner ? colorMap[planet.owner.id] : colorMap['default']];
+
+            statusBars.clear();
+            if (planet.upgrade > 0) {
+                const radius = planet.orbitDistance * 0.6;
+                statusBars.lineStyle(statusBarThickness, 0x404040)
+                    .drawCircle(planet.position.x, planet.position.y, radius);
+                statusBars.lineStyle(statusBarThickness, planet.candidateOwner?.color ?? planet.owner.color)
+                    .arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + planet.upgrade * circlePercent);
+            }
+            if (planet.health < 100) {
+                const radius = planet.orbitDistance * 0.8;
+                statusBars.lineStyle(statusBarThickness, 0xa0a0a0)
+                    .drawCircle(planet.position.x, planet.position.y, radius);
+                statusBars.lineStyle(statusBarThickness, planet.owner.color)
+                    .arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + planet.health * circlePercent);
+            }
 
             for (let i = 0; i < rings.children.length; i++) {
                 rings.children[i].visible = (planet.level <= i + 1);

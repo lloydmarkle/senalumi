@@ -8,7 +8,7 @@ const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
 export const constants = {
-    gameSpeed: 1,
+    gameSpeed: 3,
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
@@ -284,7 +284,6 @@ const buildGameBoard = (game: Game) => {
             neighbours.push({
                 planet: p2,
                 distance: distSqr(p2.position, p1.position),
-                // distance: Math.sqrt(distSqr(p2.position, p1.position)),
             });
         }
         neighbours.sort((a, b) => distSqr(p1.position, a.planet.position) - distSqr(p1.position, b.planet.position));

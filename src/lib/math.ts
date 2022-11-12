@@ -1,5 +1,4 @@
 import { create } from 'deepool';
-import type { Entity } from './game';
 
 export interface Point {
     x: number;
