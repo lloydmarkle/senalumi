@@ -1,5 +1,5 @@
 import { type Point, distSqr, QuadTree, ArrayPool } from './math';
-import { Game, constants, type Player, setLightness, Planet, type Renderable, Pulse, Flash, Satellite } from './game';
+import { Game, constants, type Player, setLightness, Planet, type Renderable, Pulse, Flash, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
@@ -279,6 +279,7 @@ const lastApp = (app?: any) =>
     (window as any).lastApp = app ?? (window as any).lastApp;
 
 export class Renderer {
+    paused = false;
     readonly dbg: DebugRender;
     readonly app: PIXI.Application;
     constructor(game: Game) {
@@ -387,137 +388,162 @@ export class Renderer {
         // dbg view (always add this last)
         this.dbg = new DebugRender(game, app, viewport, cull);
 
-        const initPlanet = createPlanetInitializer(game.players);
+        const colorMap = game.players.reduce((map, player) => {
+            let filter = new PIXI.filters.ColorMatrixFilter();
+            filter.tint(player.color, true);
+            map[player.id] = filter;
+            return map;
+        }, {})
+        const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
+        greyTeamMatrix.tint(0x222222, true);
+        colorMap['default'] = greyTeamMatrix;
 
-        const renderableInitializers = {
-            'Pulse': (pulse: Pulse) => {
-                const gfx = new PIXI.Graphics();
-                pulseContainer.addChild(gfx);
-                gfx.position = pulse.position;
-                gfx.lineStyle(pulse.planet.orbitDistance, pulse.planet.owner.satelliteColor);
-                gfx.drawCircle(0, 0, pulse.planet.orbitDistance * 2.5);
+        const pulsePool: ArrayPool<PulseGFX> = new ArrayPool(() => new PulseGFX(pulsePool, new PIXI.Graphics()));
+        const flashPool: ArrayPool<EntityGFX<Flash, PIXI.Sprite>> = new ArrayPool(() => new EntityGFX(flashPool, createGraphics(satelliteTexture)));
+        const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
+        const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
 
-                pulse.destroy = () => gfx.destroy();
-                pulse.render = () => updateGfx(gfx, pulse);
-            },
-
-            'Flash': (flash: Flash) => {
-                const gfx = createGraphics(satelliteTexture, flashContainer);
-                flash.destroy = () => gfx.destroy();
-                flash.render = () => updateGfx(gfx, flash);
-            },
-
-            'Satellite': (satellite: Satellite) => {
-                const gfx = createGraphics(satelliteTexture, satelliteContainer);
-                satellite.destroy = () => gfx.destroy();
-                satellite.render = () => {
-                    updateGfx(gfx, satellite);
-                    gfx.tint = isPlayerSatellite(satellite) ? 0xaaaaaa : satellite.owner.satelliteColor;
-                };
-            },
-
-            'Planet': (planet: Planet) => {
-                const rings = initRings(game, planet);
-                ringContainer.addChild(rings);
-                const gfx = createGraphics(planetTexture, planetContainer);
-                initPlanet(planet, gfx, rings);
-            },
+        const renderInitializers = {
+            'Pulse': (pulse: Pulse) => pulsePool.take().init(pulse, pulseContainer),
+            'Flash': (flash: Flash) => flashPool.take().baseInit(flash, flashContainer),
+            'Satellite': (satellite: Satellite) => satellitePool.take().init(satellite, satelliteContainer, isPlayerSatellite),
+            'Planet': (planet: Planet) => planetPool.take().init(planet, planetContainer, game),
         };
 
         app.ticker.add((delta) => {
             this.dbg.tick(app);
-            game.tick(app.ticker.elapsedMS);
+            if (this.paused) {
+                return;
+            }
+
+            const elapsedMS = app.ticker.elapsedMS * constants.gameSpeed;
+            game.tick(elapsedMS);
 
             pulseContainer.visible = this.dbg.config.enablePulseAnimation;
-            game.forEachRenderable(r => {
-                if (!r.render) {
-                    renderableInitializers[r.constructor.name](r);
+            game.forEachEntity(entity => {
+                if (!entity.gfx) {
+                    entity.gfx = renderInitializers[entity.type](entity);
                 }
-                r.render();
+                entity.gfx.update(entity, elapsedMS);
             })
         });
     }
 }
 
-function createGraphics(texture: PIXI.Texture, container: PIXI.Container) {
+function createGraphics(texture: PIXI.Texture) {
     const gfx = PIXI.Sprite.from(texture);
-    container.addChild(gfx);
     gfx.anchor.set(0.5, 0.5);
     return gfx;
 }
 
-function updateGfx(gfx: PIXI.Container, r: Renderable) {
-    if (r.alpha !== undefined) gfx.alpha = r.alpha;
-    gfx.rotation = r.rotation;
-    gfx.scale.set(r.size);
-    gfx.position = r.position;
-}
+class EntityGFX<T extends Entity, U extends PIXI.Container = PIXI.Container> implements Renderable {
+    constructor(private pool: ArrayPool<EntityGFX<any>>, readonly gfx: U) {}
 
-function initRings(game: Game, planet: Planet) {
-    let container = new PIXI.Container();
-    let rings: PIXI.Graphics[] = [];
-    for (let i = 1; i < planet.maxLevel; i++) {
-        const gfx = new PIXI.Graphics();
-        container.addChild(gfx);
-        rings.push(gfx);
-
-        const step = game.constants.planetRadius / 8;
-        const radius = i * step + step;
-        gfx.alpha = 0.5;
-        gfx.lineStyle(step, 0x777777);
-        gfx.drawCircle(0, 0, radius * 3);
+    baseInit(entity: T, container: PIXI.Container) {
+        container.addChild(this.gfx);
+        return this;
     }
-    return container;
+
+    update(ent: Entity, elapsedMS: number) {
+        this.gfx.alpha = ent.alpha ?? 1;
+        this.gfx.rotation = ent.rotation;
+        this.gfx.scale.set(ent.size);
+        this.gfx.position = ent.position;
+    }
+
+    destroy () {
+        this.pool.release(this);
+        this.gfx.parent.removeChild(this.gfx);
+    }
 }
 
-function createPlanetInitializer(players: Player[]) {
-    const colorMap = players.reduce((map, player) => {
-        let filter = new PIXI.filters.ColorMatrixFilter();
-        filter.tint(player.color, true);
-        map[player.id] = filter;
-        return map;
-    }, {})
-    const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
-    greyTeamMatrix.tint(0x222222, true);
-    colorMap['default'] = greyTeamMatrix;
+class PulseGFX extends EntityGFX<Pulse, PIXI.Graphics> {
+    init(pulse: Pulse, container: PIXI.Container) {
+        this.gfx.clear();
+        this.gfx.position = pulse.position;
+        this.gfx.lineStyle(pulse.planet.orbitDistance, pulse.planet.owner.satelliteColor);
+        this.gfx.drawCircle(0, 0, pulse.planet.orbitDistance * 2.5);
+        return super.baseInit(pulse, container);
+    }
+}
 
-    const statusBarThickness = 5;
-    const statusOffset = -Math.PI * 0.5;
-    const circlePercent = Math.PI * 2 * 0.01;
+class SatelliteGFX extends EntityGFX<Satellite, PIXI.Sprite> {
+    private isPlayerSatellite: (sat: Satellite) => boolean;
 
-    return (planet: Planet, gfx: PIXI.Container, rings: PIXI.Container) => {
-        let statusBars = new PIXI.Graphics();
-        statusBars.alpha = 0.8;
-        gfx.parent.addChild(statusBars);
+    init(satellite: Satellite, container: PIXI.Container, isPlayerSatellite: (sat: Satellite) => boolean) {
+        this.isPlayerSatellite = isPlayerSatellite;
+        return super.baseInit(satellite, container);
+    }
 
-        planet.destroy = () => {
-            gfx.destroy();
-            rings.destroy({ children: true });
-        };
-        planet.render = () => {
-            updateGfx(gfx, planet);
-            gfx.filters = [planet.owner ? colorMap[planet.owner.id] : colorMap['default']];
+    update(sat: Satellite, elapsedMS: number) {
+        super.update(sat, elapsedMS);
+        this.gfx.tint = this.isPlayerSatellite(sat) ? 0xaaaaaa : sat.owner.satelliteColor;
+    }
+}
 
-            statusBars.clear();
-            if (planet.upgrade > 0) {
-                const radius = planet.orbitDistance * 0.6;
-                statusBars.lineStyle(statusBarThickness, 0x404040)
-                    .drawCircle(planet.position.x, planet.position.y, radius);
-                statusBars.lineStyle(statusBarThickness, planet.candidateOwner?.color ?? planet.owner.color)
-                    .arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + planet.upgrade * circlePercent);
-            }
-            if (planet.health < 100) {
-                const radius = planet.orbitDistance * 0.8;
-                statusBars.lineStyle(statusBarThickness, 0xa0a0a0)
-                    .drawCircle(planet.position.x, planet.position.y, radius);
-                statusBars.lineStyle(statusBarThickness, planet.owner.color)
-                    .arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + planet.health * circlePercent);
-            }
+const statusBarThickness = 5;
+const statusOffset = -Math.PI * 0.5;
+const circlePercent = Math.PI * 2 * 0.01;
+class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
+    private rings: PIXI.Container;
+    statusBars: PIXI.Graphics;
+    constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly colorMap: any) {
+        super(pool, gfx);
+    }
 
-            for (let i = 0; i < rings.children.length; i++) {
-                rings.children[i].visible = (planet.level <= i + 1);
-            }
-            rings.position = planet.position;
-        };
-    };
+    init(planet: Planet, container: PIXI.Container, game: Game) {
+        this.rings = new PIXI.Container();
+
+        let rings: PIXI.Graphics[] = [];
+        for (let i = 1; i < planet.maxLevel; i++) {
+            const gfx = new PIXI.Graphics();
+            this.rings.addChild(gfx);
+            rings.push(gfx);
+
+            const step = game.constants.planetRadius / 8;
+            const radius = i * step + step;
+            gfx.alpha = 0.5;
+            gfx.lineStyle(step, 0x777777);
+            gfx.drawCircle(0, 0, radius * 3);
+        }
+
+        this.statusBars = new PIXI.Graphics();
+        this.statusBars.alpha = 0.8;
+
+        super.baseInit(planet, container);
+        container.addChild(this.statusBars);
+        return this;
+    }
+
+    update(planet: Planet, elapsedMS: number) {
+        super.update(planet, elapsedMS);
+
+        this.gfx.filters = [this.colorMap[planet.owner?.id ?? 'default']];
+
+        this.statusBars.clear();
+        if (planet.upgrade > 0) {
+            this.drawStatusBar(planet, planet.upgrade, planet.orbitDistance * 0.6, 0x404040, planet.candidateOwner?.color ?? planet.owner.color);
+        }
+        if (planet.health < 100) {
+            this.drawStatusBar(planet, planet.health, planet.orbitDistance * 0.8, 0xa0a0a0, planet.owner.color);
+        }
+
+        for (let i = 0; i < this.rings.children.length; i++) {
+            this.rings.children[i].visible = (planet.level <= i + 1);
+        }
+        this.rings.position = planet.position;
+    }
+
+    private drawStatusBar(planet: Planet, percentage: number, radius: number, grey: number, color: number) {
+        this.statusBars.lineStyle(statusBarThickness, grey);
+        this.statusBars.drawCircle(planet.position.x, planet.position.y, radius);
+        this.statusBars.lineStyle(statusBarThickness, color);
+        this.statusBars.arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + percentage * circlePercent);
+    }
+
+    destroy () {
+        this.statusBars.destroy();
+        this.rings.destroy({ children: true });
+        super.destroy();
+    }
 }

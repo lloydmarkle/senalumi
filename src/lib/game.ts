@@ -57,18 +57,23 @@ class Stats {
 }
 
 export interface Renderable {
+    update(entity: Entity, elapsedMS: number): void;
+    destroy(): void;
+}
+
+export interface Entity {
+    id: number;
+    type: string;
+
+    gfx: Renderable;
+    // canCollide: boolean;
+
     position: Point;
     size: number;
     rotation: number;
     alpha?: number;
 
-    render: Function;
-    destroy: Function;
-}
-
-export interface Entity {
-    id: number;
-    canCollide: boolean;
+    destroy(): void;
 }
 
 export const setLightness = (color: number, lightness: number) => {
@@ -408,15 +413,14 @@ export class Game {
     private snapshot: GameStateSnapshot;
     readonly log: GameStateSnapshot[] = [];
     readonly constants = constants;
-    private pulses = new ArrayPool(() => new Pulse());
-    private flashes = new ArrayPool(() => new Flash());
+    pulses = new ArrayPool(() => new Pulse());
+    flashes = new ArrayPool(() => new Flash());
     planets: Planet[] = [];
     satellites = new ArrayPool(() => new Satellite());
     players: Player[];
     gameTime = 0.0;
     lastTick = 0.0;
     pulsed = 0;
-    paused = false;
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
 
     constructor() {
@@ -455,18 +459,14 @@ export class Game {
         this.pulses = new ArrayPool(() => new Pulse());
     }
 
-    forEachRenderable(fn: (r: Renderable) => void) {
+    forEachEntity(fn: (ent: Entity) => void) {
         this.planets.forEach(planet => fn(planet));
         this.pulses.forEach(pulse => fn(pulse));
         this.flashes.forEach(flash => fn(flash));
         this.satellites.forEach(sat => fn(sat));
     }
 
-    tick(ms: number) {
-        if (this.paused) {
-            return;
-        }
-        const elapsedMS = ms * constants.gameSpeed;
+    tick(elapsedMS: number) {
         this.gameTime = this.gameTime + elapsedMS;
         this.stats.clear();
         const gameTime = this.stats.now();
@@ -530,8 +530,8 @@ export class Game {
                 this.stats.recordCollide(distTimer, 'distance');
 
                 if (dist < r2) {
-                    this.destroy(sat1);
-                    this.destroy(sat2);
+                    sat1.destroy();
+                    sat2.destroy();
                 }
             }
         }
@@ -577,31 +577,10 @@ export class Game {
     recordEvent(ev: GameEvent) {
         this.snapshot.events.push(ev);
     }
-
-    destroy(entity: Renderable) {
-        if (entity instanceof Satellite) {
-            const filter = this.stats.now();
-            const released = this.satellites.release(entity);
-            this.stats.recordCollide(filter, 'filter');
-            if (released) {
-                entity.destroy?.();
-
-                const remove = this.stats.now();
-                this.flashes.take().init(this, entity.position, entity.velocity);
-                this.stats.recordCollide(remove, 'remove');
-            }
-        } else if (entity instanceof Flash) {
-            this.flashes.release(entity);
-            entity.destroy?.();
-        } else if (entity instanceof Pulse) {
-            this.pulses.release(entity);
-            entity.destroy?.();
-        }
-    }
 }
 
 type PlanetLevel = 0 | 1 | 2 | 3 | 4;
-export class Planet implements Renderable {
+export class Planet implements Entity {
     private _candidateOwner?: Player;
     private _owner?: Player;
     private _rotation: number = Math.random() * Math.PI * 2;
@@ -609,8 +588,9 @@ export class Planet implements Renderable {
     private _health: number = 100;
     private _upgrade: number = 0;
 
-    render: Function;
-    destroy: Function;
+    id: number;
+    gfx: Renderable;
+    readonly type = 'Planet';
     level: PlanetLevel = 0;
     get rotation() { return this._rotation; }
     get owner(): Player | undefined { return this._owner; }
@@ -641,7 +621,7 @@ export class Planet implements Renderable {
                 this._candidateOwner = sat.owner;
             }
             this._upgrade += (this._candidateOwner === sat.owner) ? 1 : -1;
-            this.game.destroy(sat);
+            sat.destroy();
 
             if (this._upgrade === 0) {
                 this._candidateOwner = null;
@@ -653,10 +633,10 @@ export class Planet implements Renderable {
         } else if (sat.owner === this.owner) {
             if (this.level < this.maxLevel && this._health === 100) {
                 this._upgrade += 1;
-                this.game.destroy(sat);
+                sat.destroy();
             } else if (this._health < 100) {
                 this._health += 1;
-                this.game.destroy(sat);
+                sat.destroy();
             }
             if (this._upgrade === 100) {
                 this.game.recordEvent({ type: 'planet-upgrade', team: this.owner.id });
@@ -665,7 +645,7 @@ export class Planet implements Renderable {
             }
         } else {
             this._health -= 1;
-            this.game.destroy(sat);
+            sat.destroy();
             if (this._health === 0) {
                 this.game.recordEvent({ type: 'planet-lost', team: this.owner.id });
                 this.capture(null);
@@ -673,6 +653,8 @@ export class Planet implements Renderable {
             }
         }
     }
+
+    destroy() {}
 }
 
 const arrived = (a: Point, b: Point) => {
@@ -764,11 +746,12 @@ class MoveSequence implements Mover {
     }
 }
 
-export class Satellite implements Renderable {
-    render: Function;
-    destroy: Function;
+export class Satellite implements Entity {
     mover: Mover;
     rotation = 0;
+    id: number;
+    gfx: Renderable;
+    readonly type = 'Satellite';
     readonly size = 1;
     readonly position: Point = originPoint();
     readonly velocity: Point = originPoint();
@@ -777,8 +760,7 @@ export class Satellite implements Renderable {
     private rotationSpeed: number;
 
     init(owner: Player, position: Point) {
-        this.render = null;
-        this.destroy = null;
+        this.gfx = null;
         this.rotation = Math.random() * Math.PI * 2;
         this.rotationSpeed = Math.random() * Math.PI * 2 / 2000;
 
@@ -796,7 +778,7 @@ export class Satellite implements Renderable {
     tick(elapsedMS: number) {
         const outOfBounds = (this.position.x < -constants.maxWorld || this.position.x > constants.maxWorld || this.position.y < -constants.maxWorld || this.position.y > constants.maxWorld);
         if (outOfBounds) {
-            return this.owner.game.destroy(this);
+            return this.destroy();
         }
         this.rotation += this.rotationSpeed * elapsedMS;
         this.mover = this.mover.evaluate(elapsedMS);
@@ -818,9 +800,23 @@ export class Satellite implements Renderable {
         this.velocity.x += (constants.forceStiffness * dirX + constants.forceDamping * (vx - this.velocity.x)) * rate;
         this.velocity.y += (constants.forceStiffness * dirY + constants.forceDamping * (vy - this.velocity.y)) * rate;
     }
+
+    destroy() {
+        const game = this.owner.game;
+        const filter = game.stats.now();
+        const released = game.satellites.release(this);
+        game.stats.recordCollide(filter, 'filter');
+        if (released) {
+            this.gfx?.destroy();
+
+            const remove = game.stats.now();
+            game.flashes.take().init(game, this.position, this.velocity);
+            game.stats.recordCollide(remove, 'remove');
+        }
+    }
 }
 
-abstract class SpecialEffect implements Renderable {
+abstract class SpecialEffect implements Entity {
     private ageMS: number;
     private lifetimeMS: number;
     size: number = 1;
@@ -828,15 +824,15 @@ abstract class SpecialEffect implements Renderable {
     rotation: number = 0;
     readonly position = originPoint();
 
-    render: Function;
-    destroy: Function;
+    id: number;
+    abstract get type(): string;
+    gfx: Renderable;
 
     private _game: Game;
     get game() { return this._game }
 
     protected effectInit(game: Game, timeleftMS: number) {
-        this.render = null;
-        this.destroy = null;
+        this.gfx = null;
         this._game = game;
         this.ageMS = 0;
         this.lifetimeMS = timeleftMS;
@@ -845,7 +841,7 @@ abstract class SpecialEffect implements Renderable {
     tick(elapsedMS: number) {
         this.ageMS += elapsedMS;
         if (this.ageMS > this.lifetimeMS) {
-            this.game.destroy(this);
+            this.destroy();
         } else {
             const t = this.ageMS / this.lifetimeMS;
             this.update(elapsedMS, t, 1 - t);
@@ -853,11 +849,13 @@ abstract class SpecialEffect implements Renderable {
     }
 
     protected abstract update(elapsedMS: number, t: number, u: number);
+    abstract destroy(): void;
 }
 
 export class Flash extends SpecialEffect {
     private rotationSpeed = Math.random() * Math.PI / 200;
 
+    get type() { return 'Flash'; }
     readonly velocity = originPoint();
 
     init(game: Game, position: Point, velocity: Point) {
@@ -877,10 +875,16 @@ export class Flash extends SpecialEffect {
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
     }
+
+    destroy() {
+        this.game.flashes.release(this);
+        this.gfx?.destroy();
+    }
 }
 
 export class Pulse extends SpecialEffect {
     planet: Planet;
+    get type() { return 'Pulse'; }
 
     init(game: Game, planet: Planet) {
         super.effectInit(game, 2000);
@@ -894,5 +898,10 @@ export class Pulse extends SpecialEffect {
     protected update(_: number, t: number, u: number) {
         this.alpha = 0.5 * u;
         this.size = t;
+    }
+
+    destroy() {
+        this.game.pulses.release(this);
+        this.gfx?.destroy();
     }
 }

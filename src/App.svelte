@@ -16,7 +16,7 @@
     if (ev.key === ' ') {
       showScore = !showScore;
     }
-    game.paused = showScore || showDebugOptions;
+    gfx.paused = showScore || showDebugOptions;
   }
 </script>
 
