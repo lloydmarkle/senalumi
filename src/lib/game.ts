@@ -1,6 +1,5 @@
 import { hex, hsl } from 'color-convert';
-import type { init } from 'svelte/internal';
-import { ArrayPool, distSqr, originPoint, point, copyPoint, QuadTree, type Point } from './math';
+import { ArrayPool, distSqr, originPoint, point, copyPoint, QuadTree, type Point, lirp } from './math';
 
 const quadTreeBoxCapacity = 5;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
@@ -8,7 +7,7 @@ const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
 export const constants = {
-    gameSpeed: 3,
+    gameSpeed: 1,
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
@@ -816,61 +815,42 @@ export class Satellite implements Entity {
     }
 }
 
-abstract class SpecialEffect implements Entity {
-    private ageMS: number;
-    private lifetimeMS: number;
-    size: number = 1;
-    alpha: number = 0;
-    rotation: number = 0;
-    readonly position = originPoint();
-
-    id: number;
-    abstract get type(): string;
-    gfx: Renderable;
-
-    private _game: Game;
-    get game() { return this._game }
-
-    protected effectInit(game: Game, timeleftMS: number) {
-        this.gfx = null;
-        this._game = game;
-        this.ageMS = 0;
-        this.lifetimeMS = timeleftMS;
-    }
-
-    tick(elapsedMS: number) {
-        this.ageMS += elapsedMS;
-        if (this.ageMS > this.lifetimeMS) {
-            this.destroy();
-        } else {
-            const t = this.ageMS / this.lifetimeMS;
-            this.update(elapsedMS, t, 1 - t);
-        }
-    }
-
-    protected abstract update(elapsedMS: number, t: number, u: number);
-    abstract destroy(): void;
-}
-
-export class Flash extends SpecialEffect {
+export class Flash implements Entity {
     private rotationSpeed = Math.random() * Math.PI / 200;
 
+    id: number;
+    gfx: Renderable;
     get type() { return 'Flash'; }
+
+    private game: Game;
+    private alphaInt = lirp();
+    private sizeInt = lirp();
+
+    planet: Planet;
+    readonly position = originPoint();
     readonly velocity = originPoint();
+    rotation: number;
+    get alpha() { return this.alphaInt.value; }
+    get size() { return this.sizeInt.value; }
 
     init(game: Game, position: Point, velocity: Point) {
-        this.effectInit(game, Math.random() * 300 + 200);
-        this.rotation = Math.random() * Math.PI * 2;
-        this.size = 1;
-        this.alpha = 1;
+        this.gfx = null;
+        this.game = game;
         copyPoint(position, this.position);
         copyPoint(velocity, this.velocity);
+        const time = Math.random() * 300 + 200;
+        this.alphaInt.init(time, 1, 0.2);
+        this.sizeInt.init(time, 1, 4);
+        this.rotation = Math.random() * Math.PI * 2;
         return this;
     }
 
-    protected update(elapsedMS: number) {
-        this.alpha -= 0.001 * elapsedMS;
-        this.size += 0.005 * elapsedMS;
+    tick(elapsedMS: number) {
+        if (this.alphaInt.finished && this.sizeInt.finished) {
+            return this.destroy();
+        }
+        this.alphaInt.tick(elapsedMS);
+        this.sizeInt.tick(elapsedMS);
         this.rotation += this.rotationSpeed * elapsedMS;
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
@@ -882,22 +862,36 @@ export class Flash extends SpecialEffect {
     }
 }
 
-export class Pulse extends SpecialEffect {
-    planet: Planet;
+export class Pulse implements Entity {
+    id: number;
+    gfx: Renderable;
     get type() { return 'Pulse'; }
 
+    private game: Game;
+    private alphaInt = lirp();
+    private sizeInt = lirp();
+
+    planet: Planet;
+    rotation = 0;
+    get position() { return this.planet.position; }
+    get alpha() { return this.alphaInt.value; }
+    get size() { return this.sizeInt.value; }
+
     init(game: Game, planet: Planet) {
-        super.effectInit(game, 2000);
-        copyPoint(planet.position, this.position);
+        this.gfx = null;
+        this.game = game;
         this.planet = planet;
-        this.alpha = 0;
-        this.size = 1;
+        this.alphaInt.init(2000, 0.5, 0);
+        this.sizeInt.init(2000, 0, 1);
         return this;
     }
 
-    protected update(_: number, t: number, u: number) {
-        this.alpha = 0.5 * u;
-        this.size = t;
+    tick(elapsedMS: number) {
+        if (this.alphaInt.finished && this.sizeInt.finished) {
+            return this.destroy();
+        }
+        this.alphaInt.tick(elapsedMS);
+        this.sizeInt.tick(elapsedMS);
     }
 
     destroy() {

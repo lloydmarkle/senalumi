@@ -1,4 +1,4 @@
-import { type Point, distSqr, QuadTree, ArrayPool } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, lirp } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Pulse, Flash, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -486,6 +486,8 @@ const statusOffset = -Math.PI * 0.5;
 const circlePercent = Math.PI * 2 * 0.01;
 class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     private rings: PIXI.Container;
+    private lastSize: number;
+    private sizeInt = lirp();
     statusBars: PIXI.Graphics;
     constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly colorMap: any) {
         super(pool, gfx);
@@ -507,6 +509,8 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
             gfx.drawCircle(0, 0, radius * 3);
         }
 
+        this.lastSize = planet.size;
+        this.sizeInt.init(0, 0, planet.size);
         this.statusBars = new PIXI.Graphics();
         this.statusBars.alpha = 0.8;
 
@@ -517,6 +521,12 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
 
     update(planet: Planet, elapsedMS: number) {
         super.update(planet, elapsedMS);
+
+        if (this.lastSize !== planet.size) {
+            this.sizeInt.init(1000, this.lastSize, planet.size);
+            this.lastSize = planet.size;
+        }
+        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
 
         this.gfx.filters = [this.colorMap[planet.owner?.id ?? 'default']];
 

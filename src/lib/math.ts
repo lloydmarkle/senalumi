@@ -162,7 +162,6 @@ export class QuadTree<T extends { position: Point }> {
     }
 }
 
-
 interface Pool<T> {
     use: () => T;
     recycle: (item: T) => void;
@@ -219,3 +218,46 @@ export class ArrayPool<T> {
         }
     }
 }
+
+export interface Interpolation {
+    finished: boolean;
+    value: number;
+
+    init(timeMS: number, start: number, stop: number): Interpolation;
+    tick(elapsedMS: number): number;
+}
+export function interpolator(timeFn: (age: number, total: number) => number) {
+    let age = 0;
+    let initial = 0;
+    let target = 0;
+    let lifetime = 0;
+
+    let result = {
+        finished: false,
+        value: 0,
+
+        init(timeMS: number, start: number, stop: number) {
+            age = 0;
+            lifetime = timeMS;
+            result.finished = false;
+            initial = start;
+            target = stop;
+            return result;
+        },
+
+        tick: (elapsedMS: number) => {
+            if (age < lifetime) {
+                age += elapsedMS;
+                const t = timeFn(age, lifetime);
+                result.value = initial * (1 - t) + target * t;
+            } else {
+                result.finished = true;
+                result.value = target;
+            }
+            return result.value;
+        }
+    }
+    return result;
+}
+
+export const lirp = () => interpolator((a, b) => a / b);
