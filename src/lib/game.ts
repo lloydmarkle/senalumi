@@ -1,5 +1,5 @@
 import { hex, hsl } from 'color-convert';
-import { ArrayPool, distSqr, originPoint, point, copyPoint, QuadTree, type Point, lirp } from './math';
+import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, NoGCArray } from './math';
 
 const quadTreeBoxCapacity = 5;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
@@ -7,7 +7,7 @@ const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
     Math.random() * 20 - 10);
 export const constants = {
-    gameSpeed: 1,
+    gameSpeed: 4,
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
@@ -56,7 +56,7 @@ class Stats {
 }
 
 export interface Renderable {
-    update(entity: Entity, elapsedMS: number): void;
+    update(elapsedMS: number): void;
     destroy(): void;
 }
 
@@ -408,19 +408,25 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
 });
 
 export class Game {
-    stats = new Stats();
     private snapshot: GameStateSnapshot;
+
+    stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly constants = constants;
-    pulses = new ArrayPool(() => new Pulse());
-    flashes = new ArrayPool(() => new Flash());
-    planets: Planet[] = [];
     satellites = new ArrayPool(() => new Satellite());
+    planets: Planet[] = [];
     players: Player[];
-    gameTime = 0.0;
-    lastTick = 0.0;
-    pulsed = 0;
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
+    state = {
+        pulsed: false,
+        removed: new NoGCArray<Satellite>(),
+        gameTimeMS: 0.0,
+        lastPulseTime: 0.0,
+    };
+    private resetGamestate() {
+        this.state.pulsed = false;
+        this.state.removed.clear();
+    }
 
     constructor() {
         this.snapshot = createSnapshot(0);
@@ -454,19 +460,16 @@ export class Game {
         for (let i = 0; i < initialSatellites; i++){
             this.pulse();
         }
-        // quick hack to remove all the pulse animations after initial pulse
-        this.pulses = new ArrayPool(() => new Pulse());
     }
 
     forEachEntity(fn: (ent: Entity) => void) {
         this.planets.forEach(planet => fn(planet));
-        this.pulses.forEach(pulse => fn(pulse));
-        this.flashes.forEach(flash => fn(flash));
         this.satellites.forEach(sat => fn(sat));
     }
 
     tick(elapsedMS: number) {
-        this.gameTime = this.gameTime + elapsedMS;
+        this.resetGamestate();
+        this.state.gameTimeMS += elapsedMS;
         this.stats.clear();
         const gameTime = this.stats.now();
 
@@ -474,8 +477,6 @@ export class Game {
 
         const moveTimer = this.stats.now();
         this.planets.forEach(planet => planet.tick(elapsedMS));
-        this.pulses.forEach(pulse => pulse.tick(elapsedMS));
-        this.flashes.forEach(flash => flash.tick(elapsedMS));
         this.satellites.forEach(sat => {
             const collideTime = this.stats.now();
             this.collisionTree.insert(sat, constants.satelliteRadius);
@@ -484,7 +485,7 @@ export class Game {
         });
         this.stats.moveTime = this.stats.elapsed(moveTimer) - this.stats.collideTime;
 
-        // needs to be after satellites otherwise the quad trees explode
+        // needs to be after satellites tick otherwise the quad tree explodes
         const thinkTime = this.stats.now();
         this.players.forEach(player => {
             let timer = this.stats.now();
@@ -498,10 +499,11 @@ export class Game {
         this.stats.collideTime += this.stats.elapsed(collideTime);
 
         // pulse is the last thing we do because planets could have changed ownership during collision detection
-        const seconds = Math.floor(this.gameTime / 1000);
-        if (seconds > this.lastTick) {
-            this.lastTick = seconds;
+        const seconds = Math.floor(this.state.gameTimeMS / 1000);
+        if (seconds > this.state.lastPulseTime) {
+            this.state.lastPulseTime = seconds;
             const pulseTime = this.stats.now();
+            this.state.pulsed = true;
             this.pulse();
 
             const map = this.snapshot.satelliteCounts;
@@ -512,6 +514,7 @@ export class Game {
         }
 
         this.stats.gameTime = this.stats.elapsed(gameTime);
+        return this.state;
     }
 
     private collide(satellites: Satellite[], radius: number) {
@@ -557,7 +560,6 @@ export class Game {
     private pulse() {
         this.planets.forEach(planet => {
             if (planet.owner) {
-                this.pulses.take().init(this, planet);
                 for (let i = 0; i < planet.level * constants.pulseRate; i++) {
                     this.spawnSatellite(planet);
                 }
@@ -807,95 +809,7 @@ export class Satellite implements Entity {
         game.stats.recordCollide(filter, 'filter');
         if (released) {
             this.gfx?.destroy();
-
-            const remove = game.stats.now();
-            game.flashes.take().init(game, this.position, this.velocity);
-            game.stats.recordCollide(remove, 'remove');
+            game.state.removed.add(this);
         }
-    }
-}
-
-export class Flash implements Entity {
-    private rotationSpeed = Math.random() * Math.PI / 200;
-
-    id: number;
-    gfx: Renderable;
-    get type() { return 'Flash'; }
-
-    private game: Game;
-    private alphaInt = lirp();
-    private sizeInt = lirp();
-
-    planet: Planet;
-    readonly position = originPoint();
-    readonly velocity = originPoint();
-    rotation: number;
-    get alpha() { return this.alphaInt.value; }
-    get size() { return this.sizeInt.value; }
-
-    init(game: Game, position: Point, velocity: Point) {
-        this.gfx = null;
-        this.game = game;
-        copyPoint(position, this.position);
-        copyPoint(velocity, this.velocity);
-        const time = Math.random() * 300 + 200;
-        this.alphaInt.init(time, 1, 0.2);
-        this.sizeInt.init(time, 1, 4);
-        this.rotation = Math.random() * Math.PI * 2;
-        return this;
-    }
-
-    tick(elapsedMS: number) {
-        if (this.alphaInt.finished && this.sizeInt.finished) {
-            return this.destroy();
-        }
-        this.alphaInt.tick(elapsedMS);
-        this.sizeInt.tick(elapsedMS);
-        this.rotation += this.rotationSpeed * elapsedMS;
-        this.position.x += this.velocity.x * elapsedMS;
-        this.position.y += this.velocity.y * elapsedMS;
-    }
-
-    destroy() {
-        this.game.flashes.release(this);
-        this.gfx?.destroy();
-    }
-}
-
-export class Pulse implements Entity {
-    id: number;
-    gfx: Renderable;
-    get type() { return 'Pulse'; }
-
-    private game: Game;
-    private alphaInt = lirp();
-    private sizeInt = lirp();
-
-    planet: Planet;
-    rotation = 0;
-    get position() { return this.planet.position; }
-    get alpha() { return this.alphaInt.value; }
-    get size() { return this.sizeInt.value; }
-
-    init(game: Game, planet: Planet) {
-        this.gfx = null;
-        this.game = game;
-        this.planet = planet;
-        this.alphaInt.init(2000, 0.5, 0);
-        this.sizeInt.init(2000, 0, 1);
-        return this;
-    }
-
-    tick(elapsedMS: number) {
-        if (this.alphaInt.finished && this.sizeInt.finished) {
-            return this.destroy();
-        }
-        this.alphaInt.tick(elapsedMS);
-        this.sizeInt.tick(elapsedMS);
-    }
-
-    destroy() {
-        this.game.pulses.release(this);
-        this.gfx?.destroy();
     }
 }

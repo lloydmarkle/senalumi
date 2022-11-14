@@ -1,5 +1,6 @@
-import { type Point, distSqr, QuadTree, ArrayPool, lirp } from './math';
-import { Game, constants, type Player, setLightness, Planet, type Renderable, Pulse, Flash, Satellite, type Entity } from './game';
+import { backInOut } from 'svelte/easing';
+import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint, Interpolator } from './math';
+import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
@@ -398,16 +399,20 @@ export class Renderer {
         greyTeamMatrix.tint(0x222222, true);
         colorMap['default'] = greyTeamMatrix;
 
-        const pulsePool: ArrayPool<PulseGFX> = new ArrayPool(() => new PulseGFX(pulsePool, new PIXI.Graphics()));
-        const flashPool: ArrayPool<EntityGFX<Flash, PIXI.Sprite>> = new ArrayPool(() => new EntityGFX(flashPool, createGraphics(satelliteTexture)));
+        const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
+        const flashPool: ArrayPool<FlashSFX> = new ArrayPool(() => new FlashSFX(flashPool, createGraphics(satelliteTexture)));
+        const specialEffects = [pulsePool, flashPool];
+
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
 
         const renderInitializers = {
-            'Pulse': (pulse: Pulse) => pulsePool.take().init(pulse, pulseContainer),
-            'Flash': (flash: Flash) => flashPool.take().baseInit(flash, flashContainer),
             'Satellite': (satellite: Satellite) => satellitePool.take().init(satellite, satelliteContainer, isPlayerSatellite),
-            'Planet': (planet: Planet) => planetPool.take().init(planet, planetContainer, game),
+            'Planet': (planet: Planet) => {
+                const gfx = planetPool.take().init(planet, planetContainer, game);
+                ringContainer.addChild(gfx.rings);
+                return gfx;
+            },
         };
 
         app.ticker.add((delta) => {
@@ -417,15 +422,22 @@ export class Renderer {
             }
 
             const elapsedMS = app.ticker.elapsedMS * constants.gameSpeed;
-            game.tick(elapsedMS);
+            const state = game.tick(elapsedMS);
+
+            if (state.pulsed) {
+                game.planets.forEach(p => p.owner && pulsePool.take().init(p, pulseContainer));
+            }
+            state.removed.forEach(sat => flashPool.take().init(sat, flashContainer));
 
             pulseContainer.visible = this.dbg.config.enablePulseAnimation;
             game.forEachEntity(entity => {
                 if (!entity.gfx) {
                     entity.gfx = renderInitializers[entity.type](entity);
                 }
-                entity.gfx.update(entity, elapsedMS);
-            })
+                entity.gfx.update(elapsedMS);
+            });
+
+            specialEffects.forEach(sfx => sfx.forEach(r => r.update(elapsedMS)));
         });
     }
 }
@@ -436,19 +448,39 @@ function createGraphics(texture: PIXI.Texture) {
     return gfx;
 }
 
-class EntityGFX<T extends Entity, U extends PIXI.Container = PIXI.Container> implements Renderable {
-    constructor(private pool: ArrayPool<EntityGFX<any>>, readonly gfx: U) {}
+interface SFX {
+    update(elapsedMS: number): void;
+    destroy(): void;
+}
 
-    baseInit(entity: T, container: PIXI.Container) {
+class PulseSFX implements SFX {
+    private alphaInt = new Interpolator();
+    private sizeInt = new Interpolator();
+    planet: Planet;
+
+    constructor(private pool: ArrayPool<PulseSFX>, readonly gfx: PIXI.Graphics) {}
+
+    init(planet: Planet, container: PIXI.Container) {
+        this.sizeInt.init(2000, 0, 1);
+        this.alphaInt.init(2000, 0.5, 0);
+        this.planet = planet;
+
         container.addChild(this.gfx);
+        this.gfx.clear();
+        this.gfx.position = planet.position;
+        this.gfx.lineStyle(planet.orbitDistance, planet.owner.satelliteColor);
+        this.gfx.drawCircle(0, 0, planet.orbitDistance * 2.5);
         return this;
     }
 
-    update(ent: Entity, elapsedMS: number) {
-        this.gfx.alpha = ent.alpha ?? 1;
-        this.gfx.rotation = ent.rotation;
-        this.gfx.scale.set(ent.size);
-        this.gfx.position = ent.position;
+    update(elapsedMS: number): void {
+        if (this.alphaInt.finished && this.sizeInt.finished) {
+            return this.destroy();
+        }
+        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
+        this.gfx.rotation = this.planet.rotation;
+        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
+        this.gfx.position = this.planet.position;
     }
 
     destroy () {
@@ -457,13 +489,70 @@ class EntityGFX<T extends Entity, U extends PIXI.Container = PIXI.Container> imp
     }
 }
 
-class PulseGFX extends EntityGFX<Pulse, PIXI.Graphics> {
-    init(pulse: Pulse, container: PIXI.Container) {
-        this.gfx.clear();
-        this.gfx.position = pulse.position;
-        this.gfx.lineStyle(pulse.planet.orbitDistance, pulse.planet.owner.satelliteColor);
-        this.gfx.drawCircle(0, 0, pulse.planet.orbitDistance * 2.5);
-        return super.baseInit(pulse, container);
+class FlashSFX implements SFX {
+    private rotationSpeed = Math.random() * Math.PI / 200;
+
+    readonly position = originPoint();
+    readonly velocity = originPoint();
+
+    private rotation: number;
+    private alphaInt = new Interpolator();
+    private sizeInt = new Interpolator();
+
+    constructor(private pool: ArrayPool<FlashSFX>, readonly gfx: PIXI.Sprite) {}
+
+    init(sat: Satellite, container: PIXI.Container) {
+        container.addChild(this.gfx);
+        const time = Math.random() * 300 + 200;
+        this.alphaInt.init(time, 1, 0.2);
+        this.sizeInt.init(time, 1, 4);
+
+        copyPoint(sat.position, this.position);
+        copyPoint(sat.velocity, this.velocity);
+        this.rotation = Math.random() * Math.PI * 2;
+        return this;
+    }
+
+    update(elapsedMS: number): void {
+        if (this.alphaInt.finished && this.sizeInt.finished) {
+            return this.destroy();
+        }
+        this.rotation += this.rotationSpeed * elapsedMS;
+        this.position.x += this.velocity.x * elapsedMS;
+        this.position.y += this.velocity.y * elapsedMS;
+
+        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
+        this.gfx.rotation = this.rotation;
+        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
+        this.gfx.position = this.position;
+    }
+
+    destroy () {
+        this.pool.release(this);
+        this.gfx.parent.removeChild(this.gfx);
+    }
+}
+
+class EntityGFX<T extends Entity, U extends PIXI.Container = PIXI.Container> implements Renderable {
+    protected ent: T;
+    constructor(private pool: ArrayPool<EntityGFX<any>>, readonly gfx: U) {}
+
+    baseInit(entity: T, container: PIXI.Container) {
+        this.ent = entity;
+        container.addChild(this.gfx);
+        return this;
+    }
+
+    update(elapsedMS: number) {
+        this.gfx.alpha = this.ent.alpha ?? 1;
+        this.gfx.rotation = this.ent.rotation;
+        this.gfx.scale.set(this.ent.size);
+        this.gfx.position = this.ent.position;
+    }
+
+    destroy () {
+        this.pool.release(this);
+        this.gfx.parent.removeChild(this.gfx);
     }
 }
 
@@ -475,9 +564,9 @@ class SatelliteGFX extends EntityGFX<Satellite, PIXI.Sprite> {
         return super.baseInit(satellite, container);
     }
 
-    update(sat: Satellite, elapsedMS: number) {
-        super.update(sat, elapsedMS);
-        this.gfx.tint = this.isPlayerSatellite(sat) ? 0xaaaaaa : sat.owner.satelliteColor;
+    update(elapsedMS: number) {
+        super.update(elapsedMS);
+        this.gfx.tint = this.isPlayerSatellite(this.ent) ? 0xaaaaaa : this.ent.owner.satelliteColor;
     }
 }
 
@@ -485,9 +574,9 @@ const statusBarThickness = 5;
 const statusOffset = -Math.PI * 0.5;
 const circlePercent = Math.PI * 2 * 0.01;
 class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
-    private rings: PIXI.Container;
     private lastSize: number;
-    private sizeInt = lirp();
+    private sizeInt = new Interpolator();
+    rings: PIXI.Container;
     statusBars: PIXI.Graphics;
     constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly colorMap: any) {
         super(pool, gfx);
@@ -519,11 +608,12 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         return this;
     }
 
-    update(planet: Planet, elapsedMS: number) {
-        super.update(planet, elapsedMS);
+    update(elapsedMS: number) {
+        super.update(elapsedMS);
 
+        const planet = this.ent;
         if (this.lastSize !== planet.size) {
-            this.sizeInt.init(1000, this.lastSize, planet.size);
+            this.sizeInt.init(2000, this.lastSize, planet.size, backInOut);
             this.lastSize = planet.size;
         }
         this.gfx.scale.set(this.sizeInt.tick(elapsedMS));

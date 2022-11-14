@@ -1,3 +1,4 @@
+import { linear } from 'svelte/easing';
 import { create } from 'deepool';
 
 export interface Point {
@@ -35,7 +36,7 @@ class Box {
 }
 
 // Use a growing pool of quad tree for less gc
-const pool = createPool(() => new QuadTree<any>());
+const pool: Pool<QuadTree<any>> = create(() => new QuadTree<any>());
 
 // Much more memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
@@ -166,18 +167,10 @@ interface Pool<T> {
     use: () => T;
     recycle: (item: T) => void;
 }
-function createPool<T>(creator: () => T): Pool<T> {
-    return create(creator);
-}
 
-export class ArrayPool<T> {
-    private pool: Pool<T>;
+export class NoGCArray<T> {
     private items: T[] = [];
     private count = 0;
-
-    constructor(itemFactory: () => T) {
-        this.pool = createPool(itemFactory);
-    }
 
     forEach(fn: (item: T) => void) {
         this.items.forEach(e => e && fn(e));
@@ -185,19 +178,25 @@ export class ArrayPool<T> {
 
     get length () { return this.count; }
 
-    take() {
-        const sat = this.pool.use();
+    clear() {
+        for (let i = 0; i < this.items.length; i++) {
+            this.items[i] = null;
+        }
+        this.count = 0;
+    }
+
+    add(item: T) {
         let idx = this.items.findIndex(e => !e);
         if (idx === -1) {
             this.grow();
             idx = this.count;
         }
-        this.items[idx] = sat;
+        this.items[idx] = item;
         this.count += 1;
-        return sat;
+        return item;
     }
 
-    release(item: T) {
+    remove(item: T) {
         // inspired by https://github.com/pixijs/pixijs/blob/dev/packages/display/src/Container.ts#L292 and
         // https://github.com/pixijs/pixijs/blob/4cbadba3e46c4987f505e76a7f4e844d95a120cc/packages/utils/src/data/removeItems.ts#L9
         const idx = this.items.findIndex(e => e === item);
@@ -206,7 +205,6 @@ export class ArrayPool<T> {
         }
         this.items[idx] = null;
         this.count -= 1;
-        this.pool.recycle(item);
         return true;
     }
 
@@ -219,45 +217,49 @@ export class ArrayPool<T> {
     }
 }
 
-export interface Interpolation {
-    finished: boolean;
-    value: number;
+export class ArrayPool<T> {
+    private pool: Pool<T>;
+    private array = new NoGCArray<T>();
 
-    init(timeMS: number, start: number, stop: number): Interpolation;
-    tick(elapsedMS: number): number;
-}
-export function interpolator(timeFn: (age: number, total: number) => number) {
-    let age = 0;
-    let initial = 0;
-    let target = 0;
-    let lifetime = 0;
-
-    let result = {
-        finished: false,
-        value: 0,
-
-        init(timeMS: number, start: number, stop: number) {
-            age = 0;
-            lifetime = timeMS;
-            result.finished = false;
-            initial = start;
-            target = stop;
-            return result;
-        },
-
-        tick: (elapsedMS: number) => {
-            if (age < lifetime) {
-                age += elapsedMS;
-                const t = timeFn(age, lifetime);
-                result.value = initial * (1 - t) + target * t;
-            } else {
-                result.finished = true;
-                result.value = target;
-            }
-            return result.value;
-        }
+    constructor(itemFactory: () => T) {
+        this.pool = create(itemFactory);
     }
-    return result;
+
+    get length() { return this.array.length; }
+    take = () => this.array.add(this.pool.use());
+    release = (item: T) => this.array.remove(item);
+    forEach = (fn: (item: T) => void) => this.array.forEach(fn);
 }
 
-export const lirp = () => interpolator((a, b) => a / b);
+type EaseFn = (p: number) => number;
+export class Interpolator {
+    finished = false;
+    value = 0;
+    private age: number;
+    private lifetime: number;
+    private initial: number;
+    private target: number;
+    private timeFn: EaseFn;
+
+    init(timeMS: number, start: number, stop: number, timeFn: EaseFn = linear) {
+        this.age = 0;
+        this.lifetime = timeMS;
+        this.finished = false;
+        this.initial = start;
+        this.target = stop;
+        this.timeFn = timeFn;
+        return this;
+    };
+
+    tick(elapsedMS: number) {
+        if (this.age < this.lifetime) {
+            this.age += elapsedMS;
+            const t = this.timeFn(this.age / this.lifetime);
+            this.value = this.initial * (1 - t) + this.target * t;
+        } else {
+            this.finished = true;
+            this.value = this.target;
+        }
+        return this.value;
+    }
+}
