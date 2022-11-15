@@ -1,5 +1,10 @@
 import { linear } from 'svelte/easing';
-import { create } from 'deepool';
+import { create as createPool } from 'deepool';
+const fakePool = (fn) => ({
+    use: () => fn(),
+    recycle: () => {},
+});
+// const createPool = fakePool;
 
 export interface Point {
     x: number;
@@ -15,10 +20,20 @@ export const copyPoint = (src: Point, tgt: Point) => {
 export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
 
 class Box {
-    constructor(public left: number, public top: number, public right: number, public bottom: number) {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+
+    init(left: number, top: number, right: number, bottom: number) {
         if (left > right || top > bottom)  {
             throw new Error('invalid box ' + JSON.stringify({ x1: left, y1: top, x2: right, y2: bottom }));
         }
+        this.left = left;
+        this.top = top;
+        this.right = right;
+        this.bottom = bottom;
+        return this;
     }
 
     intersectBox(box: Box) {
@@ -36,7 +51,8 @@ class Box {
 }
 
 // Use a growing pool of quad tree for less gc
-const pool: Pool<QuadTree<any>> = create(() => new QuadTree<any>());
+const quadTreePool: Pool<QuadTree<any>> = createPool(() => new QuadTree<any>());
+const boxPool: Pool<Box> = createPool(() => new Box())
 
 // Much more memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
@@ -64,34 +80,41 @@ export class QuadTree<T extends { position: Point }> {
 
     clean() {
         this.data = [];
-        if (this.nw) {
-            const isLeaf = this.nw || !(
-                this.nw.data.length || this.ne.data.length ||
-                this.sw.data.length || this.se.data.length);
+        const isLeaf = this.nw &&
+            this.nw.data.length === 0 && this.ne.data.length === 0 &&
+            this.sw.data.length === 0 && this.se.data.length === 0;
 
+        if (this.nw) {
             this.nw.clean();
             this.ne.clean();
             this.se.clean();
             this.sw.clean();
-
-            if (isLeaf) {
-                pool.recycle(this.nw);
-                pool.recycle(this.ne);
-                pool.recycle(this.se);
-                pool.recycle(this.sw);
-                this.nw = this.ne = this.se = this.sw = null;
-            }
         }
+
+        if (isLeaf) {
+            this.nw.recycle();
+            this.ne.recycle();
+            this.se.recycle();
+            this.sw.recycle();
+            this.nw = this.ne = this.se = this.sw = null;
+        }
+    }
+
+    private recycle() {
+        boxPool.recycle(this.box);
+        quadTreePool.recycle(this);
+        this.box = null;
     }
 
     insert(t: T, radius: number) {
         if (!this.box) {
-            this.box = new Box(t.position.x - radius, t.position.y - radius, t.position.x + radius, t.position.y + radius);
+            this.box = boxPool.use().init(t.position.x - radius, t.position.y - radius, t.position.x + radius, t.position.y + radius);
+        } else {
+            this.box.left = Math.min(this.box.left, t.position.x - radius);
+            this.box.top = Math.min(this.box.top, t.position.y - radius);
+            this.box.right = Math.max(this.box.right, t.position.x + radius);
+            this.box.bottom = Math.max(this.box.bottom, t.position.y + radius);
         }
-        this.box.left = Math.min(this.box.left, t.position.x - radius);
-        this.box.top = Math.min(this.box.top, t.position.y - radius);
-        this.box.right = Math.max(this.box.right, t.position.x + radius);
-        this.box.bottom = Math.max(this.box.bottom, t.position.y + radius);
         this.add(t, radius);
     }
 
@@ -109,10 +132,10 @@ export class QuadTree<T extends { position: Point }> {
     private subdivide(radius: number) {
         const halfx = (this.box.left + this.box.right) / 2;
         const halfy = (this.box.top + this.box.bottom) / 2;
-        this.nw = this.setup(pool.use(), this.box.left, this.box.top, halfx, halfy);
-        this.ne = this.setup(pool.use(), halfx, this.box.top, this.box.right, halfy);
-        this.se = this.setup(pool.use(), halfx, halfy, this.box.right, this.box.bottom);
-        this.sw = this.setup(pool.use(), this.box.left, halfy, halfx, this.box.bottom);
+        this.nw = this.setup(this.box.left, this.box.top, halfx, halfy);
+        this.ne = this.setup(halfx, this.box.top, this.box.right, halfy);
+        this.se = this.setup(halfx, halfy, this.box.right, this.box.bottom);
+        this.sw = this.setup(this.box.left, halfy, halfx, this.box.bottom);
 
         // push points to children
         for (const d of this.data) {
@@ -121,16 +144,10 @@ export class QuadTree<T extends { position: Point }> {
         this.data = [];
     }
 
-    private setup(tree: QuadTree<T>, x1: number, y1: number, x2: number, y2: number) {
+    private setup(x1: number, y1: number, x2: number, y2: number) {
+        const tree = quadTreePool.use();
         (tree as any).capacity = this.capacity;
-        if (tree.box) {
-            tree.box.left = x1;
-            tree.box.top = y1;
-            tree.box.right = x2;
-            tree.box.bottom = y2;
-        } else {
-            tree.box = new Box(x1, y1, x2, y2);
-        }
+        tree.box = boxPool.use().init(x1, y1, x2, y2);
         return tree;
     }
 
@@ -141,8 +158,9 @@ export class QuadTree<T extends { position: Point }> {
     }
 
     query(point: Point, radius: number, fn: (t: T) => void) {
-        const box = new Box(point.x - radius, point.y - radius, point.x + radius, point.y + radius);
+        const box = boxPool.use().init(point.x - radius, point.y - radius, point.x + radius, point.y + radius);
         this.findPoints(box, fn);
+        boxPool.recycle(box);
     }
 
     private findPoints(box: Box, fn: (t :T) => void) {
@@ -222,7 +240,7 @@ export class ArrayPool<T> {
     private array = new NoGCArray<T>();
 
     constructor(itemFactory: () => T) {
-        this.pool = create(itemFactory);
+        this.pool = createPool(itemFactory);
     }
 
     get length() { return this.array.length; }
@@ -252,8 +270,8 @@ export class Interpolator {
     };
 
     tick(elapsedMS: number) {
+        this.age += elapsedMS;
         if (this.age < this.lifetime) {
-            this.age += elapsedMS;
             const t = this.timeFn(this.age / this.lifetime);
             this.value = this.initial * (1 - t) + this.target * t;
         } else {

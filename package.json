@@ -12,6 +12,9 @@
   },
   "mocha": {
     "loader": "ts-node/esm",
+    "require": [
+      "./src/test/bootstrap.ts"
+    ],
     "spec": "**/*.test.ts",
     "recursive": true
   },

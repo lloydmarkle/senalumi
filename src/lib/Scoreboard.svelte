@@ -45,8 +45,8 @@
 
 <div class="container"
     class:container-visible={blurBackground}
-    on:introstart={() => blurBackground = true}
-    on:outrostart={() => blurBackground = false}
+    on:introend={() => blurBackground = true}
+    on:outroend={() => blurBackground = false}
     transition:fly={{ y: (window.innerHeight * -0.8) }}
     >
     <div class="chart">

@@ -401,7 +401,7 @@ export class Renderer {
 
         const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
         const flashPool: ArrayPool<FlashSFX> = new ArrayPool(() => new FlashSFX(flashPool, createGraphics(satelliteTexture)));
-        const specialEffects = [pulsePool, flashPool];
+        const renderables = [pulsePool, flashPool];
 
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
@@ -437,7 +437,7 @@ export class Renderer {
                 entity.gfx.update(elapsedMS);
             });
 
-            specialEffects.forEach(sfx => sfx.forEach(r => r.update(elapsedMS)));
+            renderables.forEach(sfx => sfx.forEach(r => r.update(elapsedMS)));
         });
     }
 }
@@ -448,12 +448,7 @@ function createGraphics(texture: PIXI.Texture) {
     return gfx;
 }
 
-interface SFX {
-    update(elapsedMS: number): void;
-    destroy(): void;
-}
-
-class PulseSFX implements SFX {
+class PulseSFX implements Renderable {
     private alphaInt = new Interpolator();
     private sizeInt = new Interpolator();
     planet: Planet;
@@ -489,7 +484,7 @@ class PulseSFX implements SFX {
     }
 }
 
-class FlashSFX implements SFX {
+class FlashSFX implements Renderable {
     private rotationSpeed = Math.random() * Math.PI / 200;
 
     readonly position = originPoint();

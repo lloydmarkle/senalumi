@@ -1,5 +1,6 @@
-import { hex, hsl } from 'color-convert';
-import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, NoGCArray } from './math';
+import colorConvert from 'color-convert'
+const { hex, hsl } = colorConvert;
+import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, NoGCArray } from './math.js';
 
 const quadTreeBoxCapacity = 5;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
@@ -419,6 +420,8 @@ export class Game {
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     state = {
         pulsed: false,
+        // due to pooling and pulse happening after collisions, this removed array may not be accurate
+        // in practice, it doesn't seem to matter
         removed: new NoGCArray<Satellite>(),
         gameTimeMS: 0.0,
         lastPulseTime: 0.0,
@@ -557,7 +560,7 @@ export class Game {
         ]));
     }
 
-    private pulse() {
+    pulse() {
         this.planets.forEach(planet => {
             if (planet.owner) {
                 for (let i = 0; i < planet.level * constants.pulseRate; i++) {

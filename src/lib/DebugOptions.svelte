@@ -6,6 +6,13 @@
 
     export let gfx: Renderer;
     export let game: Game;
+
+    function spawn1K() {
+        let end = game.satellites.length + 1000;
+        while (game.satellites.length < end) {
+            game.pulse();
+        }
+    }
 </script>
 
 <div class="debug-background banner" transition:fly={{ y: -50 }}>
@@ -53,6 +60,9 @@
             </Toggle>
         </div>
     {/each}
+    <div class="opiton">
+        <button on:click={spawn1K}>Spawn 1000 satellites</button>
+    </div>
 </div>
 
 <style>
