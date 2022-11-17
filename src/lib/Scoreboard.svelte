@@ -119,10 +119,10 @@
 
     .chart {
         width: 80vw;
-		height: 450px;
-		padding: 3em 0 2em 2em;
-		margin: 0 0 36px 0;
+		height: 60vh;
+		padding: 3em;
 		max-width: 80em;
+		max-height: 60em;
 		margin: 0 auto;
         background: rgba(0,0,0, 0.5);
 	}
@@ -241,7 +241,7 @@
 
 	@media (min-width: 800px) {
 		.chart {
-			height: 600px;
+			/* height: 600px; */
 		}
 	}
 </style>

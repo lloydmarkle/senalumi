@@ -145,9 +145,9 @@ abstract class AIPlayerBase extends Player {
 
     protected moveToPlanet(satellites: Satellite[], planet: Planet) {
         satellites.forEach(s => s.mover = new MoveSequence([
-            [new PointMover(s, planet.position), () => arrived(s.position, planet.position)],
-            [new PlanetMover(s, planet), () => arrived(s.position, planet.position)],
-            [new OrbitMover(s, planet), () => false],
+            new PointMover(planet.position),
+            new PlanetMover(s, planet),
+            new OrbitMover(planet),
         ]));
     }
 }
@@ -466,8 +466,8 @@ export class Game {
     }
 
     forEachEntity(fn: (ent: Entity) => void) {
-        this.planets.forEach(planet => fn(planet));
-        this.satellites.forEach(sat => fn(sat));
+        this.planets.forEach(fn);
+        this.satellites.forEach(fn);
     }
 
     tick(elapsedMS: number) {
@@ -547,16 +547,16 @@ export class Game {
         for (const planet of this.planets) {
             if (distSqr(planet.position, point) < 1600) {
                 playerSatellites.forEach(s => s.mover = new MoveSequence([
-                    [new PointMover(s, planet.position), () => arrived(s.position, planet.position)],
-                    [new PlanetMover(s, planet), () => arrived(s.position, planet.position)],
-                    [new OrbitMover(s, planet), () => false],
+                    new PointMover(planet.position),
+                    new PlanetMover(s, planet),
+                    new OrbitMover(planet),
                 ]));
                 return;
             }
         }
         playerSatellites.forEach(s => s.mover = new MoveSequence([
-            [new PointMover(s, point), () => arrived(s.position, point)],
-            [new OrbitMover(s, { orbitDistance: Math.random() * 20, position: point }), () => false],
+            new PointMover(point),
+            new OrbitMover({ orbitDistance: Math.random() * 20, position: point }),
         ]));
     }
 
@@ -575,7 +575,7 @@ export class Game {
             return;
         }
         const sat = this.satellites.take().init(planet.owner, planet.position);
-        sat.mover = new OrbitMover(sat, planet);
+        sat.mover = new OrbitMover(planet);
     }
 
     recordEvent(ev: GameEvent) {
@@ -661,13 +661,20 @@ export class Planet implements Entity {
     destroy() {}
 }
 
-const arrived = (a: Point, b: Point) => {
-    return distSqr(a, b) < 400;
+interface Moveable {
+    velocity: Point;
+    position: Point;
 }
 
-interface Mover {
-    evaluate(elapsedMS: number): Mover;
+interface Mover<T extends Moveable = Moveable> {
+    arrived(moveable: T): boolean;
+    evaluate(moveable: T, elapsedMS: number): Mover<T>;
 }
+
+const nullMover: Mover = {
+    evaluate: () => nullMover,
+    arrived: () => false,
+};
 
 type Mission = 'hurt' | 'heal' | 'take' | 'upgrade' | 'none' | 'move';
 class PlanetMover implements Mover {
@@ -678,7 +685,8 @@ class PlanetMover implements Mover {
         this.mission = this.computeMission();
     }
 
-    evaluate(elapsedMS: number) {
+    arrived = () => true;
+    evaluate(moveable: Moveable, elapsedMS: number) {
         const mission = this.computeMission();
         if (mission === this.mission) {
             this.planet.hit(this.satellite);
@@ -697,12 +705,20 @@ class PlanetMover implements Mover {
     }
 }
 
-class NullMover implements Mover {
-    evaluate(elapsedMS: number) {
-        return this;
-    }
+function applySpringForce(moveable: Moveable, x: number, y: number, rate: number) {
+    // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
+    let dirX = x - moveable.position.x;
+    let dirY = y - moveable.position.y;
+    const normalizer = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX *= normalizer;
+    dirY *= normalizer;
+
+    let vx = dirX * constants.maxSatelliteVelocity;
+    let vy = dirY * constants.maxSatelliteVelocity;
+
+    moveable.velocity.x += (constants.forceStiffness * dirX + constants.forceDamping * (vx - moveable.velocity.x)) * rate;
+    moveable.velocity.y += (constants.forceStiffness * dirY + constants.forceDamping * (vy - moveable.velocity.y)) * rate;
 }
-const nullMover = new NullMover();
 
 class OrbitMover implements Mover {
     private orbitSpeed = Math.random() * Math.PI * 2 * 0.00005 + (Math.PI * 2 * 0.00003);
@@ -710,11 +726,12 @@ class OrbitMover implements Mover {
     private orbitDistanceOffset = (Math.random() * 0.3) + 0.9;
     private positionNoise = targetOffsetNoise();
     private moveNoise = moveNoise();
-    constructor(readonly satellite: Satellite, readonly orbit: { orbitDistance: number, position: Point }) {}
+    constructor(readonly orbit: { orbitDistance: number, position: Point }) {}
 
-    evaluate(elapsedMS: number) {
+    arrived = () => false;
+    evaluate(moveable: Moveable, elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
-        this.satellite.updateVelocity(
+        applySpringForce(moveable,
             Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
             Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,
             elapsedMS * this.moveNoise);
@@ -725,12 +742,13 @@ class OrbitMover implements Mover {
 class PointMover implements Mover {
     private moveNoise = moveNoise();
     private positionNoise = targetOffsetNoise();
-    constructor(readonly satellite: Satellite, readonly target: Point) {}
+    constructor(readonly target: Point) {}
 
-    evaluate(elapsedMS: number) {
+    arrived = (moveable: Moveable) => distSqr(moveable.position, this.target) < 400;
+    evaluate(moveable: Moveable, elapsedMS: number) {
         // why compute this every frame? If this.target is a reference to a planet, then
         // the planet could be moving so we have a moving target
-        this.satellite.updateVelocity(
+        applySpringForce(moveable,
             this.target.x + this.positionNoise.x,
             this.target.y + this.positionNoise.y,
             elapsedMS * this.moveNoise);
@@ -738,19 +756,20 @@ class PointMover implements Mover {
     }
 }
 
-type MovePair = [Mover, () => boolean];
 class MoveSequence implements Mover {
-    constructor(readonly movers: MovePair[]) {}
-    evaluate(elapsedMS: number) {
-        if (this.movers[0][1]()) {
+    constructor(readonly movers: Mover[]) {}
+
+    arrived = (moveable: Moveable) => this.movers[0].arrived(moveable);
+    evaluate(moveable: Moveable, elapsedMS: number) {
+        if (this.arrived(moveable)) {
             this.movers.shift();
         }
-        this.movers[0][0].evaluate(elapsedMS);
+        this.movers[0].evaluate(moveable, elapsedMS);
         return this;
     }
 }
 
-export class Satellite implements Entity {
+export class Satellite implements Entity, Moveable {
     mover: Mover;
     rotation = 0;
     id: number;
@@ -784,25 +803,10 @@ export class Satellite implements Entity {
         if (outOfBounds) {
             return this.destroy();
         }
+        this.mover = this.mover.evaluate(this, elapsedMS);
         this.rotation += this.rotationSpeed * elapsedMS;
-        this.mover = this.mover.evaluate(elapsedMS);
         this.position.x += this.velocity.x * elapsedMS;
         this.position.y += this.velocity.y * elapsedMS;
-    }
-
-    updateVelocity(x: number, y: number, rate: number) {
-        // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
-        let dirX = x - this.position.x;
-        let dirY = y - this.position.y;
-        const normalizer = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
-        dirX *= normalizer;
-        dirY *= normalizer;
-
-        let vx = dirX * constants.maxSatelliteVelocity;
-        let vy = dirY * constants.maxSatelliteVelocity;
-
-        this.velocity.x += (constants.forceStiffness * dirX + constants.forceDamping * (vx - this.velocity.x)) * rate;
-        this.velocity.y += (constants.forceStiffness * dirY + constants.forceDamping * (vy - this.velocity.y)) * rate;
     }
 
     destroy() {

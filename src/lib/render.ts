@@ -1,4 +1,4 @@
-import { backInOut } from 'svelte/easing';
+import { backInOut, cubicIn } from 'svelte/easing';
 import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint, Interpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
@@ -309,7 +309,7 @@ export class Renderer {
         });
         app.stage.addChild(viewport);
         viewport
-            // .drag()
+            .drag()
             .pinch()
             .wheel()
             .decelerate();
@@ -372,7 +372,6 @@ export class Renderer {
             }
             selector.pointerup();
         });
-        // app.ticker.maxFPS = 10;
 
         const cull = new Simple();
         // cull.addList(satelliteContainer.children);
@@ -385,6 +384,7 @@ export class Renderer {
         //         viewport.dirty = false;
         //     }
         // });
+        // app.ticker.maxFPS = 10;
 
         // dbg view (always add this last)
         this.dbg = new DebugRender(game, app, viewport, cull);
@@ -457,7 +457,7 @@ class PulseSFX implements Renderable {
 
     init(planet: Planet, container: PIXI.Container) {
         this.sizeInt.init(2000, 0, 1);
-        this.alphaInt.init(2000, 0.5, 0);
+        this.alphaInt.init(2000, 0.3, 0, cubicIn);
         this.planet = planet;
 
         container.addChild(this.gfx);
