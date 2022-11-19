@@ -251,10 +251,10 @@ export class ArrayPool<T> {
 
 type EaseFn = (p: number) => number;
 export class Interpolator {
-    finished = false;
+    finished = true;
     value = 0;
-    private age: number;
     private lifetime: number;
+    private age: number;
     private initial: number;
     private target: number;
     private timeFn: EaseFn;
@@ -270,6 +270,10 @@ export class Interpolator {
     };
 
     tick(elapsedMS: number) {
+        if (this.finished) {
+            return this.value;
+        }
+
         this.age += elapsedMS;
         if (this.age < this.lifetime) {
             const t = this.timeFn(this.age / this.lifetime);

@@ -1,4 +1,4 @@
-import { backInOut, cubicIn } from 'svelte/easing';
+import { backInOut, cubicIn, cubicOut } from 'svelte/easing';
 import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint, Interpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
@@ -8,25 +8,87 @@ import type { ListenerFn } from 'eventemitter3';
 
 class Selector {
     private dragMove: ListenerFn;
-    mid: Point = { x:0, y:0 };
-    radius: number = 0;
-    radiusSqr: number = 0;
-    downStart: number = 0;
-    downPoint: Point;
+    private mid: Point = { x:0, y:0 };
+    private radius: number = 0;
+    private radiusSqr: number = 0;
+    private downStart: number = 0;
+    private selectStartCenter: Point;
+    private worldPoint: Point;
+    private screenPoint: Point;
+
+    onMoveSatellites: (point: Point) => void;
     readonly gfx: PIXI.Graphics;
     private _mode: 'none' | 'select' | 'drag' = 'none';
     get mode() { return this._mode; }
 
-    constructor(readonly viewport: Viewport) {
+    constructor(readonly viewport: Viewport, readonly game: Game) {
         this.gfx = new PIXI.Graphics();
-        this.dragMove = ev => {
-            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            this.pointermove(point);
-        };
+        this.dragMove = (ev: PIXI.InteractionEvent) => this.pointermove(ev);
     }
 
-    contains(point: Point) {
-        return distSqr(point, this.mid) < this.radiusSqr;
+    contains = (point: Point) => distSqr(point, this.mid) < this.radiusSqr;
+
+    pointerdown(ev: PIXI.InteractionEvent) {
+        this.downStart = new Date().getTime();
+        this.selectStartCenter = this.viewport.center;
+        this.screenPoint = ev.data.global.clone();
+        this.worldPoint = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        this.viewport.on('pointermove', this.dragMove);
+    }
+
+    pointerup(ev: PIXI.InteractionEvent) {
+        if (this._mode === 'none') {
+            if (this.radius === 0 && this.pointerDownTime() < 200) {
+                const planet = this.game.planets.find(p => distSqr(p.position, this.worldPoint) < 1600);
+                if (planet) {
+                    this.updateGfx(planet.position, this.game.constants.planetRadius * 1.3);
+                }
+            } else {
+                const point = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
+                this.onMoveSatellites?.(point);
+                this.clearGfx();
+            }
+        }
+
+        this._mode = 'none';
+        this.downStart = 0;
+        this.viewport.off('pointermove', this.dragMove);
+        this.viewport.plugins.resume('drag');
+    }
+
+    pointermove(ev: PIXI.InteractionEvent) {
+        const moveDistSqr = distSqr(ev.data.global, this.screenPoint);
+        if (moveDistSqr > 160) {
+            if (this._mode === 'none') {
+                if (this.pointerDownTime() > 200) {
+                    this._mode = 'drag';
+                    this.clearGfx();
+                } else {
+                    this._mode = 'select';
+                    // disable drag and reset view to where drag started
+                    this.viewport.plugins.pause('drag');
+                    this.viewport.moveCenter(this.selectStartCenter);
+                }
+            }
+
+            if (this._mode !== 'drag') {
+                const point = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
+                const top = Math.min(point.y, this.worldPoint.y);
+                const bottom = Math.max(point.y, this.worldPoint.y);
+                const left = Math.min(point.x, this.worldPoint.x);
+                const right = Math.max(point.x, this.worldPoint.x);
+                const radius = Math.max(Math.abs(this.worldPoint.x - point.x), Math.abs(this.worldPoint.y - point.y)) / 2;
+                this.updateGfx({
+                        x: left + (right - left) / 2,
+                        y: top + (bottom - top) / 2,
+                    }, radius);
+            }
+        }
+    }
+
+    private pointerDownTime() {
+        const now = new Date().getTime();
+        return now - this.downStart;
     }
 
     private clearGfx() {
@@ -35,68 +97,14 @@ class Selector {
         this.gfx.clear();
     }
 
-    private update(point: Point) {
+    private updateGfx(mid: Point, radius: number) {
+        this.mid = mid;
+        this.radius = radius;
+        this.radiusSqr = this.radius * this.radius;
+
         this.gfx.clear();
         this.gfx.lineStyle(2, 0xff0000);
-
-        const top = Math.min(point.y, this.downPoint.y);
-        const bottom = Math.max(point.y, this.downPoint.y);
-        const left = Math.min(point.x, this.downPoint.x);
-        const right = Math.max(point.x, this.downPoint.x);
-        // this.gfx.drawRect(
-        //     left,
-        //     top,
-        //     right - left,
-        //     bottom - top,
-        // );
-
-        this.radius = Math.max(Math.abs(this.downPoint.x - point.x), Math.abs(this.downPoint.y - point.y)) / 2;
-        this.radiusSqr = this.radius * this.radius;
-        this.mid.x = left + (right - left) / 2;
-        this.mid.y = top + (bottom - top) / 2;
         this.gfx.drawCircle(this.mid.x, this.mid.y, this.radius);
-    }
-
-    pointerdown(point: Point) {
-        this.downStart = new Date().getTime();
-        this.downPoint = point;
-        this.viewport.on('pointermove', this.dragMove);
-    }
-
-    pointermove(point: Point) {
-        if (!this.downStart) {
-            return;
-        }
-
-        const moveDistSqr = distSqr(this.downPoint, point);
-        if (moveDistSqr > 50) {
-            if (this._mode === 'none') {
-                const now = new Date().getTime();
-                if (now - this.downStart > 200) {
-                    this._mode = 'drag';
-                    this.clearGfx();
-                } else {
-                    this._mode = 'select';
-                    // this.viewport.plugins.pause('drag');
-                    // this.viewport.off('pointermove', this.dragMove);
-                }
-                console.log('set-mode',this._mode)
-            }
-
-            if (this._mode !== 'drag') {
-                this.update(point);
-            }
-        }
-    }
-
-    pointerup() {
-        // this.viewport.plugins.resume('drag');
-        this.viewport.off('pointermove', this.dragMove);
-        if (this._mode === 'none') {
-            this.clearGfx();
-        }
-        this._mode = 'none';
-        this.downStart = 0;
     }
 }
 
@@ -289,8 +297,7 @@ export class Renderer {
         }
 
         const player = game.players.find(p => !('elapsedFromLastThink' in p));
-        const isPlayerSatellite = (sat: any) => sat.owner === player && selector.contains(sat.position);
-        // const isPlayerSatellite = (sat: any) => selector.contains(sat.position);
+        const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
         let app = new PIXI.Application({
             view: document.querySelector("#game") as HTMLCanvasElement,
             autoDensity: true,
@@ -328,6 +335,8 @@ export class Renderer {
         viewport.moveCenter(0, 0);
         viewport.setZoom(0.4);
 
+        let strongBlur = new PIXI.filters.BlurFilter(50, 16);
+
         // Create the sprite and add it to the stage
         let satelliteTexture = PIXI.Texture.from('star.png');
         let planetTexture = PIXI.Texture.from('sun.png');
@@ -335,14 +344,10 @@ export class Renderer {
         let bgContainer = new PIXI.Container();
         viewport.addChild(bgContainer);
         let ringContainer = new PIXI.Container();
-        ringContainer.filters = [
-            new PIXI.filters.BlurFilter(50, 16),
-        ];
+        ringContainer.filters = [strongBlur];
         viewport.addChild(ringContainer);
         let pulseContainer = new PIXI.Container();
-        pulseContainer.filters = [
-            new PIXI.filters.BlurFilter(50, 16),
-        ];
+        pulseContainer.filters = [strongBlur];
         viewport.addChild(pulseContainer);
         let planetContainer = new PIXI.Container();
         viewport.addChild(planetContainer);
@@ -351,27 +356,26 @@ export class Renderer {
         let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
         viewport.addChild(flashContainer);
 
+        const satelliteTracesPool: ArrayPool<TraceSFX> = new ArrayPool(() => new TraceSFX(satelliteTracesPool, createGraphics(satelliteTexture)));
+        const targetFlashPool: ArrayPool<TargetSFX> = new ArrayPool(() => new TargetSFX(targetFlashPool, createGraphics(satelliteTexture)));
+
         let interactionContainer = new PIXI.Container();
         viewport.addChild(interactionContainer);
-        let selector = new Selector(viewport);
+        let selector = new Selector(viewport, game);
         interactionContainer.addChild(selector.gfx);
-        viewport.on('pointerdown', ev => {
-            const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-            selector.pointerdown(point);
-        });
-        viewport.on('pointerup', ev => {
-            if (selector.mode === 'none') {
-                const point = viewport.toWorld(ev.data.global.x, ev.data.global.y);
-                const selection = []
-                game.satellites.forEach(sat => {
-                    if (isPlayerSatellite(sat)) {
-                        selection.push(sat);
-                    }
-                });
-                game.moveSatellites(player, selection, point);
-            }
-            selector.pointerup();
-        });
+        viewport.on('pointerdown', ev => selector.pointerdown(ev));
+        viewport.on('pointerup', ev => selector.pointerup(ev));
+        selector.onMoveSatellites = (point: Point) => {
+            const selection: Satellite[] = []
+            game.satellites.forEach(sat => {
+                if (isPlayerSatellite(sat)) {
+                    satelliteTracesPool.take().init(point, sat, flashContainer);
+                    selection.push(sat);
+                }
+            });
+            targetFlashPool.take().init(point, pulseContainer);
+            game.moveSatellites(player, selection, point);
+        }
 
         const cull = new Simple();
         // cull.addList(satelliteContainer.children);
@@ -401,7 +405,7 @@ export class Renderer {
 
         const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
         const flashPool: ArrayPool<FlashSFX> = new ArrayPool(() => new FlashSFX(flashPool, createGraphics(satelliteTexture)));
-        const renderables = [pulsePool, flashPool];
+        const renderables = [pulsePool, flashPool, targetFlashPool, satelliteTracesPool];
 
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
@@ -448,83 +452,94 @@ function createGraphics(texture: PIXI.Texture) {
     return gfx;
 }
 
-class PulseSFX implements Renderable {
-    private alphaInt = new Interpolator();
-    private sizeInt = new Interpolator();
-    planet: Planet;
+class SFX<T extends PIXI.Container = PIXI.Container> implements Renderable {
+    protected alphaInt = new Interpolator();
+    protected rotationInt = new Interpolator();
+    protected sizeInt = new Interpolator();
+    protected xPoint = new Interpolator();
+    protected yPoint = new Interpolator();
 
-    constructor(private pool: ArrayPool<PulseSFX>, readonly gfx: PIXI.Graphics) {}
+    constructor(private pool: ArrayPool<SFX<T>>, readonly gfx: T) {}
+
+    sfxInit(container: PIXI.Container) {
+        container.addChild(this.gfx);
+        return this;
+    }
+
+    update(elapsedMS: number): void {
+        if (this.alphaInt.finished) {
+            return this.destroy();
+        }
+        this.gfx.rotation = this.rotationInt.tick(elapsedMS);
+        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
+        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
+        this.gfx.position.x = this.xPoint.tick(elapsedMS);
+        this.gfx.position.y = this.yPoint.tick(elapsedMS);
+    }
+
+    destroy () {
+        this.pool.release(this);
+        this.gfx.parent.removeChild(this.gfx);
+    }
+
+    protected position(point: Point) {
+        this.xPoint.init(0, 0, point.x);
+        this.yPoint.init(0, 0, point.y);
+    }
+}
+
+class TargetSFX extends SFX<PIXI.Sprite> {
+    init(point: Point, container: PIXI.Container) {
+        this.alphaInt.init(2000, .6, 0, cubicOut);
+        this.sizeInt.init(2000, 25, 30, cubicOut);
+        this.rotationInt.init(2000, 0, Math.random() * Math.PI * 20);
+        this.position(point);
+        return super.sfxInit(container);
+    }
+}
+
+class TraceSFX extends SFX<PIXI.Sprite> {
+    init(point: Point, sat: Satellite, container: PIXI.Container) {
+        const time = Math.random() * 100 + 400;
+        this.xPoint.init(time, sat.position.x, point.x, cubicOut);
+        this.yPoint.init(time, sat.position.y, point.y, cubicOut);
+        this.alphaInt.init(time, .8, 0.2, cubicOut);
+        this.sizeInt.init(0, 0, 1);
+        this.rotationInt.init(time, 0, Math.random() * Math.PI * 30);
+        return super.sfxInit(container);
+    }
+}
+
+class PulseSFX extends SFX<PIXI.Graphics> {
+    planet: Planet;
 
     init(planet: Planet, container: PIXI.Container) {
         this.sizeInt.init(2000, 0, 1);
         this.alphaInt.init(2000, 0.3, 0, cubicIn);
         this.planet = planet;
 
-        container.addChild(this.gfx);
         this.gfx.clear();
-        this.gfx.position = planet.position;
         this.gfx.lineStyle(planet.orbitDistance, planet.owner.satelliteColor);
         this.gfx.drawCircle(0, 0, planet.orbitDistance * 2.5);
-        return this;
+        return super.sfxInit(container);
     }
 
     update(elapsedMS: number): void {
-        if (this.alphaInt.finished && this.sizeInt.finished) {
-            return this.destroy();
-        }
-        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
+        super.update(elapsedMS);
         this.gfx.rotation = this.planet.rotation;
-        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
         this.gfx.position = this.planet.position;
-    }
-
-    destroy () {
-        this.pool.release(this);
-        this.gfx.parent.removeChild(this.gfx);
     }
 }
 
-class FlashSFX implements Renderable {
-    private rotationSpeed = Math.random() * Math.PI / 200;
-
-    readonly position = originPoint();
-    readonly velocity = originPoint();
-
-    private rotation: number;
-    private alphaInt = new Interpolator();
-    private sizeInt = new Interpolator();
-
-    constructor(private pool: ArrayPool<FlashSFX>, readonly gfx: PIXI.Sprite) {}
-
+class FlashSFX extends SFX<PIXI.Sprite> {
     init(sat: Satellite, container: PIXI.Container) {
-        container.addChild(this.gfx);
         const time = Math.random() * 300 + 200;
         this.alphaInt.init(time, 1, 0.2);
         this.sizeInt.init(time, 1, 4);
-
-        copyPoint(sat.position, this.position);
-        copyPoint(sat.velocity, this.velocity);
-        this.rotation = Math.random() * Math.PI * 2;
-        return this;
-    }
-
-    update(elapsedMS: number): void {
-        if (this.alphaInt.finished && this.sizeInt.finished) {
-            return this.destroy();
-        }
-        this.rotation += this.rotationSpeed * elapsedMS;
-        this.position.x += this.velocity.x * elapsedMS;
-        this.position.y += this.velocity.y * elapsedMS;
-
-        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
-        this.gfx.rotation = this.rotation;
-        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
-        this.gfx.position = this.position;
-    }
-
-    destroy () {
-        this.pool.release(this);
-        this.gfx.parent.removeChild(this.gfx);
+        this.xPoint.init(time, sat.position.x, sat.position.x + time * sat.velocity.x);
+        this.yPoint.init(time, sat.position.y, sat.position.y + time * sat.velocity.y);
+        this.rotationInt.init(time, 0, Math.random() * Math.PI * 3);
+        return super.sfxInit(container);
     }
 }
 
