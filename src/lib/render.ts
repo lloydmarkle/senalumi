@@ -1,5 +1,5 @@
 import { backInOut, cubicIn, cubicOut } from 'svelte/easing';
-import { type Point, distSqr, QuadTree, ArrayPool, originPoint, copyPoint, Interpolator } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, Interpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -284,26 +284,23 @@ class DebugRender {
     }
 }
 
-const lastApp = (app?: any) =>
+const lastApp = (app?: any): PIXI.Application =>
     (window as any).lastApp = app ?? (window as any).lastApp;
 
 export class Renderer {
-    paused = false;
     readonly dbg: DebugRender;
-    readonly app: PIXI.Application;
-    constructor(game: Game) {
-        if (import.meta.hot && lastApp()) {
+    constructor(game: Game, player: Player) {
+        if (lastApp()) {
             lastApp().destroy(false, { baseTexture: true, children: true, texture: true });
         }
 
-        const player = game.players.find(p => !('elapsedFromLastThink' in p));
         const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
         let app = new PIXI.Application({
             view: document.querySelector("#game") as HTMLCanvasElement,
             autoDensity: true,
             resizeTo: window,
         });
-        lastApp(this.app = app);
+        lastApp(app);
 
         // create viewport
         const viewport = new Viewport({
@@ -421,27 +418,26 @@ export class Renderer {
 
         app.ticker.add((delta) => {
             this.dbg.tick(app);
-            if (this.paused) {
-                return;
-            }
+            const state = game.tick(app.ticker.elapsedMS);
 
-            const elapsedMS = app.ticker.elapsedMS * constants.gameSpeed;
-            const state = game.tick(elapsedMS);
-
-            if (state.pulsed) {
+            if (state.log) {
                 game.planets.forEach(p => p.owner && pulsePool.take().init(p, pulseContainer));
             }
             state.removed.forEach(sat => flashPool.take().init(sat, flashContainer));
+
+            // a little weird to have the UI clear this...
+            state.removed.clear();
+            state.log = null;
 
             pulseContainer.visible = this.dbg.config.enablePulseAnimation;
             game.forEachEntity(entity => {
                 if (!entity.gfx) {
                     entity.gfx = renderInitializers[entity.type](entity);
                 }
-                entity.gfx.update(elapsedMS);
+                entity.gfx.update(state.elapsedMS);
             });
 
-            renderables.forEach(sfx => sfx.forEach(r => r.update(elapsedMS)));
+            renderables.forEach(sfx => sfx.forEach(r => r.update(state.elapsedMS)));
         });
     }
 }

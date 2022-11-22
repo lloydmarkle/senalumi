@@ -186,7 +186,7 @@ interface Pool<T> {
     recycle: (item: T) => void;
 }
 
-export class NoGCArray<T> {
+export class GrowOnlyArray<T> {
     private items: T[] = [];
     private count = 0;
 
@@ -237,16 +237,16 @@ export class NoGCArray<T> {
 
 export class ArrayPool<T> {
     private pool: Pool<T>;
-    private array = new NoGCArray<T>();
+    private array = new GrowOnlyArray<T>();
 
     constructor(itemFactory: () => T) {
         this.pool = createPool(itemFactory);
     }
 
     get length() { return this.array.length; }
-    take = () => this.array.add(this.pool.use());
-    release = (item: T) => this.array.remove(item);
     forEach = (fn: (item: T) => void) => this.array.forEach(fn);
+    take = () => this.array.add(this.pool.use())
+    release = (item: T) => this.array.remove(item)
 }
 
 type EaseFn = (p: number) => number;

@@ -1,6 +1,6 @@
 import colorConvert from 'color-convert'
 const { hex, hsl } = colorConvert;
-import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, NoGCArray } from './math.js';
+import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, GrowOnlyArray } from './math.js';
 
 const quadTreeBoxCapacity = 5;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
@@ -27,26 +27,26 @@ type TeamStats = { [key in Team]?: number };
 class Stats {
     public collisionStages: { [key in CollisionStages]?: number } = {};
     public playerTime: TeamStats = {};
-    public moveTime: number;
-    public collideTime: number;
-    public pulseTime: number;
-    public thinkTime: number;
-    public gameTime: number;
+    public moveTime: number = 0;
+    public collideTime: number = 0;
+    public pulseTime: number = 0;
+    public thinkTime: number = 0;
+    public gameTime: number = 0;
 
     now() {
         return performance.now();
     }
 
     recordCollide(start: number, stage: CollisionStages) {
-        this.collisionStages[stage] = (this.collisionStages[stage] ?? 0) + (performance.now() - start);
+        this.collisionStages[stage] = (this.collisionStages[stage] ?? 0) + (this.now() - start);
     }
 
     recordPlayerStat(start: number, team: Team, field: TeamStats) {
-        field[team] = (field[team] ?? 0) + (performance.now() - start);
+        field[team] = (field[team] ?? 0) + (this.now() - start);
     }
 
     elapsed(start: number) {
-        return performance.now() - start;
+        return this.now() - start;
     }
 
     clear() {
@@ -62,7 +62,7 @@ export interface Renderable {
 }
 
 export interface Entity {
-    id: number;
+    id: string;
     type: string;
 
     gfx: Renderable;
@@ -73,6 +73,7 @@ export interface Entity {
     rotation: number;
     alpha?: number;
 
+    tick(elapsedMS: number);
     destroy(): void;
 }
 
@@ -101,11 +102,6 @@ export abstract class Player {
             }
         });
         return sats;
-    }
-}
-
-class HumanPlayer extends Player {
-    tick(ms: number) {
     }
 }
 
@@ -356,7 +352,7 @@ class AIPlayer3 extends AIPlayerBase {
 }
 
 const generateWorld = (game: Game, colours: number, worldSize: number) => {
-    const planets = [];
+    const planets: Planet[] = [];
     const minDistance = constants.planetRadius * constants.planetRadius * 4;
     const worldSize2x = worldSize * 2;
     const tree = new QuadTree<Planet>(1);
@@ -390,10 +386,11 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
         planets.push(new Planet(game, position, 1));
         tree.insert(planets[planets.length - 1], constants.planetRadius);
     }
-    return  planets;
+    planets.forEach((p, i) => p.id = 'p' + i);
+    return planets;
 }
 
-interface GameEvent {
+export interface GameEvent {
     type: 'planet-upgrade' | 'planet-capture' | 'planet-lost';
     team: Team;
 }
@@ -410,24 +407,28 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
 
 export class Game {
     private snapshot: GameStateSnapshot;
+    private satId = 0;
 
+    paused = false;
     stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly constants = constants;
-    satellites = new ArrayPool(() => new Satellite());
+    satellites = new ArrayPool(() => new Satellite(`s${this.satId++}`));
     planets: Planet[] = [];
     players: Player[];
     collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     state = {
-        pulsed: false,
+        log: null as GameStateSnapshot,
         // due to pooling and pulse happening after collisions, this removed array may not be accurate
         // in practice, it doesn't seem to matter
-        removed: new NoGCArray<Satellite>(),
-        gameTimeMS: 0.0,
-        lastPulseTime: 0.0,
+        removed: new GrowOnlyArray<Satellite>(),
+        elapsedMS: 0,
+        gameTimeMS: 0,
+        lastPulseTime: 0,
     };
     private resetGamestate() {
-        this.state.pulsed = false;
+        this.state.elapsedMS = 0;
+        this.state.log = null;
         this.state.removed.clear();
     }
 
@@ -453,7 +454,7 @@ export class Game {
             // new HumanPlayer(this, 'blue', 0x1111DD),
             new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
             new AIPlayer2(this, 'pink', 0xFF10F0, aiStats),
-        ]
+        ];
 
         this.planets = generateWorld(this, this.players.length, 1000);
         this.players.forEach((player, i) => this.planets[i].capture(player));
@@ -470,11 +471,17 @@ export class Game {
         this.satellites.forEach(fn);
     }
 
-    tick(elapsedMS: number) {
+    tick(time: number) {
         this.resetGamestate();
-        this.state.gameTimeMS += elapsedMS;
+        if (this.paused) {
+            return this.state;
+        }
         this.stats.clear();
+
         const gameTime = this.stats.now();
+        const elapsedMS = time * this.constants.gameSpeed;
+        this.state.gameTimeMS += elapsedMS;
+        this.state.elapsedMS = elapsedMS;
 
         this.collisionTree.clean();
 
@@ -506,11 +513,11 @@ export class Game {
         if (seconds > this.state.lastPulseTime) {
             this.state.lastPulseTime = seconds;
             const pulseTime = this.stats.now();
-            this.state.pulsed = true;
             this.pulse();
 
             const map = this.snapshot.satelliteCounts;
             this.satellites.forEach(sat => map.set(sat.owner.id, (map.get(sat.owner.id) ?? 0) + 1));
+            this.state.log = this.snapshot;
             this.log.push(this.snapshot);
             this.snapshot = createSnapshot(seconds);
             this.stats.pulseTime = this.stats.elapsed(pulseTime);
@@ -592,7 +599,7 @@ export class Planet implements Entity {
     private _health: number = 100;
     private _upgrade: number = 0;
 
-    id: number;
+    id: string;
     gfx: Renderable;
     readonly type = 'Planet';
     level: PlanetLevel = 0;
@@ -661,7 +668,7 @@ export class Planet implements Entity {
     destroy() {}
 }
 
-interface Moveable {
+export interface Moveable {
     velocity: Point;
     position: Point;
 }
@@ -772,7 +779,6 @@ class MoveSequence implements Mover {
 export class Satellite implements Entity, Moveable {
     mover: Mover;
     rotation = 0;
-    id: number;
     gfx: Renderable;
     readonly type = 'Satellite';
     readonly size = 1;
@@ -781,6 +787,8 @@ export class Satellite implements Entity, Moveable {
     readonly owner: Player;
 
     private rotationSpeed: number;
+
+    constructor(readonly id: string) {}
 
     init(owner: Player, position: Point) {
         this.gfx = null;

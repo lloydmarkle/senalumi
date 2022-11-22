@@ -81,18 +81,20 @@
             </Pancake.Quadtree> -->
 
             <!-- annotate events -->
-            {#each highlights as highlight}
-                {#each highlight.events as gameEvent}
-                    <Pancake.Point x={highlight.time} y={maxy}>
-                        <div class="annotation {gameEvent.type}" style="color:{teamColours[gameEvent.team]}">
-                            {gameEvent.type === 'planet-upgrade' ? '❖' :
-                             gameEvent.type === 'planet-capture' ? '▲' :
-                             gameEvent.type === 'planet-lost' ? '▼' :
-                             ''}
-                        </div>
-                    </Pancake.Point>
+            <div class="annotation-container">
+                {#each highlights as highlight}
+                    {#each highlight.events as gameEvent}
+                        <Pancake.Point x={highlight.time} y={maxy}>
+                            <div class="annotation {gameEvent.type}" style="color:{teamColours[gameEvent.team]}">
+                                {gameEvent.type === 'planet-upgrade' ? '+' :
+                                gameEvent.type === 'planet-capture' ? '▲' :
+                                gameEvent.type === 'planet-lost' ? '▼' :
+                                ''}
+                            </div>
+                        </Pancake.Point>
+                    {/each}
                 {/each}
-            {/each}
+            </div>
         </Pancake.Chart>
     </div>
 </div>
@@ -164,6 +166,10 @@
 		text-align: center;
 	}
 
+    .annotation-container {
+        height: 100px;
+        background: rgba(255, 255, 255, 0.1);
+    }
     .annotation {
         position: absolute;
         /* right:0.5em; */
