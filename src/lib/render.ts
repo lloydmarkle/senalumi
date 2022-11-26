@@ -162,7 +162,7 @@ class DebugRender {
 
             const planets = this.game.planets.reduce((map, p) => {
                 if (p.owner) {
-                    map[p.owner.id] = (map[p.owner.id] ?? 0) + p.level;
+                    map[p.owner.team] = (map[p.owner.team] ?? 0) + p.level;
                 }
                 return map;
             }, {});
@@ -237,7 +237,7 @@ class DebugRender {
         this.updateFns.push(() => {
             gfx.clear();
             this.destroyChildren(gfx);
-            gfx.visible = this.config.showPlayerSelection[player.id] ?? false;
+            gfx.visible = this.config.showPlayerSelection[player.team] ?? false;
             if (!gfx.visible) {
                 return;
             }
@@ -273,7 +273,7 @@ class DebugRender {
             text.anchor.set(0.5, 0.5);
             text.position.x = planet.position.x;
             text.position.y = planet.position.y;
-            text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.id[0] ?? '') + ':' + planet.level;
+            text.text = planet.health + ':' + planet.upgrade + (planet.candidateOwner?.team[0] ?? '') + ':' + planet.level;
         });
     }
 
@@ -289,12 +289,12 @@ const lastApp = (app?: any): PIXI.Application =>
 
 export class Renderer {
     readonly dbg: DebugRender;
-    constructor(game: Game, player: Player) {
+    constructor(game: Game, player?: Player) {
         if (lastApp()) {
+            console.log('destroy render')
             lastApp().destroy(false, { baseTexture: true, children: true, texture: true });
         }
 
-        const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
         let app = new PIXI.Application({
             view: document.querySelector("#game") as HTMLCanvasElement,
             autoDensity: true,
@@ -358,20 +358,23 @@ export class Renderer {
 
         let interactionContainer = new PIXI.Container();
         viewport.addChild(interactionContainer);
+        const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
         let selector = new Selector(viewport, game);
         interactionContainer.addChild(selector.gfx);
-        viewport.on('pointerdown', ev => selector.pointerdown(ev));
-        viewport.on('pointerup', ev => selector.pointerup(ev));
-        selector.onMoveSatellites = (point: Point) => {
-            const selection: Satellite[] = []
-            game.satellites.forEach(sat => {
-                if (isPlayerSatellite(sat)) {
-                    satelliteTracesPool.take().init(point, sat, flashContainer);
-                    selection.push(sat);
-                }
-            });
-            targetFlashPool.take().init(point, pulseContainer);
-            game.moveSatellites(player, selection, point);
+        if (player) {
+            viewport.on('pointerdown', ev => selector.pointerdown(ev));
+            viewport.on('pointerup', ev => selector.pointerup(ev));
+            selector.onMoveSatellites = (point: Point) => {
+                const selection: Satellite[] = []
+                game.satellites.forEach(sat => {
+                    if (isPlayerSatellite(sat)) {
+                        satelliteTracesPool.take().init(point, sat, flashContainer);
+                        selection.push(sat);
+                    }
+                });
+                targetFlashPool.take().init(point, pulseContainer);
+                game.moveSatellites(player, selection, point);
+            }
         }
 
         const cull = new Simple();
@@ -393,7 +396,7 @@ export class Renderer {
         const colorMap = game.players.reduce((map, player) => {
             let filter = new PIXI.filters.ColorMatrixFilter();
             filter.tint(player.color, true);
-            map[player.id] = filter;
+            map[player.team] = filter;
             return map;
         }, {})
         const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
@@ -407,6 +410,7 @@ export class Renderer {
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
 
+        game.forEachEntity(entity => entity.gfx = null);
         const renderInitializers = {
             'Satellite': (satellite: Satellite) => satellitePool.take().init(satellite, satelliteContainer, isPlayerSatellite),
             'Planet': (planet: Planet) => {
@@ -420,7 +424,15 @@ export class Renderer {
             this.dbg.tick(app);
             const state = game.tick(app.ticker.elapsedMS);
 
+            game.forEachEntity(entity => {
+                if (!entity.gfx) {
+                    entity.gfx = renderInitializers[entity.type](entity);
+                }
+                entity.gfx.update(state.elapsedMS);
+            });
+
             if (state.log) {
+                pulseContainer.visible = this.dbg.config.enablePulseAnimation;
                 game.planets.forEach(p => p.owner && pulsePool.take().init(p, pulseContainer));
             }
             state.removed.forEach(sat => flashPool.take().init(sat, flashContainer));
@@ -428,14 +440,6 @@ export class Renderer {
             // a little weird to have the UI clear this...
             state.removed.clear();
             state.log = null;
-
-            pulseContainer.visible = this.dbg.config.enablePulseAnimation;
-            game.forEachEntity(entity => {
-                if (!entity.gfx) {
-                    entity.gfx = renderInitializers[entity.type](entity);
-                }
-                entity.gfx.update(state.elapsedMS);
-            });
 
             renderables.forEach(sfx => sfx.forEach(r => r.update(state.elapsedMS)));
         });
@@ -624,7 +628,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         }
         this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
 
-        this.gfx.filters = [this.colorMap[planet.owner?.id ?? 'default']];
+        this.gfx.filters = [this.colorMap[planet.owner?.team ?? 'default']];
 
         this.statusBars.clear();
         if (planet.upgrade > 0) {

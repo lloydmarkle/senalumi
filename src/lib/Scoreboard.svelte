@@ -1,20 +1,11 @@
 <script lang="ts">
-    import type { GameStateSnapshot } from './game';
+    import { type GameStateSnapshot, teamColor, type Team } from './game';
     import { fly } from 'svelte/transition';
     import * as Pancake from '@sveltejs/pancake';
 
     export let data: GameStateSnapshot[];
 
-    // TODO: get this from game
-    let teamColours = {
-        'red': '#D2042D',
-        'yellow': '#FFF44F',
-        'orange': '#CC5500',
-        'green': '#7CFC00',
-        'blue': '#1111DD',
-        'violet': '#7F00FF',
-        'pink': '#FF10F0',
-    };
+    let teamColourString = (team: Team) => ('#' + teamColor(team).toString(16));
 
     let teams = Array.from(data[0].satelliteCounts.keys());
     let teamPoints = teams.map(team =>
@@ -63,7 +54,7 @@
             <Pancake.Svg>
                 {#each teamPoints as item}
                     <Pancake.SvgLine data={item} x={e => e.time} y={e => e.count} let:d>
-                        <path class="avg" {d} stroke={teamColours[item[0].team]} />
+                        <path class="avg" {d} stroke={teamColourString(item[0].team)} />
                     </Pancake.SvgLine>
                 {/each}
             </Pancake.Svg>
@@ -85,7 +76,7 @@
                 {#each highlights as highlight}
                     {#each highlight.events as gameEvent}
                         <Pancake.Point x={highlight.time} y={maxy}>
-                            <div class="annotation {gameEvent.type}" style="color:{teamColours[gameEvent.team]}">
+                            <div class="annotation {gameEvent.type}" style="color:{teamColourString(gameEvent.team)}">
                                 {gameEvent.type === 'planet-upgrade' ? '+' :
                                 gameEvent.type === 'planet-capture' ? '▲' :
                                 gameEvent.type === 'planet-lost' ? '▼' :
@@ -232,6 +223,7 @@
 	}
 
     .planet-capture {
+        top: 0em;
     }
     .planet-upgrade {
         top: 1em;
@@ -243,11 +235,5 @@
 	.tooltip strong {
 		font-size: 1.4em;
 		display: block;
-	}
-
-	@media (min-width: 800px) {
-		.chart {
-			/* height: 600px; */
-		}
 	}
 </style>

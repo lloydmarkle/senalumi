@@ -55,8 +55,8 @@
     </div>
     {#each game.players as player}
         <div class="option">
-            <Toggle id="show-player-selection-{player.id}" bind:checked={gfx.dbg.config.showPlayerSelection[player.id]}>
-                Show <span style="background:#{player.color.toString(16)}">{player.id}</span> player selection
+            <Toggle id="show-player-selection-{player.team}" bind:checked={gfx.dbg.config.showPlayerSelection[player.team]}>
+                Show <span style="background:#{player.color.toString(16)}">{player.team}</span> player selection
             </Toggle>
         </div>
     {/each}

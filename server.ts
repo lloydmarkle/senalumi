@@ -1,6 +1,7 @@
 import * as http from 'http';
 import { Room, Client } from 'colyseus';
 import { GameSchema, PlayerMoveMessage, PlayerSchema } from './src/lib/net-game';
+import { Game } from './src/lib/game';
 
 // enable performance.now() on both app and server
 import { performance } from 'perf_hooks';
@@ -9,24 +10,30 @@ import { performance } from 'perf_hooks';
 export class AuraluxRoom extends Room<GameSchema> {
   // When room is initialized
   onCreate(options: any) {
-    this.setState(new GameSchema());
+    const game = new Game();
+    this.setState(new GameSchema(game, options.label));
 
     this.onMessage('player:info', (client, msg: PlayerSchema) => {
       const player = this.state.players.get(client.sessionId);
-      const found = Array.from(this.state.players.values()).find(e => e.color === msg.color);
-      if (found && found.sessionId !== client.sessionId) {
+      const found = Array.from(this.state.players.values()).find(e => e.team === msg.team);
+      if (found && msg.team && found.sessionId !== client.sessionId) {
         // fail! someone already chose this color?
-        console.error(`invalid color for session: session:${player.sessionId}, color:${msg.color}`);
+        console.error(`invalid color for session: session:${player.sessionId}, color:${msg.team}`);
         return;
       }
       player.displayName = msg.displayName;
-      player.color = msg.color;
+      player.ready = msg.ready;
+      player.team = msg.team;
       this.state.players.set(client.sessionId, player);
+
+      if (Array.from(this.state.players.values()).every(p => p.ready)) {
+        this.state.game.start();
+      }
     });
 
     this.onMessage('player:move', (client, msg: PlayerMoveMessage) => {
       const playerInfo = this.state.players.get(client.sessionId);
-      const player = this.state.game.players.find(e => e.id === playerInfo.color);
+      const player = this.state.game.players.find(e => e.team === playerInfo.team);
       const sats = [];
       const ids = new Set(msg.satelliteIds);
       this.state.game.forEachEntity(ent => {
@@ -52,12 +59,17 @@ export class AuraluxRoom extends Room<GameSchema> {
 
   // When client successfully joins the room
   onJoin(client: Client, options: any, auth: any) {
-    this.state.players.set(client.sessionId, new PlayerSchema('_blank', client.sessionId));
+    const player = new PlayerSchema('_blank', client.sessionId);
+    if (this.state.players.size === 0) {
+      player.admin = true;
+    }
+    this.state.players.set(client.sessionId, player);
   }
 
   // When a client leaves the room
   onLeave(client: Client, consented: boolean) {
     this.state.players.delete(client.sessionId);
+    // TODO: reset admin
   }
 
   // Cleanup callback, called after there are no more clients in the room. (see `autoDispose`)

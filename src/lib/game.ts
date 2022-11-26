@@ -16,11 +16,22 @@ export const constants = {
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
     satelliteRadius: 8,
+    gameCountDown: 5, // seconds
     // sprite is (currently) 300px
     planetRadius: 150,
 };
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
+let colorMap = {
+    'red': 0xD2042D,
+    'yellow': 0xFFF44F,
+    'orange': 0xCC5500,
+    'green': 0x7CFC00,
+    'blue': 0x1111DD,
+    'violet': 0x7F00FF,
+    'pink': 0xFF10F0,
+};
+export const teamColor = (team: Team) => colorMap[team] ?? 0;
 
 type CollisionStages = 'distance' | 'filter' | 'remove';
 type TeamStats = { [key in Team]?: number };
@@ -83,14 +94,15 @@ export const setLightness = (color: number, lightness: number) => {
     return parseInt(hsl.hex(c), 16);
 }
 
-export abstract class Player {
+export class Player {
+    readonly color: number;
     readonly satelliteColor: number;
-    constructor(readonly game: Game, readonly id: Team, readonly color: number) {
-        this.color = setLightness(color, 50);
-        this.satelliteColor = setLightness(color, 75);
+    constructor(readonly game: Game, readonly team: Team) {
+        this.color = setLightness(teamColor(team), 50);
+        this.satelliteColor = setLightness(teamColor(team), 75);
     }
 
-    abstract tick(ms: number): void;
+    tick(ms: number): void {}
 
     selection(planet: Planet) {
         const radius = planet.orbitDistance * 1.6;
@@ -123,9 +135,10 @@ interface AIConfig {
     conquerChance: number;
 }
 abstract class AIPlayerBase extends Player {
+    ready = true;
     private nextThink: number;
-    constructor(game: Game, id: Team, color: number, readonly config: AIConfig) {
-        super(game, id, color);
+    constructor(game: Game, team: Team, readonly config: AIConfig) {
+        super(game, team);
     }
 
     abstract tick(ms: number): void;
@@ -351,7 +364,35 @@ class AIPlayer3 extends AIPlayerBase {
     }
 }
 
-const generateWorld = (game: Game, colours: number, worldSize: number) => {
+export function generateAiPlayers(game: Game) {
+    const aiStats: AIConfig = {
+        minThinkGapMS: 8000,
+        maxThinkGapMS: 12000,
+        minSatellites: 110,
+        healChance: 0.95,
+        attackChance: 0.40,
+        conquerChance: 0.55,
+        transferChance: 0.85,
+        upgradeChance: 0.45,
+    };
+    return [
+        new AIPlayer(game, 'red', aiStats),
+        new AIPlayer(game, 'orange', aiStats),
+        new AIPlayer3(game, 'yellow', aiStats),
+        new AIPlayer2(game, 'green', aiStats),
+        new AIPlayer(game, 'blue', aiStats),
+        new AIPlayer(game, 'violet', aiStats),
+        new AIPlayer2(game, 'pink', aiStats),
+    ];
+}
+
+interface WorldConfig {
+    worldSize: number;
+    level3Planets: number;
+    level2Planets: number;
+    level1Planets: number;
+}
+function generateRandomCircleWorld(game: Game, { worldSize, level3Planets, level2Planets, level1Planets }: WorldConfig) {
     const planets: Planet[] = [];
     const minDistance = constants.planetRadius * constants.planetRadius * 4;
     const worldSize2x = worldSize * 2;
@@ -368,26 +409,40 @@ const generateWorld = (game: Game, colours: number, worldSize: number) => {
         }
     };
 
-    for (let i = 0; i < colours; i++) {
-        const angle = Math.PI * 2 * (i / colours);
+    for (let i = 0; i < level3Planets; i++) {
+        const angle = Math.PI * 2 * (i / level3Planets);
         const position = point(Math.cos(angle) * worldSize, Math.sin(angle) * worldSize);
         planets.push(new Planet(game, position, 3));
         tree.insert(planets[planets.length - 1], constants.planetRadius);
     }
-    for (let i = 0; i < (colours * 0.5); i++) {
-    // for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < level2Planets; i++) {
         const position = positionPlanet();
         planets.push(new Planet(game, position, 2));
         tree.insert(planets[planets.length - 1], constants.planetRadius);
     }
-    for (let i = 0; i < colours; i++) {
-    // for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < level1Planets; i++) {
         const position = positionPlanet();
         planets.push(new Planet(game, position, 1));
         tree.insert(planets[planets.length - 1], constants.planetRadius);
     }
-    planets.forEach((p, i) => p.id = 'p' + i);
     return planets;
+}
+
+function setupWorld(game: Game) {
+    game.players = generateAiPlayers(game);
+    game.planets = generateRandomCircleWorld(game, {
+        worldSize: 1000,
+        level3Planets: game.players.length,
+        level2Planets: game.players.length / 2,
+        level1Planets: game.players.length,
+    });
+    game.players.forEach((player, i) => game.planets[i].capture(player));
+
+    // add 100 satelliets to each planet
+    const initialSatellites = 100;
+    for (let i = 0; i < initialSatellites; i++){
+        game.pulse();
+    }
 }
 
 export interface GameEvent {
@@ -405,26 +460,30 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
     events: [],
 });
 
+export interface World {
+    planets: Planet[];
+    players: Player[];
+}
 export class Game {
     private snapshot: GameStateSnapshot;
     private satId = 0;
 
-    paused = false;
-    stats = new Stats();
+    readonly stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly constants = constants;
-    satellites = new ArrayPool(() => new Satellite(`s${this.satId++}`));
-    planets: Planet[] = [];
+    planets: Planet[];
     players: Player[];
-    collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
-    state = {
+    readonly satellites = new ArrayPool(() => new Satellite(`s${this.satId++}`));
+    readonly collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
+    readonly state = {
         log: null as GameStateSnapshot,
         // due to pooling and pulse happening after collisions, this removed array may not be accurate
         // in practice, it doesn't seem to matter
         removed: new GrowOnlyArray<Satellite>(),
         elapsedMS: 0,
-        gameTimeMS: 0,
+        gameTimeMS: constants.gameCountDown * -1000,
         lastPulseTime: 0,
+        running: false,
     };
     private resetGamestate() {
         this.state.elapsedMS = 0;
@@ -432,38 +491,17 @@ export class Game {
         this.state.removed.clear();
     }
 
-    constructor() {
+    constructor(initializeWorld: (game: Game) => void = setupWorld) {
         this.snapshot = createSnapshot(0);
 
-        const aiStats: AIConfig = {
-            minThinkGapMS: 8000,
-            maxThinkGapMS: 12000,
-            minSatellites: 110,
-            healChance: 0.95,
-            attackChance: 0.40,
-            conquerChance: 0.55,
-            transferChance: 0.85,
-            upgradeChance: 0.45,
-        };
-        this.players = [
-            new AIPlayer(this, 'red', 0xD2042D, aiStats),
-            new AIPlayer3(this, 'yellow', 0xFFF44F, aiStats),
-            new AIPlayer(this, 'orange', 0xCC5500, aiStats),
-            new AIPlayer2(this, 'green', 0x7CFC00, aiStats),
-            new AIPlayer(this, 'blue', 0x1111DD, aiStats),
-            // new HumanPlayer(this, 'blue', 0x1111DD),
-            new AIPlayer(this, 'violet', 0x7F00FF, aiStats),
-            new AIPlayer2(this, 'pink', 0xFF10F0, aiStats),
-        ];
+        initializeWorld(this);
+        let pid = 0;
+        this.planets.forEach(p => p.id = 'p' + pid++);
+    }
 
-        this.planets = generateWorld(this, this.players.length, 1000);
-        this.players.forEach((player, i) => this.planets[i].capture(player));
-
-        const initialSatellites = 100;
-        // const initialSatellites = maxSatellites;
-        for (let i = 0; i < initialSatellites; i++){
-            this.pulse();
-        }
+    start(delay = constants.gameCountDown) {
+        this.state.gameTimeMS = delay * -1000;
+        this.state.running = true;
     }
 
     forEachEntity(fn: (ent: Entity) => void) {
@@ -473,7 +511,7 @@ export class Game {
 
     tick(time: number) {
         this.resetGamestate();
-        if (this.paused) {
+        if (!this.state.running) {
             return this.state;
         }
         this.stats.clear();
@@ -482,6 +520,9 @@ export class Game {
         const elapsedMS = time * this.constants.gameSpeed;
         this.state.gameTimeMS += elapsedMS;
         this.state.elapsedMS = elapsedMS;
+        if (this.state.gameTimeMS < 0) {
+            return this.state;
+        }
 
         this.collisionTree.clean();
 
@@ -500,7 +541,7 @@ export class Game {
         this.players.forEach(player => {
             let timer = this.stats.now();
             player.tick(elapsedMS);
-            this.stats.recordPlayerStat(timer, player.id, this.stats.playerTime);
+            this.stats.recordPlayerStat(timer, player.team, this.stats.playerTime);
         });
         this.stats.thinkTime += this.stats.elapsed(thinkTime);
 
@@ -516,7 +557,7 @@ export class Game {
             this.pulse();
 
             const map = this.snapshot.satelliteCounts;
-            this.satellites.forEach(sat => map.set(sat.owner.id, (map.get(sat.owner.id) ?? 0) + 1));
+            this.satellites.forEach(sat => map.set(sat.owner.team, (map.get(sat.owner.team) ?? 0) + 1));
             this.state.log = this.snapshot;
             this.log.push(this.snapshot);
             this.snapshot = createSnapshot(seconds);
@@ -639,7 +680,7 @@ export class Planet implements Entity {
             }
             if (this._upgrade === 100) {
                 this.capture(this._candidateOwner);
-                this.game.recordEvent({ type: 'planet-capture', team: this.owner.id });
+                this.game.recordEvent({ type: 'planet-capture', team: this.owner.team });
             }
         } else if (sat.owner === this.owner) {
             if (this.level < this.maxLevel && this._health === 100) {
@@ -650,7 +691,7 @@ export class Planet implements Entity {
                 sat.destroy();
             }
             if (this._upgrade === 100) {
-                this.game.recordEvent({ type: 'planet-upgrade', team: this.owner.id });
+                this.game.recordEvent({ type: 'planet-upgrade', team: this.owner.team });
                 this.level += 1;
                 this._upgrade = 0;
             }
@@ -658,7 +699,7 @@ export class Planet implements Entity {
             this._health -= 1;
             sat.destroy();
             if (this._health === 0) {
-                this.game.recordEvent({ type: 'planet-lost', team: this.owner.id });
+                this.game.recordEvent({ type: 'planet-lost', team: this.owner.team });
                 this.capture(null);
                 this.level = 0;
             }

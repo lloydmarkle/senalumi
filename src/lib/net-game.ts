@@ -7,30 +7,31 @@ import { Game, Planet, Satellite, Player, type GameEvent, type GameStateSnapshot
 export class PlayerSchema extends Schema {
     constructor(
         public displayName: string,
+        // these don't need to be in the constructor but it's short than writing a separate interface and
+        // initializing them in the constructor
         public sessionId: string = '',
-    ) {
-        super();
-        this.color = '' as any;
-    }
+        public ready = false,
+        public admin = false,
+        public team: Team = '' as any,
+    ) { super() }
 }
 defineTypes(PlayerSchema, {
     displayName: 'string',
-    color: 'string',
+    team: 'string',
+    admin: 'boolean',
+    ready: 'boolean',
 });
-export interface PlayerSchema extends Schema {
-    color: Team;
-}
 
 export class PlanetSchema extends Schema {
     constructor(readonly ent: Planet) { super() }
 
     synchronizeFromEntity() {
-        this.owner = this.ent.owner?.id;
+        this.owner = this.ent.owner?.team;
         this.level = this.ent.level;
         this.maxLevel = this.ent.maxLevel;
         this.health = this.ent.health
         this.upgrade = this.ent.upgrade
-        this.candidateOwner = this.ent.candidateOwner?.id
+        this.candidateOwner = this.ent.candidateOwner?.team
         this.px = this.ent.position.x;
         this.py = this.ent.position.y;
     }
@@ -50,9 +51,9 @@ export class PlanetSchema extends Schema {
             } else if (c.field === 'upgrade') {
                 (planet as any)._upgrade = c.value;
             } else if (c.field === 'candidateOwner') {
-                (planet as any)._candidateOwner = game.players.find(p => p.id === c.value);
+                (planet as any)._candidateOwner = game.players.find(p => p.team === c.value);
             } else if (c.field === 'owner') {
-                (planet as any)._owner = game.players.find(p => p.id === c.value);
+                (planet as any)._owner = game.players.find(p => p.team === c.value);
             }
         });
     }
@@ -83,7 +84,7 @@ export class SatelliteSchema extends Schema {
 
     synchronizeFromEntity() {
         this.id = this.ent.id;
-        this.owner = this.ent.owner.id;
+        this.owner = this.ent.owner.team;
         this.vx = this.ent.velocity.x;
         this.vy = this.ent.velocity.y;
         this.px = this.ent.position.x;
@@ -128,7 +129,7 @@ export interface SatelliteSchema extends Schema {
 export class PlayerMoveMessage extends Schema {
     constructor(player: Player, sats: Satellite[], point: Point) {
         super();
-        this.owner = player.id;
+        this.owner = player.team;
         this.satelliteIds = sats.map(e => e.id);
         this.px = point.x;
         this.py = point.y;
@@ -184,15 +185,20 @@ export interface GameLogSchema extends Schema {
 
 export class GameSchema extends Schema {
     constructor(
+        readonly game: Game,
+        readonly label: string,
         readonly satellites = new MapSchema<SatelliteSchema>(),
         readonly planets = new MapSchema<PlanetSchema>(),
         readonly players = new MapSchema<PlayerSchema>(),
         readonly log = new ArraySchema<GameLogSchema>(),
-        readonly game = new Game(),
+        public running = false,
+        public gameTimeMS = 0,
     ) { super() }
 
     update(elapsedMS: number) {
         const tick = this.game.tick(elapsedMS * this.game.constants.gameSpeed);
+        this.running = tick.running;
+        this.gameTimeMS = tick.gameTimeMS;
         if (tick.log) {
             this.log.push(new GameLogSchema(tick.log));
         }
@@ -215,73 +221,74 @@ defineTypes(GameSchema, {
     satellites: { map: SatelliteSchema },
     players: { map: PlayerSchema },
     log: [GameLogSchema],
+    running: 'boolean',
+    gameTimeMS: 'number',
+    label: 'string',
 });
 
 // client-side code
 import * as Colyseus from 'colyseus.js';
-import { GrowOnlyArray, point, type Point } from './math';
+import { point, type Point } from './math';
 
 //  hack the game into a client-only mode
-export function convertToRemoteGame(game: Game, playerInfo: PlayerSchema) {
+export async function joinRemoteGame(playerInfo: PlayerSchema, gameName: string) {
+    const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
+    // client.getAvailableRooms('auralux');
+    try {
+        const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { label: gameName });
+        room.send('player:info', playerInfo);
+
+        room.onError((code, msg) => {
+            console.error('error', code, msg);
+        });
+        room.onLeave((code) => {
+            console.log('leave', code);
+        });
+        room.onMessage('message', m => console.log(m));
+        return room;
+    } catch(e) {
+        console.log("JOIN ERROR", e);
+    }
+}
+
+export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>) {
     game.satellites.forEach(sat => sat.destroy());
-    game.planets = [];
-    const tickResult = { lastPulseTime: 0, elapsedMS: 0, gameTimeMS: 0, removed: new GrowOnlyArray<Satellite>(), log: null };
+    (game as any).planets = [];
     game.tick = (time) => {
-        tickResult.elapsedMS = time;
+        game.state.elapsedMS = time;
+        game.state.running = room.state.running;
         // interpolate and returna result that is derived from the game log and removed satellies
-        // see synchronizeState() below
+        // see below for state synchornization from colyseus callback
         game.forEachEntity(ent => ent.tick(time));
-        return tickResult;
+        return game.state;
     };
 
-    const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
-    (async () => {
-        // client.getAvailableRooms('auralux');
-        try {
-            const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { label: 'test' });
-            room.send('player:info', playerInfo);
+    const state = room.state;
+    // state.players.onAdd = (player, key) => console.log('player-a', player, key)
+    // state.players.onRemove = (player, key) => console.log('player-r', player, key)
+    // state.players.onChange = (player, key) => console.log('player-c', player, key)
 
-            room.onError((code, msg) => {
-                console.error('error', code, msg);
-            });
-            room.onLeave((code) => {
-                console.log('leave', code);
-            });
-            room.onMessage('message', m => console.log(m));
-            synchronizeState(room);
-        } catch(e) {
-            console.log("JOIN ERROR", e);
-        }
-    })();
+    game.moveSatellites = (player, satellites, point) =>
+        room.send('player:move', new PlayerMoveMessage(player, satellites, point));
 
-    function synchronizeState(room: Colyseus.Room<GameSchema>) {
-        const state = room.state;
-        // state.players.onAdd = (player, key) => console.log('player-a', player, key)
-        // state.players.onRemove = (player, key) => console.log('player-r', player, key)
-        // state.players.onChange = (player, key) => console.log('player-c', player, key)
+    state.planets.onAdd = (ent, key) => {
+        const planet = new Planet(game, point(ent.px, ent.py), 3);
+        ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
+        game.planets.push(planet);
+    };
 
-        game.moveSatellites = (player, satellites, point) =>
-            room.send('player:move', new PlayerMoveMessage(player, satellites, point));
-
-        state.planets.onAdd = (ent, key) => {
-            const planet = new Planet(game, point(ent.px, ent.py), 3);
-            ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
-            game.planets.push(planet);
+    state.satellites.onAdd = (ent, key) => {
+        const owner = game.players.find(e => e.team === ent.owner);
+        const sat = game.satellites.take().init(owner, point(ent.px, ent.py));
+        ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, changes);
+        ent.onRemove = () => {
+            sat.destroy();
+            game.state.removed.add(sat);
         };
+    };
 
-        state.satellites.onAdd = (ent, key) => {
-            const owner = game.players.find(e => e.id === ent.owner);
-            const sat = game.satellites.take().init(owner, point(ent.px, ent.py));
-            ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, changes);
-            ent.onRemove = () => {
-                sat.destroy();
-                tickResult.removed.add(sat);
-            };
-        };
-
-        state.log.onAdd = (log, key) => {
-            game.log.push(log as GameStateSnapshot);
-            tickResult.log = log;
-        };
-    }
+    state.log.onAdd = (log, key) => {
+        game.state.log = log as GameStateSnapshot;
+        game.log.push(game.state.log);
+    };
 }
