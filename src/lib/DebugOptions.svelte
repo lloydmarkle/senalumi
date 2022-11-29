@@ -27,7 +27,7 @@
         </Toggle>
     </div>
     <div class="opiton">
-        <input type="number" name="debug-game-speed" id="debug-game-speed" bind:value={game.constants.gameSpeed}>
+        <input type="number" name="debug-game-speed" id="debug-game-speed" bind:value={game.config.gameSpeed}>
         <label for="debug-game-speed">Game speed</label>
     </div>
     <div class="option">
@@ -36,7 +36,7 @@
         </Toggle>
     </div>
     <div class="opiton">
-        <input type="number" name="debug-game-pulse-rate" id="debug-game-pulse-rate" bind:value={game.constants.pulseRate}>
+        <input type="number" name="debug-game-pulse-rate" id="debug-game-pulse-rate" bind:value={game.config.pulseRate}>
         <label for="debug-game-pulse-rate">Satellites per pulse</label>
     </div>
     <div class="opiton">

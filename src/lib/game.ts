@@ -468,11 +468,11 @@ export class Game {
     private snapshot: GameStateSnapshot;
     private satId = 0;
 
-    readonly stats = new Stats();
-    readonly log: GameStateSnapshot[] = [];
-    readonly constants = constants;
     planets: Planet[];
     players: Player[];
+    readonly stats = new Stats();
+    readonly log: GameStateSnapshot[] = [];
+    readonly config = constants;
     readonly satellites = new ArrayPool(() => new Satellite(`s${this.satId++}`));
     readonly collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly state = {
@@ -517,7 +517,7 @@ export class Game {
         this.stats.clear();
 
         const gameTime = this.stats.now();
-        const elapsedMS = time * this.constants.gameSpeed;
+        const elapsedMS = time * this.config.gameSpeed;
         this.state.gameTimeMS += elapsedMS;
         this.state.elapsedMS = elapsedMS;
         if (this.state.gameTimeMS < 0) {

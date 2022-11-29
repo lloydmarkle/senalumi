@@ -24,6 +24,7 @@ export default defineConfig({
   plugins: [svelte(), colyseusServerPlugin()],
   server: {
     cors: true,
+    host: '0.0.0.0',
     proxy: {
       '/server': {
         target: 'http://localhost:2567',

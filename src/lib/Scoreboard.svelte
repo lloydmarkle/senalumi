@@ -46,7 +46,7 @@
                 <div class="grid-line horizontal"><span>{value} {last ? '' : ''}</span></div>
             </Pancake.Grid>
 
-            <Pancake.Grid vertical count={5} let:value>
+            <Pancake.Grid vertical count={10} let:value>
                 <div class="grid-line vertical"></div>
                 <span class="year-label">{formatMinute(value)}</span>
             </Pancake.Grid>

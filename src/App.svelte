@@ -12,32 +12,31 @@
   demoGame.start(0);
   let demoGfx = new Renderer(demoGame, null);
 
-  let playerInfo = new PlayerSchema(`my-name-${Math.random().toFixed(2)}`, 'local');
+  let playerName = `Guest-${Math.ceil(Math.random() * 100)}`;
   let players: PlayerSchema[] = [];
-  $: ready = players.length && players.every(p => p.ready);
-  $: if (ready && demoGfx) {
-    const player = game.players.find(p => p.team === playerInfo.team);
+
+  let gameState = writable(new GameSchema(null, ''));
+  $: if ($gameState.running && demoGfx) {
+    const currentPlayer = players.find(p => p.sessionId);
+    const player = game.players.find(p => p.team === currentPlayer.team);
     gfx = new Renderer(game, player);
     demoGfx = null;
   }
-
-  let gameState = writable(new GameSchema(null, ''));
 
   let game: Game;
   let gfx: Renderer;
   let room: Room<GameSchema>;
   (async () => {
-    room = await joinRemoteGame(playerInfo, 'test-room');
+    room = await joinRemoteGame(playerName, 'test-room');
     game = new Game();
     convertToRemoteGame(game, room);
 
     const resetPlayers = () =>
       players = Array.from(room.state.players.entries(), ([key, player]) =>
           (key === room.sessionId)
-          // create a copy of the local player to synchronize client state properly
-          ? (playerInfo = new PlayerSchema(player.displayName, 'local', player.ready, player.admin, player.team))
+          // add sessionid so other parts of the ui cam find the local player
+          ? player.assign({ ...player, sessionId: 'local' })
           : player);
-    resetPlayers();
     room.state.players.onAdd = player => {
       player.onChange = resetPlayers;
       player.onRemove = resetPlayers;

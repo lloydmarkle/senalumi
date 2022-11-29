@@ -7,7 +7,7 @@
     export let options: ItemType[];
     export let value: string;
 
-    let selected = options.find(e => e.value === value);
+    $: selected = options.find(e => e.value === value);
     function handleSelect(ev) {
         value = ev.detail.value;
     }
@@ -15,10 +15,10 @@
 
 <div class="themed">
     <Select
+        containerStyles={'width:12rem'}
         placeholder='';
         isClearable={false}
         isSearchable={false}
-        listAutoWidth={false}
         value={selected}
         items={options}
         {Icon}

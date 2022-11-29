@@ -5,8 +5,9 @@
     import Select from './components/Select.svelte';
 
     export let players: PlayerSchema[];
-    export let room: Room<GameSchema>;
     export let gameState: GameSchema;
+    export let room: Room<GameSchema>;
+    $: currentPlayer = players.find(p => p.sessionId);
 
     let playerTeams = [
         { value: '', label: 'Watching' },
@@ -24,6 +25,14 @@
     function updatePlayer(player: PlayerSchema) {
         room.send('player:info', player);
     }
+
+    function syncConfig() {
+        room.send('game:config', gameState.config);
+    }
+    function startGame() {
+        gameState.config.startGame = true;
+        syncConfig();
+    }
 </script>
 
 {#if room}
@@ -35,13 +44,56 @@
     >
     <div class="lobby-screen">
         <h1><span>Game </span>{gameState.label}</h1>
-        <h2>
-            {#if room.state.running}
-            Start in {Math.abs(gameState.gameTimeMS / 1000).toFixed(1)}
-            {:else}
-            Waiting for players
+        {#if currentPlayer.admin}
+            <details class="admin-panel">
+                <summary>Configure Game</summary>
+                <div class="options-grid">
+                    <span>
+                        <label for="config-warmup">Warmup time (seconds):</label>
+                        <input type="number" id="config-warmup" name="config-warmup" bind:value={gameState.config.warmupSeconds} on:change={syncConfig} />
+                    </span>
+                    <span>
+                        <label for="config-speed">Play speed:</label>
+                        <input type="number" id="config-speed" name="config-speed" bind:value={gameState.config.gameSpeed} on:change={syncConfig} />
+                    </span>
+                    <span>
+                        <label for="config-pulseRate">Pulse rate:</label>
+                        <input type="number" id="config-pulseRate" name="config-pulseRate" bind:value={gameState.config.pulseRate} on:change={syncConfig} />
+                    </span>
+                    <span>
+                        <label for="config-maxWorld">World size:</label>
+                        <input type="number" id="config-maxWorld" name="config-maxWorld" bind:value={gameState.config.maxWorld} on:change={syncConfig} />
+                    </span>
+                    <span>
+                        <input type="checkbox" id="config-coop" name="config-coop" bind:checked={gameState.config.allowCoop} on:change={syncConfig} />
+                        <label for="config-coop">Allow multiple players per colour</label>
+                    </span>
+                    <span>
+                        <label for="config-maxPlayers">Max players:</label>
+                        <input type="number" id="config-maxPlayers" name="config-maxPlayers" bind:value={gameState.config.maxPlayers} />
+                    </span>
+                    <!--
+                        TODO: customize colours?
+                    <span>
+                        <label for="config-colours">Colours:</label>
+                        <Select options={playerTeams} bind:value={player.team} on:select={() => updatePlayer(player)} />
+                    </span>
+                    -->
+                </div>
+            </details>
+        {/if}
+        <div class="info-panel">
+            <h2>
+                {#if gameState.running}
+                Start in {Math.abs(gameState.gameTimeMS / 1000).toFixed(1)}
+                {:else}
+                Waiting for players
+                {/if}
+            </h2>
+            {#if currentPlayer.admin && !gameState.running}
+                <button disabled={players.some(p => !p.ready)} on:click={startGame}>Start game</button>
             {/if}
-        </h2>
+        </div>
         <table class="player-table">
             <thead>
                 <tr>
@@ -54,7 +106,7 @@
             <tbody>
             {#each players as player}
                 <tr>
-                {#if player.sessionId}
+                {#if !gameState.running && player.sessionId}
                     <td>{player.admin ? 'Admin' : ''}</td>
                     <td><input type="checkbox" bind:checked={player.ready}  on:change={() => updatePlayer(player)} /></td>
                     <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
@@ -97,7 +149,21 @@
         background: black;
         min-height: 40vh;
         min-width: 60vw;
+        max-width: 80vw;
         padding: 1rem 4rem;
+    }
+
+    .info-panel {
+        padding-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .options-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        row-gap: 0.5rem;
+        column-gap: 0.5rem;
     }
 
     h1 span {

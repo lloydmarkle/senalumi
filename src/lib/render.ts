@@ -41,7 +41,7 @@ class Selector {
             if (this.radius === 0 && this.pointerDownTime() < 200) {
                 const planet = this.game.planets.find(p => distSqr(p.position, this.worldPoint) < 1600);
                 if (planet) {
-                    this.updateGfx(planet.position, this.game.constants.planetRadius * 1.3);
+                    this.updateGfx(planet.position, this.game.config.planetRadius * 1.3);
                 }
             } else {
                 const point = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
@@ -248,7 +248,7 @@ class DebugRender {
             for (const planet of planets) {
                 gfx.drawCircle(planet.position.x, planet.position.y, planet.orbitDistance * 1.6);
                 const sats = player.selection(planet);
-                sats.forEach(sat => gfx.drawCircle(sat.position.x, sat.position.y, this.game.constants.satelliteRadius));
+                sats.forEach(sat => gfx.drawCircle(sat.position.x, sat.position.y, this.game.config.satelliteRadius));
 
                 const itemCount = new PIXI.Text(sats.length);
                 itemCount.x = planet.position.x;
@@ -324,10 +324,10 @@ export class Renderer {
             minScale: 0.2,
         })
         viewport.clamp({
-            top: -game.constants.maxWorld,
-            bottom: game.constants.maxWorld,
-            left: -game.constants.maxWorld,
-            right: game.constants.maxWorld,
+            top: -game.config.maxWorld,
+            bottom: game.config.maxWorld,
+            left: -game.config.maxWorld,
+            right: game.config.maxWorld,
         })
         viewport.moveCenter(0, 0);
         viewport.setZoom(0.4);
@@ -601,7 +601,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
             this.rings.addChild(gfx);
             rings.push(gfx);
 
-            const step = game.constants.planetRadius / 8;
+            const step = game.config.planetRadius / 8;
             const radius = i * step + step;
             gfx.alpha = 0.5;
             gfx.lineStyle(step, 0x777777);

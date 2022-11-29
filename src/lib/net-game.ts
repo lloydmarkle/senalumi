@@ -1,5 +1,5 @@
 import { Schema, MapSchema, defineTypes, ArraySchema, type DataChange } from '@colyseus/schema';
-import { Game, Planet, Satellite, Player, type GameEvent, type GameStateSnapshot, type Team } from './game';
+import { Game, constants, Planet, Satellite, Player, type GameEvent, type GameStateSnapshot, type Team } from './game';
 
 // something weird going on with vite, decorators, and colyseus.
 // Not really sure what but defineTypes() works
@@ -183,10 +183,34 @@ export interface GameLogSchema extends Schema {
     events: GameEventSchema[];
 }
 
+export class GameConfigSchema extends Schema {
+    constructor(
+        public warmupSeconds = constants.gameCountDown,
+        public gameSpeed = constants.gameSpeed,
+        public pulseRate = constants.pulseRate,
+        public maxWorld = constants.maxWorld,
+        public allowCoop = true,
+        public maxPlayers = 16,
+        public colours = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'pink'],
+        public startGame = false, // signal to start game
+    ) { super() }
+}
+defineTypes(GameConfigSchema, {
+    warmupSeconds: 'number',
+    gameSpeed: 'number',
+    pulseRate: 'number',
+    maxWorld: 'number',
+    maxPlayers: 'number',
+    colours: ['string'],
+    allowCoop: 'boolean',
+    startGame: 'boolean',
+});
+
 export class GameSchema extends Schema {
     constructor(
         readonly game: Game,
         readonly label: string,
+        readonly config = new GameConfigSchema(),
         readonly satellites = new MapSchema<SatelliteSchema>(),
         readonly planets = new MapSchema<PlanetSchema>(),
         readonly players = new MapSchema<PlayerSchema>(),
@@ -196,7 +220,7 @@ export class GameSchema extends Schema {
     ) { super() }
 
     update(elapsedMS: number) {
-        const tick = this.game.tick(elapsedMS * this.game.constants.gameSpeed);
+        const tick = this.game.tick(elapsedMS * this.game.config.gameSpeed);
         this.running = tick.running;
         this.gameTimeMS = tick.gameTimeMS;
         if (tick.log) {
@@ -221,6 +245,7 @@ defineTypes(GameSchema, {
     satellites: { map: SatelliteSchema },
     players: { map: PlayerSchema },
     log: [GameLogSchema],
+    config: GameConfigSchema,
     running: 'boolean',
     gameTimeMS: 'number',
     label: 'string',
@@ -231,13 +256,11 @@ import * as Colyseus from 'colyseus.js';
 import { point, type Point } from './math';
 
 //  hack the game into a client-only mode
-export async function joinRemoteGame(playerInfo: PlayerSchema, gameName: string) {
+export async function joinRemoteGame(playerName: string, gameName: string) {
     const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
     // client.getAvailableRooms('auralux');
     try {
-        const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { label: gameName });
-        room.send('player:info', playerInfo);
-
+        const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { playerName, label: gameName });
         room.onError((code, msg) => {
             console.error('error', code, msg);
         });

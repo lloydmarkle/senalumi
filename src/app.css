@@ -50,6 +50,20 @@ h1 {
   right: 0;
 }
 
+input {
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+}
+input[type="text"] {
+  padding: 0.5rem 1rem;
+  width: 100%;
+}
+input[type=checkbox] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
 button {
   border-radius: 8px;
   border: 1px solid transparent;
