@@ -1,6 +1,5 @@
 <script lang="ts">
     import { type GameStateSnapshot, teamColor, type Team } from './game';
-    import { fly } from 'svelte/transition';
     import * as Pancake from '@sveltejs/pancake';
 
     export let data: GameStateSnapshot[];
@@ -25,7 +24,6 @@
     }
 
     let highlights = data.filter(e => e.events.length);
-    let blurBackground = false;
 
     function formatMinute(n: number) {
         let seconds = n % 60;
@@ -34,82 +32,56 @@
     }
 </script>
 
-<div class="container"
-    class:container-visible={blurBackground}
-    on:introend={() => blurBackground = true}
-    on:outroend={() => blurBackground = false}
-    transition:fly={{ y: (window.innerHeight * -0.8) }}
-    >
-    <div class="chart">
-        <Pancake.Chart x1={minx} x2={maxx} y1={miny} y2={maxy}>
-            <Pancake.Grid horizontal count={5} let:value let:last>
-                <div class="grid-line horizontal"><span>{value} {last ? '' : ''}</span></div>
-            </Pancake.Grid>
+<div class="chart">
+    <Pancake.Chart x1={minx} x2={maxx} y1={miny} y2={maxy}>
+        <Pancake.Grid horizontal count={5} let:value let:last>
+            <div class="grid-line horizontal"><span>{value} {last ? '' : ''}</span></div>
+        </Pancake.Grid>
 
-            <Pancake.Grid vertical count={10} let:value>
-                <div class="grid-line vertical"></div>
-                <span class="year-label">{formatMinute(value)}</span>
-            </Pancake.Grid>
+        <Pancake.Grid vertical count={10} let:value>
+            <div class="grid-line vertical"></div>
+            <span class="year-label">{formatMinute(value)}</span>
+        </Pancake.Grid>
 
-            <Pancake.Svg>
-                {#each teamPoints as item}
-                    <Pancake.SvgLine data={item} x={e => e.time} y={e => e.count} let:d>
-                        <path class="avg" {d} stroke={teamColourString(item[0].team)} />
-                    </Pancake.SvgLine>
-                {/each}
-            </Pancake.Svg>
+        <Pancake.Svg>
+            {#each teamPoints as item}
+                <Pancake.SvgLine data={item} x={e => e.time} y={e => e.count} let:d>
+                    <path class="avg" {d} stroke={teamColourString(item[0].team)} />
+                </Pancake.SvgLine>
+            {/each}
+        </Pancake.Svg>
 
-            <!-- <Pancake.Quadtree data={points} x="{d => d.date}" y="{d => d.avg}" let:closest>
-                {#if closest}
-                    <Pancake.Point x={closest.date} y={closest.avg} let:d>
-                        <div class="focus"></div>
-                        <div class="tooltip" style="transform: translate(-{pc(closest.date)}%,0)">
-                            <strong>{closest.avg} ppm</strong>
-                            <span>{format(closest.date)}</span>
+        <!-- <Pancake.Quadtree data={points} x="{d => d.date}" y="{d => d.avg}" let:closest>
+            {#if closest}
+                <Pancake.Point x={closest.date} y={closest.avg} let:d>
+                    <div class="focus"></div>
+                    <div class="tooltip" style="transform: translate(-{pc(closest.date)}%,0)">
+                        <strong>{closest.avg} ppm</strong>
+                        <span>{format(closest.date)}</span>
+                    </div>
+                </Pancake.Point>
+            {/if}
+        </Pancake.Quadtree> -->
+
+        <!-- annotate events -->
+        <div class="annotation-container">
+            {#each highlights as highlight}
+                {#each highlight.events as gameEvent}
+                    <Pancake.Point x={highlight.time} y={maxy}>
+                        <div class="annotation {gameEvent.type}" style="color:{teamColourString(gameEvent.team)}">
+                            {gameEvent.type === 'planet-upgrade' ? '+' :
+                            gameEvent.type === 'planet-capture' ? '▲' :
+                            gameEvent.type === 'planet-lost' ? '▼' :
+                            ''}
                         </div>
                     </Pancake.Point>
-                {/if}
-            </Pancake.Quadtree> -->
-
-            <!-- annotate events -->
-            <div class="annotation-container">
-                {#each highlights as highlight}
-                    {#each highlight.events as gameEvent}
-                        <Pancake.Point x={highlight.time} y={maxy}>
-                            <div class="annotation {gameEvent.type}" style="color:{teamColourString(gameEvent.team)}">
-                                {gameEvent.type === 'planet-upgrade' ? '+' :
-                                gameEvent.type === 'planet-capture' ? '▲' :
-                                gameEvent.type === 'planet-lost' ? '▼' :
-                                ''}
-                            </div>
-                        </Pancake.Point>
-                    {/each}
                 {/each}
-            </div>
-        </Pancake.Chart>
-    </div>
+            {/each}
+        </div>
+    </Pancake.Chart>
 </div>
 
 <style>
-    .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        transition: backdrop-filter 2s;
-        backdrop-filter: blur(5px) opacity(0);
-        background: linear-gradient(to bottom, rgb(200, 200, 200, 0.1), rgb(200, 200, 200, 0.3));
-        position: absolute;
-        top: 0;
-        left: 0;
-        right:0;
-        /* width: 100vw; */
-        height: 100vh;
-    }
-    .container-visible {
-        backdrop-filter: blur(5px) opacity(1);
-    }
-
     .chart {
         width: 80vw;
 		height: 60vh;

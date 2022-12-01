@@ -216,7 +216,7 @@ export class GameSchema extends Schema {
         readonly players = new MapSchema<PlayerSchema>(),
         readonly log = new ArraySchema<GameLogSchema>(),
         public running = false,
-        public gameTimeMS = 0,
+        public gameTimeMS = -1,
     ) { super() }
 
     update(elapsedMS: number) {
@@ -254,6 +254,16 @@ defineTypes(GameSchema, {
 // client-side code
 import * as Colyseus from 'colyseus.js';
 import { point, type Point } from './math';
+
+export async function listGameRooms() {
+    const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
+    try {
+        const rooms = await client.getAvailableRooms('auralux');
+        return rooms;
+    } catch(e) {
+        console.log("ROOM ERROR", e);
+    }
+}
 
 //  hack the game into a client-only mode
 export async function joinRemoteGame(playerName: string, gameName: string) {
@@ -314,4 +324,6 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
         game.state.log = log as GameStateSnapshot;
         game.log.push(game.state.log);
     };
+
+    return game;
 }

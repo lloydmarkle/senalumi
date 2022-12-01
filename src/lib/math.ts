@@ -54,7 +54,7 @@ class Box {
 const quadTreePool: Pool<QuadTree<any>> = createPool(() => new QuadTree<any>());
 const boxPool: Pool<Box> = createPool(() => new Box())
 
-// Much more memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
+// Memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
     private nw: QuadTree<T>;
     private ne: QuadTree<T>;

@@ -12,6 +12,7 @@ export class AuraluxRoom extends Room<GameSchema> {
   onCreate(options: any) {
     const game = new Game();
     this.setState(new GameSchema(game, options.label));
+    this.setMetadata({ label: options.label, state: 'Waiting' });
 
     this.onMessage('player:info', (client, msg: PlayerSchema) => {
       const player = this.state.players.get(client.sessionId);
@@ -63,6 +64,7 @@ export class AuraluxRoom extends Room<GameSchema> {
         game.config.pulseRate = msg.pulseRate;
         game.config.gameCountDown = msg.warmupSeconds;
         game.start();
+        this.metadata.state = 'Started';
       }
     });
 

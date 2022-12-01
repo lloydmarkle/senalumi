@@ -57,7 +57,7 @@ input {
 }
 input[type="text"] {
   padding: 0.5rem 1rem;
-  width: 100%;
+  flex-grow: 2;
 }
 input[type=checkbox] {
   width: 1.5rem;
