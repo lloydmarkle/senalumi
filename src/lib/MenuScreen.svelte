@@ -33,7 +33,35 @@
         player.team = playerTeams[1 + Math.floor(Math.random() * (playerTeams.length - 1))].value as Team;
         players = [player];
     }
+    chooseSinglePlayer();
 
+    let gameMaps = [
+        {
+            name: 'a',
+            fn: (game: Game) => {},
+        },
+        {
+            name: 'b',
+            fn: (game: Game) => {},
+        },
+        {
+            name: 'c',
+            fn: (game: Game) => {},
+        },
+        {
+            name: 'd',
+            fn: (game: Game) => {},
+        },
+        {
+            name: 'e',
+            fn: (game: Game) => {},
+        },
+        {
+            name: 'f',
+            fn: (game: Game) => {},
+        },
+    ];
+    let gameFn: (game: Game) => void;
     function startSinglePlayer() {
         game = new Game();
         game.start(0);
@@ -110,11 +138,17 @@
             <button transition:flyIn={1} class="back-button" on:click={() => gameType = null}>Auralux - Clone</button>
             <h1 transition:flyIn={2}>Single player</h1>
             <div class="vstack">
-                <div transition:flyIn={3} class="hstack">
+                <div transition:flyIn={3}>Map</div>
+                <!-- <span class="hstack map-select">
+                    {#each gameMaps as map}
+                        <button on:click={() => gameFn = map.fn}>{map.name}</button>
+                    {/each}
+                </span> -->
+                <span transition:flyIn={5} class="hstack">
                     <div>Team</div>
                     <Select options={playerTeams} bind:value={players[0].team} on:select={ev => players[0].team = ev.detail.value} />
-                </div>
-                <button transition:flyIn={4} on:click={startSinglePlayer}>Launch</button>
+                </span>
+                <button transition:flyIn={6} on:click={startSinglePlayer}>Launch</button>
             </div>
         </div>
     </div>
@@ -283,6 +317,16 @@
     }
     .large-button {
         padding: 1rem 4rem;
+    }
+
+    .map-select {
+        max-width: 40vw;
+        overflow-x: scroll;
+        gap: 2rem;
+    }
+    .map-select button {
+        aspect-ratio: 1;
+        min-width: 20rem;
     }
 
     .menu {

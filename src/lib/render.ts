@@ -295,7 +295,7 @@ export class Renderer {
             lastApp().destroy(false, { baseTexture: true, children: true, texture: true });
         }
 
-        let app = new PIXI.Application({
+        const app = new PIXI.Application({
             view: document.querySelector("#game") as HTMLCanvasElement,
             autoDensity: true,
             resizeTo: window,
