@@ -1,17 +1,16 @@
 <script lang="ts">
-    import { type GameStateSnapshot, teamColor, type Team } from './game';
+    import { teamColor, type Team, type GameStateSnapshot } from './game';
     import * as Pancake from '@sveltejs/pancake';
 
-    export let data: GameStateSnapshot[];
-
+	export let data: GameStateSnapshot[];
     let teamColourString = (team: Team) => ('#' + teamColor(team).toString(16));
 
-    let teams = Array.from(data[0].satelliteCounts.keys());
+    let teams = data[0] ? Array.from(data[0].satelliteCounts.keys()) : [];
     let teamPoints = teams.map(team =>
         data.map(e => ({ team, time: e.time, count: (e.satelliteCounts.get(team) ?? 0) })));
 
-	let minx = teamPoints[0][0].time;
-	let maxx = teamPoints[0].at(-1).time;
+	let minx = teamPoints[0] ? teamPoints[0][0].time : 0;
+	let maxx = teamPoints[0] ? teamPoints[0].at(-1).time : 0;
 	let miny = +Infinity;
 	let maxy = -Infinity;
 
@@ -150,27 +149,12 @@
 		text-shadow: 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white, 0 0 8px white;
 	}
 
-	.text p {
-		margin: 0;
-		line-height: 1.2;
-		color: #999;
-	}
-
-	.text h2 {
-		margin: 0;
-		font-size: 1.4em;
-	}
-
 	path.avg {
 		opacity: 0.9;
 		stroke-linejoin: round;
 		stroke-linecap: round;
 		stroke-width: 4px;
 		fill: none;
-	}
-
-	path.scatter {
-		stroke-width: 3px;
 	}
 
 	.focus {
@@ -203,9 +187,4 @@
     .planet-lost {
         top: 2em;
     }
-
-	.tooltip strong {
-		font-size: 1.4em;
-		display: block;
-	}
 </style>

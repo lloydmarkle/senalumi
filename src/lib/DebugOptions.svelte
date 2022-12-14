@@ -84,6 +84,7 @@
         left: 0;
         width: 100vw;
     }
+
     p {
         margin: 0;
         padding: 2rem;

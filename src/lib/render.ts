@@ -1,4 +1,5 @@
 import { backInOut, cubicIn, cubicOut } from 'svelte/easing';
+import { writable, type Readable, type Writable } from 'svelte/store';
 import { type Point, distSqr, QuadTree, ArrayPool, Interpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
@@ -37,6 +38,11 @@ class Selector {
     }
 
     pointerup(ev: PIXI.InteractionEvent) {
+        if (!this.game.state.running) {
+            this.clear();
+            this.clearGfx();
+            return;
+        }
         if (this._mode === 'none') {
             if (this.radius === 0 && this.pointerDownTime() < 200) {
                 const planet = this.game.planets.find(p => distSqr(p.position, this.worldPoint) < 1600);
@@ -49,11 +55,7 @@ class Selector {
                 this.clearGfx();
             }
         }
-
-        this._mode = 'none';
-        this.downStart = 0;
-        this.viewport.off('pointermove', this.dragMove);
-        this.viewport.plugins.resume('drag');
+        this.clear();
     }
 
     pointermove(ev: PIXI.InteractionEvent) {
@@ -89,6 +91,13 @@ class Selector {
     private pointerDownTime() {
         const now = new Date().getTime();
         return now - this.downStart;
+    }
+
+    private clear() {
+        this._mode = 'none';
+        this.downStart = 0;
+        this.viewport.off('pointermove', this.dragMove);
+        this.viewport.plugins.resume('drag');
     }
 
     private clearGfx() {
@@ -284,26 +293,28 @@ class DebugRender {
     }
 }
 
-const lastApp = (app?: any): PIXI.Application =>
-    (window as any).lastApp = app ?? (window as any).lastApp;
+export interface ViewTransform {
+    tx: number;
+    ty: number;
+    scale: number;
+}
 
 export class Renderer {
+    private app: PIXI.Application;
+    private viewstate: Writable<ViewTransform> = writable({ tx: 0, ty: 0, scale: 0 });
+    get transform(): Readable<ViewTransform> { return this.viewstate; };
+    readonly viewport: Viewport;
     readonly dbg: DebugRender;
-    constructor(game: Game, player?: Player) {
-        if (lastApp()) {
-            console.log('destroy render')
-            lastApp().destroy(false, { baseTexture: true, children: true, texture: true });
-        }
-
+    constructor(element: HTMLCanvasElement, game: Game, player?: Player) {
         const app = new PIXI.Application({
-            view: document.querySelector("#game") as HTMLCanvasElement,
+            view: element,
             autoDensity: true,
             resizeTo: window,
         });
-        lastApp(app);
+        this.app = app;
 
         // create viewport
-        const viewport = new Viewport({
+        const viewport = this.viewport = new Viewport({
             screenWidth: window.innerWidth,
             screenHeight: window.innerHeight,
             worldWidth: 100000,
@@ -322,13 +333,13 @@ export class Renderer {
         viewport.clampZoom({
             maxScale: 3,
             minScale: 0.2,
-        })
+        });
         viewport.clamp({
             top: -game.config.maxWorld,
             bottom: game.config.maxWorld,
             left: -game.config.maxWorld,
             right: game.config.maxWorld,
-        })
+        });
         viewport.moveCenter(0, 0);
         viewport.setZoom(0.4);
 
@@ -414,13 +425,14 @@ export class Renderer {
         const renderInitializers = {
             'Satellite': (satellite: Satellite) => satellitePool.take().init(satellite, satelliteContainer, isPlayerSatellite),
             'Planet': (planet: Planet) => {
-                const gfx = planetPool.take().init(planet, planetContainer, game);
+                const gfx = planetPool.take().init(planet, planetContainer);
                 ringContainer.addChild(gfx.rings);
                 return gfx;
             },
         };
 
         app.ticker.add((delta) => {
+            this.viewstate.set({ tx: viewport.x, ty: viewport.y, scale: viewport.scaled });
             this.dbg.tick(app);
             const state = game.tick(app.ticker.elapsedMS);
 
@@ -443,6 +455,10 @@ export class Renderer {
 
             renderables.forEach(sfx => sfx.forEach(r => r.update(state.elapsedMS)));
         });
+    }
+
+    destroy() {
+        this.app.destroy(false, { baseTexture: true, children: true, texture: false });
     }
 }
 
@@ -585,6 +601,7 @@ const statusOffset = -Math.PI * 0.5;
 const circlePercent = Math.PI * 2 * 0.01;
 class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     private lastSize: number;
+    private lastMaxLevel: number;
     private sizeInt = new Interpolator();
     rings: PIXI.Container;
     statusBars: PIXI.Graphics;
@@ -592,23 +609,12 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         super(pool, gfx);
     }
 
-    init(planet: Planet, container: PIXI.Container, game: Game) {
+    init(planet: Planet, container: PIXI.Container) {
         this.rings = new PIXI.Container();
-
-        let rings: PIXI.Graphics[] = [];
-        for (let i = 1; i < planet.maxLevel; i++) {
-            const gfx = new PIXI.Graphics();
-            this.rings.addChild(gfx);
-            rings.push(gfx);
-
-            const step = game.config.planetRadius / 8;
-            const radius = i * step + step;
-            gfx.alpha = 0.5;
-            gfx.lineStyle(step, 0x777777);
-            gfx.drawCircle(0, 0, radius * 3);
-        }
+        this.setupRings(planet);
 
         this.lastSize = planet.size;
+        this.lastMaxLevel = planet.maxLevel;
         this.sizeInt.init(0, 0, planet.size);
         this.statusBars = new PIXI.Graphics();
         this.statusBars.alpha = 0.8;
@@ -616,6 +622,22 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         super.baseInit(planet, container);
         container.addChild(this.statusBars);
         return this;
+    }
+
+    private setupRings(planet: Planet) {
+        this.rings.removeChildren();
+        let rings: PIXI.Graphics[] = [];
+        for (let i = 1; i < planet.maxLevel; i++) {
+            const gfx = new PIXI.Graphics();
+            this.rings.addChild(gfx);
+            rings.push(gfx);
+
+            const step = planet.game.config.planetRadius / 8;
+            const radius = i * step + step;
+            gfx.alpha = 0.5;
+            gfx.lineStyle(step, 0x777777);
+            gfx.drawCircle(0, 0, radius * 3);
+        }
     }
 
     update(elapsedMS: number) {
@@ -627,6 +649,11 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
             this.lastSize = planet.size;
         }
         this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
+
+        if (this.lastMaxLevel !== planet.maxLevel) {
+            this.lastMaxLevel = planet.maxLevel;
+            this.setupRings(planet);
+        }
 
         this.gfx.filters = [this.colorMap[planet.owner?.team ?? 'default']];
 

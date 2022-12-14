@@ -2,13 +2,18 @@
     import { fly, fade } from 'svelte/transition';
 
     import type { Room, RoomAvailable } from 'colyseus.js';
-    import { convertToRemoteGame, joinRemoteGame, listGameRooms, PlayerSchema, type GameSchema } from './net-game';
+    import { convertToRemoteGame, joinRemoteGame, listGameRooms, PlayerSchema, GameSchema } from './net-game';
     import Select from './components/Select.svelte';
     import { Game, type Team } from './game';
+    import GameView from './GameView.svelte';
+    import OverlayBackground from './components/OverlayBackground.svelte';
+
+    const demoGame = new Game();
+    demoGame.start(0);
 
     export let game: Game;
     export let players: PlayerSchema[];
-    export let gameState: GameSchema;
+    let gameState = new GameSchema(null, '');
     let room: Room<GameSchema>;
     $: currentPlayer = players.find(p => p.sessionId);
 
@@ -33,7 +38,7 @@
         player.team = playerTeams[1 + Math.floor(Math.random() * (playerTeams.length - 1))].value as Team;
         players = [player];
     }
-    chooseSinglePlayer();
+    // chooseSinglePlayer();
 
     let gameMaps = [
         {
@@ -65,8 +70,6 @@
     function startSinglePlayer() {
         game = new Game();
         game.start(0);
-        gameState.running = true;
-        gameState.gameTimeMS = 1;
     }
 
     let gameRooms: Promise<RoomAvailable<any>[]>;
@@ -121,6 +124,8 @@
     const flyIn = (el: Element, item: number) => fly(el, { y: -10, delay: item * 60 + 50 });
 </script>
 
+<GameView game={demoGame} />
+<OverlayBackground>
 <div class="menu">
     {#if !gameType}
     <div style="text-align: center;" transition:myFly>
@@ -289,6 +294,7 @@
     </div>
     {/if}
 </div>
+</OverlayBackground>
 
 <style>
     .hstack {

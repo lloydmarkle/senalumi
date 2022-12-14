@@ -429,7 +429,6 @@ function generateRandomCircleWorld(game: Game, { worldSize, level3Planets, level
 }
 
 function setupWorld(game: Game) {
-    game.players = generateAiPlayers(game);
     game.planets = generateRandomCircleWorld(game, {
         worldSize: 1000,
         level3Planets: game.players.length,
@@ -443,6 +442,19 @@ function setupWorld(game: Game) {
     for (let i = 0; i < initialSatellites; i++){
         game.pulse();
     }
+}
+
+export interface GameMap {
+    props: {
+        name: string,
+    },
+    planets: {
+        ownerTeam?: Team,
+        initialSatellies: number,
+        level: PlanetLevel,
+        maxLevel: PlanetLevel,
+        position: Point,
+    }[],
 }
 
 export interface GameEvent {
@@ -468,8 +480,8 @@ export class Game {
     private snapshot: GameStateSnapshot;
     private satId = 0;
 
-    planets: Planet[];
-    players: Player[];
+    planets: Planet[] = [];
+    players: Player[] = [];
     readonly stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly config = constants;
@@ -491,15 +503,16 @@ export class Game {
         this.state.removed.clear();
     }
 
-    constructor(initializeWorld: (game: Game) => void = setupWorld) {
-        this.snapshot = createSnapshot(0);
-
-        initializeWorld(this);
-        let pid = 0;
-        this.planets.forEach(p => p.id = 'p' + pid++);
+    constructor(private initializeWorld: (game: Game) => void = setupWorld) {
+        this.players = generateAiPlayers(this);
     }
 
     start(delay = constants.gameCountDown) {
+        this.snapshot = createSnapshot(0);
+        this.initializeWorld(this);
+        let pid = 0;
+        this.planets.forEach(p => p.id = 'p' + pid++);
+
         this.state.gameTimeMS = delay * -1000;
         this.state.running = true;
     }
@@ -618,7 +631,7 @@ export class Game {
         });
     }
 
-    private spawnSatellite(planet: Planet) {
+    spawnSatellite(planet: Planet) {
         if (this.satellites.length >= constants.maxSatellites) {
             return;
         }
@@ -644,6 +657,7 @@ export class Planet implements Entity {
     gfx: Renderable;
     readonly type = 'Planet';
     level: PlanetLevel = 0;
+    initialSatellites = 100;
     get rotation() { return this._rotation; }
     get owner(): Player | undefined { return this._owner; }
     get candidateOwner(): Player | undefined { return this._candidateOwner; }
@@ -706,7 +720,9 @@ export class Planet implements Entity {
         }
     }
 
-    destroy() {}
+    destroy() {
+        this.gfx?.destroy();
+    }
 }
 
 export interface Moveable {

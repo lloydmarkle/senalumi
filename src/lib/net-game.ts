@@ -297,9 +297,6 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
     };
 
     const state = room.state;
-    // state.players.onAdd = (player, key) => console.log('player-a', player, key)
-    // state.players.onRemove = (player, key) => console.log('player-r', player, key)
-    // state.players.onChange = (player, key) => console.log('player-c', player, key)
 
     game.moveSatellites = (player, satellites, point) =>
         room.send('player:move', new PlayerMoveMessage(player, satellites, point));
