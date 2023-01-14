@@ -1,16 +1,18 @@
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
     import { fly } from 'svelte/transition';
-    import Select from './components/Select.svelte';
-    import WorldSpaceOverlay from "./components/WorldSpaceOverlay.svelte";
-    import { Game, type GameMap, Planet, type Team } from "./game";
-    import { distSqr, originPoint, QuadTree } from "./math";
-    import type { Renderer } from "./render";
+    import Select from './Select.svelte';
+    import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
+    import { Game, type GameMap, Planet, type Team } from "../game";
+    import { distSqr, originPoint, QuadTree } from "../math";
+    import type { Renderer } from "../render";
+    import { appContext } from '../../context';
+
+    let context = appContext();
 
     export let game: Game;
     export let gfx: Renderer;
+    setTimeout(() => game.state.running = false, 2000);
 
-    const dispatch = createEventDispatcher();
     let playerTeams = [
         { value: '', label: 'Watching' },
         { value: 'red', label: 'Red' },
@@ -109,7 +111,8 @@
         input.accept = 'application/json';
         input.multiple = false;
         input.onchange = (ev: any) => {
-            dispatch('resetGame', null);
+            // set to null to force App.svelte to mount a new GameView
+            context.game.set(null);
             const file = ev.target.files[0];
             const reader = new FileReader();
             reader.addEventListener('load', (event) => {
@@ -129,8 +132,8 @@
                         return planet;
                     });
                 });
-                // game.start(0)
-                dispatch('resetGame', game);
+                game.start(0);
+                context.game.set(game);
             });
             reader.readAsText(file);
         }
@@ -143,7 +146,6 @@
     on:mouseup={mouseUp}
     on:mousemove={mouseMove} />
 
-
 <div class="world-settings vstack">
     <span>
         <input type="text" name="map-name" id="map-name" bind:value={mapProps.name}>
@@ -154,8 +156,8 @@
     <button on:click={exportMap}>Save</button>
 </div>
 
-<WorldSpaceOverlay {gfx}>
-    {#if debugPlanet}
+{#if debugPlanet}
+    <WorldSpaceOverlay {gfx}>
         <div in:fly={{ y: -10 }} style="--planet-radius:{game.config.planetRadius * 2}px; transform:translate({debugPlanet.position.x}px, {debugPlanet.position.y}px)">
             <div class="planet-box">
                 <div
@@ -193,8 +195,8 @@
                 </span>
             </div>
         </div>
-    {/if}
-</WorldSpaceOverlay>
+    </WorldSpaceOverlay>
+{/if}
 
 <style>
     .world-settings {

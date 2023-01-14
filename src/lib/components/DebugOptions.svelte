@@ -1,8 +1,8 @@
 <script lang="ts">
     import { fly } from 'svelte/transition';
-    import type { Game } from './game';
-    import type { Renderer } from './render';
-    import Toggle from './components/Toggle.svelte';
+    import type { Game } from '../game';
+    import type { Renderer } from '../render';
+    import Toggle from './Toggle.svelte';
 
     export let gfx: Renderer;
     export let game: Game;

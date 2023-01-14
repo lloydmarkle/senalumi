@@ -315,8 +315,6 @@ export class Renderer {
 
         // create viewport
         const viewport = this.viewport = new Viewport({
-            screenWidth: window.innerWidth,
-            screenHeight: window.innerHeight,
             worldWidth: 100000,
             worldHeight: 100000,
             // the interaction module is important for wheel to work properly when renderer.view is placed or scaled

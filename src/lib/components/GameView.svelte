@@ -1,26 +1,23 @@
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
     import { onDestroy, onMount } from "svelte";
-    import OverlayBackground from "./components/OverlayBackground.svelte";
-    import WorldSpaceOverlay from "./components/WorldSpaceOverlay.svelte";
+    import OverlayBackground from "./OverlayBackground.svelte";
+    import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
     import DebugOptions from "./DebugOptions.svelte";
     import Scoreboard from "./Scoreboard.svelte";
-    import LevelEditor from "./LevelEditor.svelte";
-    import type { Game, Player } from "./game";
-    import { Renderer } from "./render";
+    import type { Game, Player } from "../game";
+    import { Renderer } from "../render";
+    import { appContext } from "../../context";
 
     export let game: Game;
     export let player: Player = null;
 
-    const dispatch = createEventDispatcher();
+    let context = appContext();
     let gfx: Renderer;
     let el: HTMLCanvasElement;
     onMount(() => {
-        console.log('onMount')
         gfx = new Renderer(el, game, player);
     });
     onDestroy(() => {
-        console.log('onDestroy')
         gfx.destroy();
     });
 
@@ -57,18 +54,17 @@
 
 {#if showScore}
     <OverlayBackground>
-        <Scoreboard data={game?.log || []} />
-        <div>
-            <button on:click={() => dispatch('resetGame', null)}>Quit</button>
+        <div class="vstack">
+            <Scoreboard data={game?.log || []} />
+            <div class="hstack">
+                <button on:click={() => context.game.set(null)}>Quit</button>
+            </div>
         </div>
     </OverlayBackground>
 {/if}
 
-{#if showDebugOptions}
-    {#if game}
-        <DebugOptions {game} {gfx} />
-    {/if}
-    <LevelEditor {game} {gfx} on:resetGame />
+{#if showDebugOptions && game}
+    <DebugOptions {game} {gfx} />
 {/if}
 
 <slot {gfx} />

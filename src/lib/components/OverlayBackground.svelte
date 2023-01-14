@@ -2,15 +2,14 @@
     import { fly } from 'svelte/transition';
 
     export let blurStrength = 4;
-
-    let blurBackground = false;
+    export let blurBackground = false;
 </script>
 
 <div style="--blur-strength:{blurStrength}px"
     class="container"
     class:container-visible={blurBackground}
     on:introend={() => blurBackground = true }
-    on:outroend={() => blurBackground = false }
+    on:outrostart={() => blurBackground = false }
     transition:fly={{ y: (window.innerHeight * -0.8) }}
 >
     <slot />
