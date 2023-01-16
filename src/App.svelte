@@ -14,6 +14,7 @@
     import { PlayerSchema } from './lib/net-game';
     import { delayFly } from './lib/menu/transitions';
     import { key, type Context, type MenuScreens } from './context';
+    import BackArrow from './lib/menu/BackArrow.svelte';
 
     let game = writable<Game>(undefined);
     let localPlayer = writable(new PlayerSchema(`Guest-${Math.ceil(Math.random() * 100)}`));
@@ -46,17 +47,17 @@
             </MenuPage>
         {:else if $menu === 'local'}
             <MenuPage>
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}>Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow /> Auralux - Clone</button>
                 <LocalGameScreen />
             </MenuPage>
         {:else if $menu === 'remote'}
             <MenuPage>
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}>Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow />Auralux - Clone</button>
                 <RemoteGameScreen />
             </MenuPage>
         {:else if $menu === 'lobby'}
             <MenuPage>
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}>Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow /> Auralux - Clone</button>
                 <RemoteLobbyScreen />
             </MenuPage>
         {/if}
@@ -73,15 +74,5 @@
         font-size: 2rem;
         border: none;
         background: none;
-    }
-
-    .map-select {
-        max-width: 40vw;
-        overflow-x: scroll;
-        gap: 2rem;
-    }
-    .map-select button {
-        aspect-ratio: 1;
-        min-width: 20rem;
     }
 </style>

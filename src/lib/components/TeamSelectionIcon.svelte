@@ -7,6 +7,7 @@
     const csize = size / 3;
 </script>
 <svg
+  aria-hidden="true"
   width="{size}px"
   height="{size}px"
   viewBox="0 0 {size} {size}"

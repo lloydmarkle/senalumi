@@ -1,17 +1,37 @@
 <script lang="ts">
     import type { Room } from 'colyseus.js';
     import Select from '../components/Select.svelte';
-    import { Game } from '../game';
+    import { Game, type GameMap, type Team } from '../game';
     import { convertToRemoteGame, joinRemoteGame, GameSchema, type PlayerSchema } from '../net-game';
-    import { delayFly } from './transitions';
+    import { delayFly, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
+    import { playerTeams } from '../data';
+    import MapChooser from './MapChooser.svelte';
+    import BackArrow from './BackArrow.svelte';
+    import MapTile from './MapTile.svelte';
 
     const { localPlayer, roomName, menu, game } = appContext();
 
+    let map: GameMap;
     let room: Room<GameSchema>;
     let players: PlayerSchema[] = [];
-    let gameState = new GameSchema(null, '');
+    let gameState = new GameSchema('');
+
+    $: if ($localPlayer.admin && map) {
+        gameState.config.gameMap = JSON.stringify(map);
+        syncConfig();
+    }
+    let availableTeams = playerTeams;
+    $: if (map) {
+        availableTeams = [
+            playerTeams[0],
+            ...map.planets
+                .map(e => e.ownerTeam)
+                .filter(e => e)
+                .map(e => playerTeams.find(f => f.value === e)),
+        ];
+    }
 
     async function joinRoom() {
         room = await joinRemoteGame($localPlayer.displayName, $roomName);
@@ -29,25 +49,21 @@
             player.onRemove = resetPlayers;
             resetPlayers();
         };
+
         room.state.onChange = () => {
             gameState = room.state;
             if (gameState.running && !$game) {
                 $game = convertToRemoteGame(new Game(), room);
             }
         }
+        room.state.config.onChange = () => {
+            const newMap: GameMap = JSON.parse(gameState.config.gameMap);
+            if (newMap.props.img !== map?.props.img) {
+                map = newMap;
+            }
+        }
     }
     joinRoom();
-
-    let playerTeams = [
-        { value: '', label: 'Watching' },
-        { value: 'red', label: 'Red' },
-        { value: 'orange', label: 'Orange' },
-        { value: 'yellow', label: 'Yellow' },
-        { value: 'green', label: 'Green' },
-        { value: 'blue', label: 'Blue' },
-        { value: 'violet', label: 'Violet' },
-        { value: 'pink', label: 'Pink' },
-    ];
 
     const teamName = team =>
         (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
@@ -71,9 +87,11 @@
     }
 </script>
 
-<button transition:delayFly class="back-button" on:click={leaveRoom}>Multiplayer</button>
+<button transition:delayFly class="back-button" on:click={leaveRoom}><BackArrow /> Multiplayer</button>
 <h1 transition:delayFly><span>Game </span>{gameState.label}</h1>
+<div transition:delayFly>Map</div>
 {#if $localPlayer.admin}
+    <MapChooser bind:selectedMap={map} />
     <details transition:delayFly class="admin-panel">
         <summary>Configure Game</summary>
         <div class="options-grid">
@@ -110,6 +128,14 @@
             -->
         </div>
     </details>
+{:else if map}
+    <span transition:delayFly class="map-tile-container">
+        {#key map}
+            <span transition:fly class="map-tile">
+                <MapTile {map} />
+            </span>
+        {/key}
+    </span>
 {/if}
 <div transition:delayFly class="hstack">
     <h2>
@@ -120,7 +146,7 @@
         {/if}
     </h2>
     {#if $localPlayer.admin && !gameState.running}
-        <button disabled={players.some(p => !p.ready)} on:click={startGame}>Start game</button>
+        <button disabled={players.some(p => !p.ready) || !map} on:click={startGame}>Start game</button>
     {/if}
 </div>
 <table transition:delayFly class="player-table">
@@ -139,7 +165,7 @@
             <td>{player.admin ? 'Admin' : ''}</td>
             <td><input type="checkbox" bind:checked={player.ready}  on:change={() => updatePlayer(player)} /></td>
             <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
-            <td><Select options={playerTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+            <td><Select options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
         {:else}
             <td>{player.admin ? 'Admin' : ''}</td>
             <td>{player.ready ? 'Ready' : 'Not ready'}</td>
@@ -157,6 +183,14 @@
 </table>
 
 <style>
+    .map-tile-container {
+        display:grid;
+    }
+    .map-tile{
+        grid-row: 1;
+        grid-column: 1;
+    }
+
     h1 span {
         opacity: 0.8;
     }

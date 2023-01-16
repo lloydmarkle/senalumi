@@ -305,7 +305,8 @@ export class Renderer {
     get transform(): Readable<ViewTransform> { return this.viewstate; };
     readonly viewport: Viewport;
     readonly dbg: DebugRender;
-    constructor(element: HTMLCanvasElement, game: Game, player?: Player) {
+
+    constructor(element: HTMLCanvasElement, private game: Game, player?: Player) {
         const app = new PIXI.Application({
             view: element,
             autoDensity: true,
@@ -457,6 +458,42 @@ export class Renderer {
 
     destroy() {
         this.app.destroy(false, { baseTexture: true, children: true, texture: false });
+    }
+
+    base64Screenshot() {
+        const size = 128;
+        const margin = 200;
+        const halfMargin = margin * 0.5;
+
+        let bounds = PIXI.Rectangle.EMPTY;
+        for (const p of this.game.planets) {
+            const radius = p.orbitDistance;
+            const diameter = radius * 2;
+            bounds = bounds.enlarge(new PIXI.Rectangle(p.position.x - radius, p.position.y - radius, diameter, diameter));
+        }
+
+        const corner = this.viewport.corner.clone();
+        const scale = this.viewport.scale.clone();
+        this.viewport.plugins.pause('clamp');
+        this.viewport.plugins.pause('clamp-zoom');
+        try {
+            const scale = Math.min(size / (bounds.width + margin), size / (bounds.height + margin));
+            this.viewport.scale.set(scale);
+            this.viewport.moveCorner(bounds.x - halfMargin, bounds.y - halfMargin);
+
+            // https://www.html5gamedevs.com/topic/23467-how-to-get-the-screen-buffer-as-an-image/
+            let renderTexture = PIXI.RenderTexture.create({ width: size, height: size });
+            this.app.renderer.render(this.viewport, { renderTexture });
+
+            const img = this.app.renderer.plugins.extract.base64(renderTexture);
+            window.open(img)
+            return img;
+        }finally {
+            this.viewport.plugins.resume('clamp');
+            this.viewport.plugins.resume('clamp-zoom');
+            this.viewport.scale = scale;
+            this.viewport.corner = corner;
+        }
     }
 }
 

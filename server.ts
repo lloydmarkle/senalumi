@@ -1,17 +1,19 @@
 import * as http from 'http';
 import { Room, Client } from 'colyseus';
 import { GameConfigSchema, GameSchema, PlayerMoveMessage, PlayerSchema } from './src/lib/net-game';
-import { Game, Team } from './src/lib/game';
+import { Game, GameMap, initializerFromMap, Team } from './src/lib/game';
 
 // enable performance.now() on both app and server
 import { performance } from 'perf_hooks';
+import { playerTeams } from './src/lib/data';
 (global as any).performance = performance;
 
 export class AuraluxRoom extends Room<GameSchema> {
+  private game: Game;
   // When room is initialized
   onCreate(options: any) {
-    const game = new Game();
-    this.setState(new GameSchema(game, options.label));
+    this.game = new Game();
+    this.setState(new GameSchema(options.label));
     this.setMetadata({ label: options.label, state: 'Waiting' });
 
     this.onMessage('player:info', (client, msg: PlayerSchema) => {
@@ -29,15 +31,15 @@ export class AuraluxRoom extends Room<GameSchema> {
 
     this.onMessage('player:move', (client, msg: PlayerMoveMessage) => {
       const playerInfo = this.state.players.get(client.sessionId);
-      const player = game.players.find(e => e.team === playerInfo.team);
+      const player = this.game.players.find(e => e.team === playerInfo.team);
       const sats = [];
       const ids = new Set(msg.satelliteIds);
-      game.forEachEntity(ent => {
+      this.game.forEachEntity(ent => {
         if (ids.has(ent.id)) {
           sats.push(ent);
         }
       });
-      game.moveSatellites(player, sats, { x: msg.px, y: msg.py });
+      this.game.moveSatellites(player, sats, { x: msg.px, y: msg.py });
     });
 
     this.onMessage('game:config', (client, msg: GameConfigSchema) => {
@@ -48,29 +50,45 @@ export class AuraluxRoom extends Room<GameSchema> {
       }
 
       // only set some properties after game start
-      if (game.state.running) {
-        game.config.gameSpeed = msg.gameSpeed;
-        game.config.pulseRate = msg.pulseRate;
+      if (this.game.state.running) {
+        this.game.config.gameSpeed = msg.gameSpeed;
+        this.game.config.pulseRate = msg.pulseRate;
         return;
       }
 
       // set everything
       this.maxClients = msg.maxPlayers;
       this.state.config.assign(msg);
-      // TODO: choose map or world layout??
+
+      const map: GameMap = JSON.parse(msg.gameMap);
+      this.game = new Game(initializerFromMap(map));
+      // set available colors based on map
+      this.state.config.colours = [
+        playerTeams[0].value,
+        ...map.planets
+            .map(e => e.ownerTeam)
+            .filter(e => e)
+      ];
+      // re-assign players who now have an invalid colour
+      this.state.players.forEach(player => {
+        if (this.state.config.colours.indexOf(player.team) === -1) {
+          player.team = this.findTeam();
+        }
+      });
+
       // if everyone is ready, start the game!
       if (msg.startGame) {
-        game.config.gameSpeed = msg.gameSpeed;
-        game.config.pulseRate = msg.pulseRate;
-        game.config.gameCountDown = msg.warmupSeconds;
-        game.start();
+        this.game.config.gameSpeed = msg.gameSpeed;
+        this.game.config.pulseRate = msg.pulseRate;
+        this.game.config.gameCountDown = msg.warmupSeconds;
+        this.game.start();
         this.metadata.state = 'Started';
       }
     });
 
     const tickRate = 1000 / 60;
     this.setPatchRate(100);
-    this.setSimulationInterval(deltaTime => this.state.update(deltaTime), tickRate);
+    this.setSimulationInterval(deltaTime => this.state.update(this.game, deltaTime), tickRate);
   }
 
   // Authorize client based on provided options before WebSocket handshake is complete
@@ -92,10 +110,10 @@ export class AuraluxRoom extends Room<GameSchema> {
   }
 
   private findTeam(): Team {
-    const options = Array.from(this.state.game.players, p => p.team);
+    const options = this.state.config.colours.slice(1) as Team[];
     const usedTeams = Array.from(this.state.players.values(), p => p.team);
     for (const option of options) {
-      if (usedTeams.indexOf(option) !== -1) {
+      if (usedTeams.indexOf(option) === -1) {
         return option;
       }
     }
@@ -106,7 +124,10 @@ export class AuraluxRoom extends Room<GameSchema> {
   // When a client leaves the room
   onLeave(client: Client, consented: boolean) {
     this.state.players.delete(client.sessionId);
-    // TODO: reset admin
+    // reset admin
+    if (this.state.players.size) {
+      this.state.players.values().next().value.admin = true;
+    }
   }
 
   // Cleanup callback, called after there are no more clients in the room. (see `autoDispose`)

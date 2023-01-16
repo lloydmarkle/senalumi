@@ -2,30 +2,29 @@
     import { fly } from 'svelte/transition';
     import Select from './Select.svelte';
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
-    import { Game, type GameMap, Planet, type Team } from "../game";
+    import { Game, type GameMap, Planet, type Team, initializerFromMap } from "../game";
     import { distSqr, originPoint, QuadTree } from "../math";
     import type { Renderer } from "../render";
     import { appContext } from '../../context';
+    import { playerTeams } from '../data';
 
     let context = appContext();
 
     export let game: Game;
     export let gfx: Renderer;
-    setTimeout(() => game.state.running = false, 2000);
 
-    let playerTeams = [
-        { value: '', label: 'Watching' },
-        { value: 'red', label: 'Red' },
-        { value: 'orange', label: 'Orange' },
-        { value: 'yellow', label: 'Yellow' },
-        { value: 'green', label: 'Green' },
-        { value: 'blue', label: 'Blue' },
-        { value: 'violet', label: 'Violet' },
-        { value: 'pink', label: 'Pink' },
-    ];
+    function disableAi(game: Game) {
+        game.players.forEach(player => {
+            if ('enabled' in player) {
+                player.enabled = false;
+            }
+        })
+    }
+    disableAi(game);
 
     let mapProps: GameMap['props'] = {
         name: 'Map name',
+        img: '',
     };
     let drag = { planet: null };
     $: document.body.classList.toggle('dragging', drag.planet);
@@ -79,6 +78,7 @@
     }
 
     function exportMap() {
+        mapProps.img = gfx.base64Screenshot();
         // https://stackoverflow.com/questions/13405129
         const map: GameMap = {
             props: mapProps,
@@ -95,7 +95,7 @@
         document.body.appendChild(a);
         a.href = url;
         a.download = mapProps.name.replace(' ', '-');
-        a.click();
+        // a.click();
         setTimeout(() => {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
@@ -118,20 +118,8 @@
             reader.addEventListener('load', (event) => {
                 const map: GameMap = JSON.parse(event.target.result.toString());
                 mapProps = map.props;
-                game = new Game(g => {
-                    g.planets = map.planets.map(p => {
-                        const planet = new Planet(g, p.position, p.maxLevel);
-                        if (p.ownerTeam) {
-                            const player = g.players.find(player => player.team === p.ownerTeam);
-                            planet.capture(player);
-                            planet.level = p.level;
-                            for (let i = 0; i < p.initialSatellies; i++) {
-                                g.spawnSatellite(planet);
-                            }
-                        }
-                        return planet;
-                    });
-                });
+                game = new Game(initializerFromMap(map));
+                disableAi(game);
                 game.start(0);
                 context.game.set(game);
             });

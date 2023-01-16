@@ -1,8 +1,9 @@
 import { Schema, MapSchema, defineTypes, ArraySchema, type DataChange } from '@colyseus/schema';
 import { Game, constants, Planet, Satellite, Player, type GameEvent, type GameStateSnapshot, type Team } from './game';
+import { gameMaps, playerTeams } from './data';
 
 // something weird going on with vite, decorators, and colyseus.
-// Not really sure what but defineTypes() works
+// Not really sure what but using defineTypes() instead of decorators works
 // https://github.com/colyseus/colyseus/issues/510
 export class PlayerSchema extends Schema {
     constructor(
@@ -191,8 +192,9 @@ export class GameConfigSchema extends Schema {
         public maxWorld = constants.maxWorld,
         public allowCoop = true,
         public maxPlayers = 16,
-        public colours = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'pink'],
+        public colours = playerTeams.map(p => p.value),
         public startGame = false, // signal to start game
+        public gameMap = JSON.stringify(gameMaps[0]),
     ) { super() }
 }
 defineTypes(GameConfigSchema, {
@@ -204,11 +206,11 @@ defineTypes(GameConfigSchema, {
     colours: ['string'],
     allowCoop: 'boolean',
     startGame: 'boolean',
+    gameMap: 'string',
 });
 
 export class GameSchema extends Schema {
     constructor(
-        readonly game: Game,
         readonly label: string,
         readonly config = new GameConfigSchema(),
         readonly satellites = new MapSchema<SatelliteSchema>(),
@@ -219,14 +221,14 @@ export class GameSchema extends Schema {
         public gameTimeMS = -1,
     ) { super() }
 
-    update(elapsedMS: number) {
-        const tick = this.game.tick(elapsedMS * this.game.config.gameSpeed);
+    update(game: Game, elapsedMS: number) {
+        const tick = game.tick(elapsedMS * game.config.gameSpeed);
         this.running = tick.running;
         this.gameTimeMS = tick.gameTimeMS;
         if (tick.log) {
             this.log.push(new GameLogSchema(tick.log));
         }
-        this.game.forEachEntity(ent => {
+        game.forEachEntity(ent => {
             if (ent.type === 'Planet') {
                 const e = this.planets.get(ent.id) ?? new PlanetSchema(ent as Planet);
                 e.synchronizeFromEntity();

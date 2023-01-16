@@ -135,8 +135,10 @@ interface AIConfig {
     conquerChance: number;
 }
 abstract class AIPlayerBase extends Player {
-    ready = true;
     private nextThink: number;
+
+    enabled = true;
+
     constructor(game: Game, team: Team, readonly config: AIConfig) {
         super(game, team);
     }
@@ -144,6 +146,9 @@ abstract class AIPlayerBase extends Player {
     abstract tick(ms: number): void;
 
     protected shouldTick(ms: number) {
+        if (!this.enabled) {
+            return false;
+        }
         this.nextThink -= ms;
         if (this.nextThink > 0) {
             return false;
@@ -447,6 +452,7 @@ function setupWorld(game: Game) {
 export interface GameMap {
     props: {
         name: string,
+        img: string,
     },
     planets: {
         ownerTeam?: Team,
@@ -472,10 +478,25 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
     events: [],
 });
 
-export interface World {
-    planets: Planet[];
-    players: Player[];
+export type WorldInitializer = (game: Game) => void;
+
+export function initializerFromMap(map: GameMap) {
+    return game => {
+        game.planets = map.planets.map(p => {
+            const planet = new Planet(game, p.position, p.maxLevel);
+            if (p.ownerTeam) {
+                const player = game.players.find(player => player.team === p.ownerTeam);
+                planet.capture(player);
+                planet.level = p.level;
+                for (let i = 0; i < p.initialSatellies; i++) {
+                    game.spawnSatellite(planet);
+                }
+            }
+            return planet;
+        });
+    };
 }
+
 export class Game {
     private snapshot: GameStateSnapshot;
     private satId = 0;
@@ -503,7 +524,7 @@ export class Game {
         this.state.removed.clear();
     }
 
-    constructor(private initializeWorld: (game: Game) => void = setupWorld) {
+    constructor(private initializeWorld: WorldInitializer = setupWorld) {
         this.players = generateAiPlayers(this);
     }
 
