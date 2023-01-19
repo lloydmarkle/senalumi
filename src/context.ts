@@ -1,7 +1,8 @@
+import type { Room } from "colyseus.js";
 import { getContext } from "svelte";
-import type { Writable } from "svelte/store";
+import { writable } from "svelte/store";
 import type { Game } from "./lib/game";
-import type { PlayerSchema } from "./lib/net-game";
+import { GameSchema, PlayerSchema } from "./lib/net-game";
 
 // I don't love this whole "context" thing and would much rather pass around
 // state as needed but between menus and level editor and remote games it was just
@@ -9,12 +10,14 @@ import type { PlayerSchema } from "./lib/net-game";
 // now, use a global "context" variable.
 
 export type MenuScreens = 'start' | 'local' | 'remote' | 'lobby' | 'edit'
-export interface Context {
-    menu: Writable<MenuScreens>,
-    roomName: Writable<string>,
-    localPlayer: Writable<PlayerSchema>,
-    game: Writable<Game>,
-};
+export class Context {
+    constructor(
+        readonly game = writable<Game>(undefined),
+        readonly localPlayer = writable(new PlayerSchema(`Guest-${Math.ceil(Math.random() * 100)}`)),
+        readonly menu = writable<MenuScreens>('start'),
+        readonly room = writable<Room<GameSchema>>(),
+    ) {}
+}
 
 export const key = Symbol();
 export const appContext = (): Context => getContext(key)

@@ -3,6 +3,7 @@
 
     export let blurStrength = 4;
     export let blurBackground = false;
+    // make sure to use "local" for transition: https://github.com/sveltejs/svelte/issues/7119
 </script>
 
 <div style="--blur-strength:{blurStrength}px"
@@ -10,7 +11,7 @@
     class:container-visible={blurBackground}
     on:introend={() => blurBackground = true }
     on:outrostart={() => blurBackground = false }
-    transition:fly={{ y: (window.innerHeight * -0.8) }}
+    transition:fly|local={{ y: (window.innerHeight * -0.8) }}
 >
     <slot />
 </div>

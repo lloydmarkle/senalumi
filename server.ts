@@ -81,6 +81,7 @@ export class AuraluxRoom extends Room<GameSchema> {
         this.game.config.gameSpeed = msg.gameSpeed;
         this.game.config.pulseRate = msg.pulseRate;
         this.game.config.gameCountDown = msg.warmupSeconds;
+        this.disableAiPlayers();
         this.game.start();
         this.metadata.state = 'Started';
       }
@@ -89,6 +90,15 @@ export class AuraluxRoom extends Room<GameSchema> {
     const tickRate = 1000 / 60;
     this.setPatchRate(100);
     this.setSimulationInterval(deltaTime => this.state.update(this.game, deltaTime), tickRate);
+  }
+
+  private disableAiPlayers() {
+    const usedTeams = new Set(Array.from(this.state.players.values()).map(p => p.team));
+    for (const player of this.game.players) {
+      if (usedTeams.has(player.team) && 'enabled' in player) {
+        player.enabled = false;
+      }
+    }
   }
 
   // Authorize client based on provided options before WebSocket handshake is complete

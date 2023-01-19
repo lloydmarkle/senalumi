@@ -1,8 +1,7 @@
 <script lang="ts">
-    import type { Room } from 'colyseus.js';
     import Select from '../components/Select.svelte';
-    import { Game, type GameMap, type Team } from '../game';
-    import { convertToRemoteGame, joinRemoteGame, GameSchema, type PlayerSchema } from '../net-game';
+    import { Game, type GameMap } from '../game';
+    import { convertToRemoteGame, GameSchema, type PlayerSchema } from '../net-game';
     import { delayFly, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
@@ -11,17 +10,11 @@
     import BackArrow from './BackArrow.svelte';
     import MapTile from './MapTile.svelte';
 
-    const { localPlayer, roomName, menu, game } = appContext();
+    const { localPlayer, room, menu, game } = appContext();
 
     let map: GameMap;
-    let room: Room<GameSchema>;
     let players: PlayerSchema[] = [];
-    let gameState = new GameSchema('');
 
-    $: if ($localPlayer.admin && map) {
-        gameState.config.gameMap = JSON.stringify(map);
-        syncConfig();
-    }
     let availableTeams = playerTeams;
     $: if (map) {
         availableTeams = [
@@ -32,58 +25,55 @@
                 .map(e => playerTeams.find(f => f.value === e)),
         ];
     }
+    $: if ($localPlayer.admin && map) {
+        gameState.config.gameMap = JSON.stringify(map);
+        syncConfig();
+    }
 
-    async function joinRoom() {
-        room = await joinRemoteGame($localPlayer.displayName, $roomName);
+    let gameState = $room.state;
+    // load game properties from room
+    const resetPlayers = () =>
+        (players = Array.from(gameState.players.entries(), ([key, player]) =>
+            // capture local player in app context
+            key === $room.sessionId
+                ? ($localPlayer = player)
+                : player
+        ));
+    gameState.players.onAdd = player => {
+        player.onChange = resetPlayers;
+        player.onRemove = resetPlayers;
+        resetPlayers();
+    };
 
-        // load game properties from room
-        const resetPlayers = () =>
-            (players = Array.from(room.state.players.entries(), ([key, player]) =>
-                // capture local player in app context
-                key === room.sessionId
-                    ? ($localPlayer = player)
-                    : player
-            ));
-        room.state.players.onAdd = player => {
-            player.onChange = resetPlayers;
-            player.onRemove = resetPlayers;
-            resetPlayers();
-        };
-
-        room.state.onChange = () => {
-            gameState = room.state;
-            if (gameState.running && !$game) {
-                $game = convertToRemoteGame(new Game(), room);
-            }
-        }
-        room.state.config.onChange = () => {
-            const newMap: GameMap = JSON.parse(gameState.config.gameMap);
-            if (newMap.props.img !== map?.props.img) {
-                map = newMap;
-            }
+    gameState.onChange = () => {
+        if (gameState.running && !$game) {
+            $game = convertToRemoteGame(new Game(), $room);
         }
     }
-    joinRoom();
+    gameState.config.onChange = () => {
+        const newMap: GameMap = JSON.parse(gameState.config.gameMap);
+        if (newMap.props.img !== map?.props.img) {
+            map = newMap;
+        }
+    }
 
-    const teamName = team =>
-        (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
+    const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 
     function leaveRoom() {
-        room.leave();
+        $room.leave();
         $menu = 'remote';
     }
 
     function updatePlayer(player: PlayerSchema) {
-        room.send('player:info', player);
+        $room.send('player:info', player);
     }
 
     function syncConfig() {
-        room.send('game:config', gameState.config);
+        $room.send('game:config', gameState.config);
     }
     function startGame() {
         gameState.config.startGame = true;
         syncConfig();
-        $menu = 'start';
     }
 </script>
 
@@ -137,18 +127,6 @@
         {/key}
     </span>
 {/if}
-<div transition:delayFly class="hstack">
-    <h2>
-        {#if gameState.running}
-        Start in {Math.abs(gameState.gameTimeMS / 1000).toFixed(1)}
-        {:else}
-        Waiting for players
-        {/if}
-    </h2>
-    {#if $localPlayer.admin && !gameState.running}
-        <button disabled={players.some(p => !p.ready) || !map} on:click={startGame}>Start game</button>
-    {/if}
-</div>
 <table transition:delayFly class="player-table">
     <thead>
         <tr>
@@ -181,6 +159,18 @@
     {/each}
     </tbody>
 </table>
+<div transition:delayFly class="hstack">
+    <h2>
+        {#if gameState.running}
+        Start in {Math.abs(gameState.gameTimeMS / 1000).toFixed(1)}
+        {:else}
+        Waiting for players
+        {/if}
+    </h2>
+    {#if $localPlayer.admin && !gameState.running}
+        <button disabled={players.some(p => !p.ready) || !map} on:click={startGame}>Start game</button>
+    {/if}
+</div>
 
 <style>
     .map-tile-container {

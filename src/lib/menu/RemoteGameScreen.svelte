@@ -1,16 +1,16 @@
 <script lang="ts">
-    import { listGameRooms } from '../net-game';
+    import { joinRemoteGame, listGameRooms } from '../net-game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
 
-    let { localPlayer, roomName, menu } = appContext();
-    function joinRoom(gameRoomName: string) {
-        $roomName = gameRoomName;
+    let { room, localPlayer, menu } = appContext();
+    async function joinRoom(roomName: string) {
+        $room = await joinRemoteGame($localPlayer.displayName, roomName);
         $menu = 'lobby';
     }
 
     let gameRooms = listGameRooms();
-    let gameRoomName: string = undefined;
+    let roomName: string = undefined;
     function generateRoomName() {
         return 'correct-horse-battery-staple';
     }
@@ -23,14 +23,14 @@
         <input type="text" id="player-name" name="player-name" bind:value={$localPlayer.displayName} />
     </span>
     <span class="grid-box" transition:delayFly>
-        {#if gameRoomName !== undefined}
+        {#if roomName !== undefined}
             <span class="hstack" transition:delayFly={1}>
                 <label for="room-name">Game name</label>
-                <input type="text" id="room-name" name="room-name" bind:value={gameRoomName} />
-                <button transition:delayFly on:click={() => joinRoom(gameRoomName)}>Create and join</button>
+                <input type="text" id="room-name" name="room-name" bind:value={roomName} />
+                <button transition:delayFly on:click={() => joinRoom(roomName)}>Create and join</button>
             </span>
         {:else}
-            <button on:click={() => gameRoomName = generateRoomName()}>Create game</button>
+            <button on:click={() => roomName = generateRoomName()}>Create game</button>
         {/if}
     </span>
     {#await gameRooms}

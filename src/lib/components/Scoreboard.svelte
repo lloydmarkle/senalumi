@@ -2,27 +2,34 @@
     import { teamColor, type Team, type GameStateSnapshot } from '../game';
     import * as Pancake from '@sveltejs/pancake';
 
-	export let data: GameStateSnapshot[];
+	export let gameState: GameStateSnapshot[];
     let teamColourString = (team: Team) => ('#' + teamColor(team).toString(16));
 
-    let teams = data[0] ? Array.from(data[0].satelliteCounts.keys()) : [];
-    let teamPoints = teams.map(team =>
-        data.map(e => ({ team, time: e.time, count: (e.satelliteCounts.get(team) ?? 0) })));
+    let teamPoints: any;
+    let minx: number;
+    let maxx: number;
+    let miny: number;
+    let maxy: number;
+    $: {
+        let teams = gameState[0] ? Array.from(gameState[0].satelliteCounts.keys()) : [];
+        teamPoints = teams.map(team =>
+            gameState.map(e => ({ team, time: e.time, count: (e.satelliteCounts.get(team) ?? 0) })));
 
-	let minx = teamPoints[0] ? teamPoints[0][0].time : 0;
-	let maxx = teamPoints[0] ? teamPoints[0].at(-1).time : 0;
-	let miny = +Infinity;
-	let maxy = -Infinity;
+        minx = teamPoints[0] ? teamPoints[0][0].time : 0;
+        maxx = teamPoints[0] ? teamPoints[0].at(-1).time : 0;
+        miny = +Infinity;
+        maxy = -Infinity;
 
-    for (let j = 0; j < teams.length; j++) {
-        for (let i = 0; i < teamPoints[j].length; i += 1) {
-            const point = teamPoints[j][i];
-            miny = Math.min(point.count, miny);
-            maxy = Math.max(point.count, maxy);
+        for (let j = 0; j < teams.length; j++) {
+            for (let i = 0; i < teamPoints[j].length; i += 1) {
+                const point = teamPoints[j][i];
+                miny = Math.min(point.count, miny);
+                maxy = Math.max(point.count, maxy);
+            }
         }
     }
 
-    let highlights = data.filter(e => e.events.length);
+    let highlights = gameState.filter(e => e.events.length);
 
     function formatMinute(n: number) {
         let seconds = n % 60;
@@ -31,66 +38,54 @@
     }
 </script>
 
-<div class="chart">
-    <Pancake.Chart x1={minx} x2={maxx} y1={miny} y2={maxy}>
-        <Pancake.Grid horizontal count={5} let:value let:last>
-            <div class="grid-line horizontal"><span>{value} {last ? '' : ''}</span></div>
-        </Pancake.Grid>
+<Pancake.Chart x1={minx} x2={maxx} y1={miny} y2={maxy}>
+    <Pancake.Grid horizontal count={5} let:value let:last>
+        <div class="grid-line horizontal"><span>{value} {last ? '' : ''}</span></div>
+    </Pancake.Grid>
 
-        <Pancake.Grid vertical count={10} let:value>
-            <div class="grid-line vertical"></div>
-            <span class="year-label">{formatMinute(value)}</span>
-        </Pancake.Grid>
+    <Pancake.Grid vertical count={10} let:value>
+        <div class="grid-line vertical"></div>
+        <span class="year-label">{formatMinute(value)}</span>
+    </Pancake.Grid>
 
-        <Pancake.Svg>
-            {#each teamPoints as item}
-                <Pancake.SvgLine data={item} x={e => e.time} y={e => e.count} let:d>
-                    <path class="avg" {d} stroke={teamColourString(item[0].team)} />
-                </Pancake.SvgLine>
-            {/each}
-        </Pancake.Svg>
+    <Pancake.Svg>
+        {#each teamPoints as item}
+            <Pancake.SvgLine data={item} x={e => e.time} y={e => e.count} let:d>
+                <path class="avg" {d} stroke={teamColourString(item[0].team)} />
+            </Pancake.SvgLine>
+        {/each}
+    </Pancake.Svg>
 
-        <!-- <Pancake.Quadtree data={points} x="{d => d.date}" y="{d => d.avg}" let:closest>
-            {#if closest}
-                <Pancake.Point x={closest.date} y={closest.avg} let:d>
-                    <div class="focus"></div>
-                    <div class="tooltip" style="transform: translate(-{pc(closest.date)}%,0)">
-                        <strong>{closest.avg} ppm</strong>
-                        <span>{format(closest.date)}</span>
+    <!-- <Pancake.Quadtree data={points} x="{d => d.date}" y="{d => d.avg}" let:closest>
+        {#if closest}
+            <Pancake.Point x={closest.date} y={closest.avg} let:d>
+                <div class="focus"></div>
+                <div class="tooltip" style="transform: translate(-{pc(closest.date)}%,0)">
+                    <strong>{closest.avg} ppm</strong>
+                    <span>{format(closest.date)}</span>
+                </div>
+            </Pancake.Point>
+        {/if}
+    </Pancake.Quadtree> -->
+
+    <!-- annotate events -->
+    <div class="annotation-container">
+        {#each highlights as highlight}
+            {#each highlight.events as gameEvent}
+                <Pancake.Point x={highlight.time} y={maxy}>
+                    <div class="annotation {gameEvent.type}" style="color:{teamColourString(gameEvent.team)}">
+                        {gameEvent.type === 'planet-upgrade' ? '+' :
+                        gameEvent.type === 'planet-capture' ? '▲' :
+                        gameEvent.type === 'planet-lost' ? '▼' :
+                        ''}
                     </div>
                 </Pancake.Point>
-            {/if}
-        </Pancake.Quadtree> -->
-
-        <!-- annotate events -->
-        <div class="annotation-container">
-            {#each highlights as highlight}
-                {#each highlight.events as gameEvent}
-                    <Pancake.Point x={highlight.time} y={maxy}>
-                        <div class="annotation {gameEvent.type}" style="color:{teamColourString(gameEvent.team)}">
-                            {gameEvent.type === 'planet-upgrade' ? '+' :
-                            gameEvent.type === 'planet-capture' ? '▲' :
-                            gameEvent.type === 'planet-lost' ? '▼' :
-                            ''}
-                        </div>
-                    </Pancake.Point>
-                {/each}
             {/each}
-        </div>
-    </Pancake.Chart>
-</div>
+        {/each}
+    </div>
+</Pancake.Chart>
 
 <style>
-    .chart {
-        width: 80vw;
-		height: 60vh;
-		padding: 3em;
-		max-width: 80em;
-		max-height: 60em;
-		margin: 0 auto;
-        background: rgba(0,0,0, 0.5);
-	}
-
 	.grid-line {
 		position: relative;
 		display: block;

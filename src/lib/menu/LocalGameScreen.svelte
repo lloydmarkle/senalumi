@@ -6,7 +6,7 @@
     import MapChooser from './MapChooser.svelte';
     import { playerTeams } from '../data';
 
-    let { menu, game, localPlayer } = appContext();
+    let { game, localPlayer } = appContext();
     let map: GameMap = null;
     let availableTeams = playerTeams;
     $: if (map) {
@@ -21,7 +21,6 @@
     $: $localPlayer.team = availableTeams[1 + Math.floor(Math.random() * (availableTeams.length - 1))].value as Team;
 
     function startGame() {
-        $menu = 'start';
         $game = new Game(initializerFromMap(map));
         const player = $game.players.find(p => p.team === $localPlayer.team);
         if (player && 'enabled' in player) {

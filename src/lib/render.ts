@@ -22,7 +22,7 @@ class Selector {
     private _mode: 'none' | 'select' | 'drag' = 'none';
     get mode() { return this._mode; }
 
-    constructor(readonly viewport: Viewport, readonly game: Game) {
+    constructor(readonly viewport: Viewport, readonly game: Game, readonly player: Player) {
         this.gfx = new PIXI.Graphics();
         this.dragMove = (ev: PIXI.InteractionEvent) => this.pointermove(ev);
     }
@@ -112,7 +112,7 @@ class Selector {
         this.radiusSqr = this.radius * this.radius;
 
         this.gfx.clear();
-        this.gfx.lineStyle(2, 0xff0000);
+        this.gfx.lineStyle(5, this.player.color);
         this.gfx.drawCircle(this.mid.x, this.mid.y, this.radius);
     }
 }
@@ -360,7 +360,7 @@ export class Renderer {
         viewport.addChild(planetContainer);
         let satelliteContainer = new PIXI.ParticleContainer(constants.maxSatellites, { rotation: true, tint: true });
         viewport.addChild(satelliteContainer);
-        let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { scale: true, rotation: true, alpha: true });
+        let flashContainer = new PIXI.ParticleContainer(constants.maxSatellites, { tint: true, scale: true, rotation: true, alpha: true });
         viewport.addChild(flashContainer);
 
         const satelliteTracesPool: ArrayPool<TraceSFX> = new ArrayPool(() => new TraceSFX(satelliteTracesPool, createGraphics(satelliteTexture)));
@@ -369,7 +369,7 @@ export class Renderer {
         let interactionContainer = new PIXI.Container();
         viewport.addChild(interactionContainer);
         const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
-        let selector = new Selector(viewport, game);
+        let selector = new Selector(viewport, game, player);
         interactionContainer.addChild(selector.gfx);
         if (player) {
             viewport.on('pointerdown', ev => selector.pointerdown(ev));
@@ -585,10 +585,11 @@ class PulseSFX extends SFX<PIXI.Graphics> {
 class FlashSFX extends SFX<PIXI.Sprite> {
     init(sat: Satellite, container: PIXI.Container) {
         const time = Math.random() * 300 + 200;
-        this.alphaInt.init(time, 1, 0.2);
-        this.sizeInt.init(time, 1, 4);
+        this.alphaInt.init(time, 1, 0.1, backInOut);
+        this.sizeInt.init(time, 1, 6, cubicOut);
         this.xPoint.init(time, sat.position.x, sat.position.x + time * sat.velocity.x);
         this.yPoint.init(time, sat.position.y, sat.position.y + time * sat.velocity.y);
+        this.gfx.tint = sat.owner.satelliteColor;
         this.rotationInt.init(time, 0, Math.random() * Math.PI * 3);
         return super.sfxInit(container);
     }
