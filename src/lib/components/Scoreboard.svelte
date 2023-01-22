@@ -17,7 +17,7 @@
 
         minx = teamPoints[0] ? teamPoints[0][0].time : 0;
         maxx = teamPoints[0] ? teamPoints[0].at(-1).time : 0;
-        miny = +Infinity;
+        miny = 0;
         maxy = -Infinity;
 
         for (let j = 0; j < teams.length; j++) {

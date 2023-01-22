@@ -13,6 +13,7 @@ export const constants = {
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
     maxSatellites: 15000,
+    impactStrength: -0.5,
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
     satelliteRadius: 8,
@@ -580,7 +581,7 @@ export class Game {
         this.stats.thinkTime += this.stats.elapsed(thinkTime);
 
         const collideTime = this.stats.now();
-        this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius));
+        this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius, elapsedMS));
         this.stats.collideTime += this.stats.elapsed(collideTime);
 
         // pulse is the last thing we do because planets could have changed ownership during collision detection
@@ -602,7 +603,7 @@ export class Game {
         return this.state;
     }
 
-    private collide(satellites: Satellite[], radius: number) {
+    private collide(satellites: Satellite[], radius: number, ms: number) {
         const r2 = radius * radius;
         for (let i = 0; i < satellites.length; i++) {
             for (let j = i; j < satellites.length; j++) {
@@ -617,11 +618,28 @@ export class Game {
                 this.stats.recordCollide(distTimer, 'distance');
 
                 if (dist < r2) {
+                    this.applyImpact(sat1, sat2, radius * 10, ms);
                     sat1.destroy();
                     sat2.destroy();
                 }
             }
         }
+    }
+
+    private applyImpact(sat1: Satellite, sat2: Satellite, radius: number, ms: number) {
+        const dot = sat1.velocity.x * sat2.velocity.x + sat1.velocity.y * sat2.velocity.y;
+        const len1 = Math.sqrt(sat1.velocity.x * sat1.velocity.x + sat1.velocity.y * sat1.velocity.y);
+        const len2 = Math.sqrt(sat2.velocity.x * sat2.velocity.x + sat2.velocity.y * sat2.velocity.y);
+        const angle = Math.acos(dot / (len1 * len2));
+        const impact = constants.impactStrength * angle / Math.PI;
+        if (isNaN(impact)) {
+            return;
+        }
+
+        this.collisionTree.query(sat1.position, radius,
+            sat => applyImpact(sat, sat1.position, impact, ms));
+        this.collisionTree.query(sat2.position, radius,
+            sat => applyImpact(sat, sat2.position, impact, ms));
     }
 
     moveSatellites(player: Player, satellites: Satellite[], point: Point) {
@@ -790,13 +808,27 @@ class PlanetMover implements Mover {
     }
 }
 
+function applyImpact(moveable: Moveable, point: Point, impact: number, rate: number) {
+    let dirX = point.x - moveable.position.x;
+    let dirY = point.y - moveable.position.y;
+    const invLen = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX *= invLen;
+    dirY *= invLen;
+
+    let vx = dirX * impact * invLen * constants.maxSatelliteVelocity;
+    let vy = dirY * impact * invLen * constants.maxSatelliteVelocity;
+
+    moveable.velocity.x += (vx + constants.forceDamping * moveable.velocity.x) * rate;
+    moveable.velocity.y += (vy + constants.forceDamping * moveable.velocity.y) * rate;
+}
+
 function applySpringForce(moveable: Moveable, x: number, y: number, rate: number) {
     // https://medium.com/unity3danimation/simple-physics-based-motion-68a006d42a18
     let dirX = x - moveable.position.x;
     let dirY = y - moveable.position.y;
-    const normalizer = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
-    dirX *= normalizer;
-    dirY *= normalizer;
+    const invLen = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
+    dirX *= invLen;
+    dirY *= invLen;
 
     let vx = dirX * constants.maxSatelliteVelocity;
     let vy = dirY * constants.maxSatelliteVelocity;
@@ -818,7 +850,7 @@ class OrbitMover implements Mover {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
         applySpringForce(moveable,
             Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
-            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.x,
+            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.y,
             elapsedMS * this.moveNoise);
         return this;
     }

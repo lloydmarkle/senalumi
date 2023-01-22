@@ -587,8 +587,8 @@ class FlashSFX extends SFX<PIXI.Sprite> {
         const time = Math.random() * 300 + 200;
         this.alphaInt.init(time, 1, 0.1, backInOut);
         this.sizeInt.init(time, 1, 6, cubicOut);
-        this.xPoint.init(time, sat.position.x, sat.position.x + time * sat.velocity.x);
-        this.yPoint.init(time, sat.position.y, sat.position.y + time * sat.velocity.y);
+        this.xPoint.init(time, sat.position.x, sat.position.x);
+        this.yPoint.init(time, sat.position.y, sat.position.y);
         this.gfx.tint = sat.owner.satelliteColor;
         this.rotationInt.init(time, 0, Math.random() * Math.PI * 3);
         return super.sfxInit(container);
