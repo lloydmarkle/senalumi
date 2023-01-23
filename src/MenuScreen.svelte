@@ -19,7 +19,7 @@
     demoGame.start(0);
 </script>
 
-<GameView game={demoGame} />
+<!-- <GameView game={demoGame} /> -->
 <OverlayBackground blurBackground>
     <div class="menu">
         {#if $menu === 'start'}
