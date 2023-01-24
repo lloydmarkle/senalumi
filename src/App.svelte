@@ -25,8 +25,8 @@
             g.spawnSatellite(g.planets[1]);
         }
     }
-    // $game = new Game();
-    // $game.start(0);
+    $game = new Game();
+    $game.start(0);
 </script>
 
 {#if $game}

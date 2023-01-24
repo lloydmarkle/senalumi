@@ -69,7 +69,7 @@ class Stats {
 }
 
 export interface Renderable {
-    update(elapsedMS: number): void;
+    tick(elapsedMS: number): void;
     destroy(): void;
 }
 

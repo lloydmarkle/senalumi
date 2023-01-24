@@ -3,6 +3,7 @@
     import type { Game } from '../game';
     import type { Renderer } from '../render';
     import Toggle from './Toggle.svelte';
+    import * as Tone from 'tone';
 
     export let gfx: Renderer;
     export let game: Game;
@@ -12,6 +13,64 @@
         while (game.satellites.length < end) {
             game.pulse();
         }
+    }
+
+    const volume = new Tone.Volume(0).toDestination();
+    const tgain = new Tone.Gain(.05).connect(volume);
+    const osc = new Tone.Oscillator().connect(tgain);
+    let ctx: AudioContext;
+    let gain: GainNode;
+    let active = false;
+    let started = false;
+    async function audioTest() {
+        if (!started) {
+            const AudioContext = (window.AudioContext ?? (window as any).webkitAudioContext);
+            ctx = new AudioContext();
+            gain = ctx.createGain();
+            gain.gain.setValueAtTime(0.5, 0);
+            gain.connect(ctx.destination);
+
+            await Tone.start()
+            started = true;
+        }
+        if (active) {
+            return;
+        }
+        active = true;
+        // osc.frequency.value = "C4";
+        // osc.frequency.rampTo("G4", "+.5");
+        // osc.volume.value = 0;
+        // osc.volume.exponentialRampTo(-100, ".5")
+        // osc.start().stop("+.5");
+
+        let sleep = (seconds: number) => new Promise(resolve => setTimeout(resolve, seconds * 1000));
+        for (let i = 0; i < 4; i++) {
+            osc.frequency.value = "A4";
+            osc.volume.value = 0;
+            osc.volume.linearRampTo(-500, 1)
+            osc.detune.value = i * 100;
+            osc.start().stop("+1");
+
+            // const now = ctx.currentTime;
+            // const duration = 1// * this.speed // seconds
+            // const step = ctx.createOscillator();
+            // // Frequency in Hz. This corresponds to a C note.
+            // step.frequency.setValueAtTime(0 + Tone.intervalToFrequencyRatio(i) * 440, now);
+            // // step.frequency.exponentialRampToValueAtTime(0.001, now + duration);
+
+            // const ogain = ctx.createGain();
+            // ogain.gain.setValueAtTime(1, 0);
+            // ogain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+            // step.connect(ogain);
+            // ogain.connect(gain);
+
+            // step.start();
+            // step.stop(now + duration);
+            await sleep(1);
+        }
+        // osc.volume.value = -200;
+        // osc.stop();
+        active = false;
     }
 </script>
 
@@ -65,6 +124,14 @@
     </div>
 </div>
 
+
+<div class="debug-background audio-test" in:fly={{ x: 200, delay: 400 }} out:fly={{ x: 200 }}>
+    <p>Audio</p>
+    <div class="opiton">
+        <button on:click={audioTest}>Audio test</button>
+    </div>
+</div>
+
 <style>
     .option {
         padding: 0.5em 0em;
@@ -100,6 +167,19 @@
         position: absolute;
         top: 0rem;
         left: 0;
+        height: 100vh;
+        width: 20vw;
+    }
+
+    .audio-test {
+        display: flex;
+        flex-direction: column;
+        overflow: scroll;
+
+        padding: 0 1rem;
+        position: absolute;
+        top: 0rem;
+        right: 0vw;
         height: 100vh;
         width: 20vw;
     }
