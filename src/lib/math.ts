@@ -285,3 +285,25 @@ export class Interpolator {
         return this.value;
     }
 }
+
+export class LoopInterpolator {
+    private interp: Interpolator;
+    private initial: number;
+    get finished() { return this.interp.value === this.initial; }
+    get value() { return this.interp.value; }
+
+    init(interpolator: Interpolator) {
+        this.interp = interpolator;
+        this.initial = (this.interp as any).initial;
+        return this;
+    }
+
+    tick(elapsedMS: number) {
+        if (this.interp.finished) {
+            // reverse
+            const p = this.interp as any;
+            this.interp.init(p.lifetime, p.target, p.initial, p.timeFn);
+        }
+        return this.interp.tick(elapsedMS);
+    }
+}

@@ -90,9 +90,10 @@ export class SatelliteSchema extends Schema {
         this.vy = this.ent.velocity.y;
         this.px = this.ent.position.x;
         this.py = this.ent.position.y;
+        this.destroyedBy = this.ent.destroyedBy;
     }
 
-    static synchronizeTo(sat: Satellite, changes: DataChange<any>[]) {
+    static synchronizeTo(sat: Satellite, game: Game, changes: DataChange<any>[]) {
         changes.forEach(c => {
             if (c.field === 'px') {
                 sat.position.x = c.value;
@@ -104,6 +105,9 @@ export class SatelliteSchema extends Schema {
                 sat.velocity.y = c.value;
             } else if (c.field === 'id') {
                 (sat as any).id = c.value;
+            } else if (c.field === 'destroyedBy') {
+                sat.destroy();
+                sat.destroyedBy = c.value;
             }
         });
     }
@@ -115,10 +119,12 @@ defineTypes(SatelliteSchema, {
     vy: 'number',
     px: 'number',
     py: 'number',
+    destroyedBy: 'string',
 });
 export interface SatelliteSchema extends Schema {
     id: string;
     owner: string;
+    destroyedBy: string;
     // velocity
     vx: number;
     vy: number;
@@ -210,6 +216,8 @@ defineTypes(GameConfigSchema, {
 });
 
 export class GameSchema extends Schema {
+    private toRemove = new Map<string, number>();
+
     constructor(
         readonly label: string,
         readonly config = new GameConfigSchema(),
@@ -228,6 +236,20 @@ export class GameSchema extends Schema {
         if (tick.log) {
             this.log.push(new GameLogSchema(tick.log));
         }
+
+        // TODO: there has got to be a better way to do this. How else can we track the reason an entity was removed?
+        for (const [entityId, removeTime] of this.toRemove) {
+            if (this.gameTimeMS > removeTime) {
+                this.toRemove.delete(entityId);
+                this.satellites.delete(entityId);
+            }
+        }
+        tick.removed.forEach(sat => {
+            // keep dead entites around a few seconds after delete to make sure they sync final state to client
+            this.toRemove.set(sat.id, this.gameTimeMS + 5000);
+            this.satellites.get(sat.id)?.synchronizeFromEntity();
+        });
+
         game.forEachEntity(ent => {
             if (ent.type === 'Planet') {
                 const e = this.planets.get(ent.id) ?? new PlanetSchema(ent as Planet);
@@ -239,12 +261,12 @@ export class GameSchema extends Schema {
                 this.satellites.set(ent.id, e);
             }
         });
-        tick.removed.forEach(sat => this.satellites.delete(sat.id));
     }
 }
 defineTypes(GameSchema, {
     planets: { map: PlanetSchema },
     satellites: { map: SatelliteSchema },
+    removeReason: { map: 'string' },
     players: { map: PlayerSchema },
     log: [GameLogSchema],
     config: GameConfigSchema,
@@ -303,23 +325,20 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
     game.moveSatellites = (player, satellites, point) =>
         room.send('player:move', new PlayerMoveMessage(player, satellites, point));
 
-    state.planets.onAdd = (ent, key) => {
+    state.planets.onAdd = (ent) => {
         const planet = new Planet(game, point(ent.px, ent.py), 3);
         ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
         game.planets.push(planet);
     };
 
-    state.satellites.onAdd = (ent, key) => {
+    state.satellites.onAdd = (ent) => {
         const owner = game.players.find(e => e.team === ent.owner);
-        const sat = game.satellites.take().init(owner, point(ent.px, ent.py));
-        ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, changes);
-        ent.onRemove = () => {
-            sat.destroy();
-            game.state.removed.add(sat);
-        };
+        const sat = game.satellites.take().init(ent.id, owner, point(ent.px, ent.py));
+        ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, game, changes);
+        ent.onRemove = () => sat.destroy();
     };
 
-    state.log.onAdd = (log, key) => {
+    state.log.onAdd = (log) => {
         game.state.log = log as GameStateSnapshot;
         game.log.push(game.state.log);
     };

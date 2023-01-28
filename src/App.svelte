@@ -6,27 +6,27 @@
 
     let context = new Context();
     setContext(key, context);
-
     const { game } = context;
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
     const { localPlayer } = context;
     let p2Game = g => {
-        $localPlayer.team = g.players[0].team;
         g.planets = [
             new Planet(g, point(-200, 0), 3),
             new Planet(g, point(200, 0), 3),
         ];
         g.planets[0].capture(g.players[0])
         g.planets[1].capture(g.players[1])
-        for (let i = 0; i < 1000; i++) {
+        for (let i = 0; i < 2000; i++) {
             g.spawnSatellite(g.planets[0]);
             g.spawnSatellite(g.planets[1]);
         }
     }
-    $game = new Game();
-    $game.start(0);
+    // $game = new Game();
+    // $game = new Game(p2Game);
+    // $localPlayer.team = $game.players[0].team;
+    // $game.start(0);
 </script>
 
 {#if $game}

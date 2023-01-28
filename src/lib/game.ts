@@ -13,7 +13,7 @@ export const constants = {
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
     maxSatellites: 15000,
-    impactStrength: -0.5,
+    impactStrength: -2.2,
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
     satelliteRadius: 8,
@@ -507,7 +507,7 @@ export class Game {
     readonly stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly config = constants;
-    readonly satellites = new ArrayPool(() => new Satellite(`s${this.satId++}`));
+    readonly satellites = new ArrayPool(() => new Satellite());
     readonly collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly state = {
         log: null as GameStateSnapshot,
@@ -619,8 +619,8 @@ export class Game {
 
                 if (dist < r2) {
                     this.applyImpact(sat1, sat2, radius * 10, ms);
-                    sat1.destroy();
-                    sat2.destroy();
+                    sat1.destroy(sat2);
+                    sat2.destroy(sat1);
                 }
             }
         }
@@ -674,7 +674,7 @@ export class Game {
         if (this.satellites.length >= constants.maxSatellites) {
             return;
         }
-        const sat = this.satellites.take().init(planet.owner, planet.position);
+        const sat = this.satellites.take().init(`s${this.satId++}`, planet.owner, planet.position);
         sat.mover = new OrbitMover(planet);
     }
 
@@ -719,14 +719,14 @@ export class Planet implements Entity {
         this._rotation += this.rotationSpeed * elapsedMS;
     }
 
-    hit(sat: Satellite) {
+    absorb(sat: Satellite) {
         // kind of a mess...
         if (!this.owner) {
             if (!this._candidateOwner) {
                 this._candidateOwner = sat.owner;
             }
             this._upgrade += (this._candidateOwner === sat.owner) ? 1 : -1;
-            sat.destroy();
+            sat.destroy(this);
 
             if (this._upgrade === 0) {
                 this._candidateOwner = null;
@@ -738,10 +738,10 @@ export class Planet implements Entity {
         } else if (sat.owner === this.owner) {
             if (this.level < this.maxLevel && this._health === 100) {
                 this._upgrade += 1;
-                sat.destroy();
+                sat.destroy(this);
             } else if (this._health < 100) {
                 this._health += 1;
-                sat.destroy();
+                sat.destroy(this);
             }
             if (this._upgrade === 100) {
                 this.game.recordEvent({ type: 'planet-upgrade', team: this.owner.team });
@@ -750,7 +750,7 @@ export class Planet implements Entity {
             }
         } else {
             this._health -= 1;
-            sat.destroy();
+            sat.destroy(this);
             if (this._health === 0) {
                 this.game.recordEvent({ type: 'planet-lost', team: this.owner.team });
                 this.capture(null);
@@ -792,7 +792,7 @@ class PlanetMover implements Mover {
     evaluate(moveable: Moveable, elapsedMS: number) {
         const mission = this.computeMission();
         if (mission === this.mission) {
-            this.planet.hit(this.satellite);
+            this.planet.absorb(this.satellite);
         }
         return this;
     }
@@ -818,8 +818,8 @@ function applyImpact(moveable: Moveable, point: Point, impact: number, rate: num
     let vx = dirX * impact * invLen * constants.maxSatelliteVelocity;
     let vy = dirY * impact * invLen * constants.maxSatelliteVelocity;
 
-    moveable.velocity.x += (vx + constants.forceDamping * moveable.velocity.x) * rate;
-    moveable.velocity.y += (vy + constants.forceDamping * moveable.velocity.y) * rate;
+    moveable.velocity.x += (vx + constants.forceDamping * moveable.velocity.x);
+    moveable.velocity.y += (vy + constants.forceDamping * moveable.velocity.y);
 }
 
 function applySpringForce(moveable: Moveable, x: number, y: number, rate: number) {
@@ -887,6 +887,7 @@ class MoveSequence implements Mover {
 }
 
 export class Satellite implements Entity, Moveable {
+    id: string;
     mover: Mover;
     rotation = 0;
     gfx: Renderable;
@@ -895,12 +896,15 @@ export class Satellite implements Entity, Moveable {
     readonly position: Point = originPoint();
     readonly velocity: Point = originPoint();
     readonly owner: Player;
+    destroyedBy: string;
 
     private rotationSpeed: number;
 
-    constructor(readonly id: string) {}
+    constructor() {}
 
-    init(owner: Player, position: Point) {
+    init(id: string, owner: Player, position: Point) {
+        this.id = id;
+        this.destroyedBy = null;
         this.gfx = null;
         this.rotation = Math.random() * Math.PI * 2;
         this.rotationSpeed = Math.random() * Math.PI * 2 / 2000;
@@ -927,7 +931,7 @@ export class Satellite implements Entity, Moveable {
         this.position.y += this.velocity.y * elapsedMS;
     }
 
-    destroy() {
+    destroy(causeEntity?: Entity) {
         const game = this.owner.game;
         const filter = game.stats.now();
         const released = game.satellites.release(this);
@@ -935,6 +939,9 @@ export class Satellite implements Entity, Moveable {
         if (released) {
             this.gfx?.destroy();
             game.state.removed.add(this);
+        }
+        if (causeEntity) {
+            this.destroyedBy = causeEntity.id;
         }
     }
 }

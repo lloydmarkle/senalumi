@@ -370,8 +370,56 @@ export class ToneSound implements AudioDriver {
         if (!this.satSynth) {
             return;
         }
-        this.satSynth.triggerAttackRelease("E3", .001);
+        // this.satSynth.triggerAttackRelease("E3", .1);
         // this.synth.triggerAttackRelease("E4", .005);
+
+        const duration = 0.4;
+        const now = this.audioContext.currentTime;
+        var oscEnvelope = this.audioContext.createGain();
+        oscEnvelope.connect(this.main);
+        oscEnvelope.gain.setValueAtTime(0.9, now);
+        oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+
+        var osc = this.audioContext.createOscillator();
+        osc.type = 'triangle';
+        osc.connect(oscEnvelope);
+        osc.frequency.setValueAtTime(Tone.mtof(60), now);
+        osc.detune.value = (-12 + Math.round(Math.random() * 24)) * 100;
+
+        osc.start();
+        osc.stop(now + duration);
+
+        // // // based on https://clockworkchilli.com/blog/3_html5_drum_machine_with_web_audio
+        // //var noiseEnvelope = this.audio.audioContext.createGain();
+        // var noiseEnvelope = adsr(this.audioContext.createGain(), now, .01, .01, .04, .14, .2);
+        // noiseEnvelope.connect(this.main);
+        // // noiseEnvelope.gain.setValueAtTime(1, now);
+        // // noiseEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        // var noiseFilter = this.audioContext.createBiquadFilter();
+        // noiseFilter.type = 'highpass';
+        // noiseFilter.frequency.value = 1000;
+        // noiseFilter.connect(noiseEnvelope);
+
+        // var noise = this.audioContext.createBufferSource();
+        // noise.buffer = this.noiseBuffer;
+        // noise.connect(noiseFilter);
+
+        // var oscEnvelope = this.audioContext.createGain();
+        // oscEnvelope.connect(this.main);
+        // oscEnvelope.gain.setValueAtTime(0.7, now);
+        // oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5);
+
+        // var osc = this.audioContext.createOscillator();
+        // osc.type = 'triangle';
+        // osc.connect(oscEnvelope);
+        // osc.frequency.setValueAtTime(Tone.mtof(60), now);
+        // osc.detune.value = Math.random() * 1200;
+
+        // osc.start();
+        // osc.stop(now + duration);
+        // noise.start();
+        // noise.stop(now + duration);
     }
 }
 

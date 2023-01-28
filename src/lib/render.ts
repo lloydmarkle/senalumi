@@ -1,6 +1,6 @@
-import { backInOut, cubicIn, cubicOut } from 'svelte/easing';
+import { backInOut, backOut, cubicIn, cubicOut } from 'svelte/easing';
 import { writable, type Readable, type Writable } from 'svelte/store';
-import { type Point, distSqr, QuadTree, ArrayPool, Interpolator } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, LoopInterpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -310,6 +310,8 @@ export class Renderer {
     constructor(element: HTMLCanvasElement, private game: Game, player?: Player) {
         const app = new PIXI.Application({
             view: element,
+            // forceCanvas: true,
+            // resolution: 0.5,
             autoDensity: true,
             resizeTo: window,
         });
@@ -323,6 +325,7 @@ export class Renderer {
             interaction: app.renderer.plugins.interaction,
         });
         app.stage.addChild(viewport);
+        app.renderer.on('resize', () => viewport.resize());
         viewport
             .drag()
             .pinch()
@@ -458,7 +461,7 @@ export class Renderer {
                 pulseContainer.visible = this.dbg.config.enablePulseAnimation;
                 game.planets.forEach(p => p.owner && pulsePool.take().init(p, pulseContainer));
             }
-            state.removed.forEach(sat => flashPool.take().init(sat, flashContainer));
+            state.removed.forEach(sat => flashPool.take().init(sat, flashContainer, audio));
 
             // a little weird to have the UI clear this...
             state.removed.clear();
@@ -595,13 +598,20 @@ class PulseSFX extends SFX<PIXI.Graphics> {
 }
 
 class FlashSFX extends SFX<PIXI.Sprite> {
-    init(sat: Satellite, container: PIXI.Container) {
+    init(sat: Satellite, container: PIXI.Container, audio: Sound) {
         const time = Math.random() * 300 + 200;
+        if (sat.destroyedBy?.startsWith('s')) {
+            // bigger explosion when destroyed by another satellite
+            this.sizeInt.init(time, 1, 12 * Math.random() + 6, backOut);
+            audio.satellitePop();
+        } else {
+            this.sizeInt.init(time, 1, 4, backOut);
+            // no sound because the planet plays the absorb sound
+        }
+        this.gfx.tint = sat.owner.satelliteColor;
         this.alphaInt.init(time, 1, 0.1, backInOut);
-        this.sizeInt.init(time, 1, 6, cubicOut);
         this.xPoint.init(time, sat.position.x, sat.position.x);
         this.yPoint.init(time, sat.position.y, sat.position.y);
-        this.gfx.tint = sat.owner.satelliteColor;
         this.rotationInt.init(time, 0, Math.random() * Math.PI * 3);
         return super.sfxInit(container);
     }
@@ -652,6 +662,8 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     private lastMaxLevel: number;
     private sizeInt = new Interpolator();
     private planetAudio: PlanetAudio;
+    private statusBarAlphaInt = new Interpolator();
+    private statusBarAlphaLoop = new LoopInterpolator();
     rings: PIXI.Container;
     statusBars: PIXI.Graphics;
     constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly colorMap: any) {
@@ -663,6 +675,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.setupRings(planet);
         this.planetAudio = new PlanetAudio(planet, audio);
 
+        this.statusBarAlphaLoop.init(this.statusBarAlphaInt.init(1000, 0.6, 0.8));
         this.lastSize = planet.size;
         this.lastMaxLevel = planet.maxLevel;
         this.sizeInt.init(0, 0, planet.size);
@@ -709,6 +722,11 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.gfx.filters = [this.colorMap[planet.owner?.team ?? 'default']];
 
         this.statusBars.clear();
+        this.statusBars.alpha = this.statusBarAlphaLoop.tick(elapsedMS);
+        if (this.statusBarAlphaLoop.finished) {
+            const time = Math.ceil((planet.health < 100 ? planet.health : (100 - planet.upgrade)) / 10);
+            this.statusBarAlphaInt.init(time * 200, 0.6, 0.8);
+        }
         if (planet.upgrade > 0) {
             this.drawStatusBar(planet, planet.upgrade, planet.orbitDistance * 0.6, 0x404040, planet.candidateOwner?.color ?? planet.owner.color);
         }
@@ -725,7 +743,8 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     private drawStatusBar(planet: Planet, percentage: number, radius: number, grey: number, color: number) {
         this.statusBars.lineStyle(statusBarThickness, grey);
         this.statusBars.drawCircle(planet.position.x, planet.position.y, radius);
-        this.statusBars.lineStyle(statusBarThickness, color);
+        this.statusBars.lineStyle(statusBarThickness + 2, color);
+        this.statusBars.moveTo(planet.position.x, planet.position.y - radius);
         this.statusBars.arc(planet.position.x, planet.position.y, radius, statusOffset, statusOffset + percentage * circlePercent);
     }
 
