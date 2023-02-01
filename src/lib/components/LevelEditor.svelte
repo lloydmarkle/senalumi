@@ -168,7 +168,7 @@
                 </span>
                 {#if debugPlanet.owner}
                 <span class="hstack">
-                    <input type="range" min="0" max="300" step="25" on:change={updatePlanet} bind:value={debugPlanet.initialSatellites} />
+                    <input type="range" min="0" max="1000" step="25" on:change={updatePlanet} bind:value={debugPlanet.initialSatellites} />
                     <span>Initial satellites {debugPlanet.initialSatellites}</span>
                 </span>
                 {/if}

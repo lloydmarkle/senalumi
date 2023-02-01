@@ -1,12 +1,14 @@
 import { backInOut, backOut, cubicIn, cubicOut } from 'svelte/easing';
 import { writable, type Readable, type Writable } from 'svelte/store';
-import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, LoopInterpolator } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, ComboInterpolator } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
 import type { ListenerFn } from 'eventemitter3';
 import { PlanetAudio, Sound } from './sound';
+// lots of other fun filters https://filters.pixijs.download/main/demo/index.html
+import { ShockwaveFilter } from '@pixi/filter-shockwave';
 
 class Selector {
     private dragMove: ListenerFn;
@@ -326,13 +328,14 @@ export class Renderer {
         });
         app.stage.addChild(viewport);
         app.renderer.on('resize', () => viewport.resize());
+        app.stage.filters = [];
+        viewport.filters = [];
         viewport
             .drag()
             .pinch()
             .wheel()
             .decelerate();
 
-        // activate plugins
         viewport.clampZoom({
             maxScale: 3,
             minScale: 0.2,
@@ -349,7 +352,7 @@ export class Renderer {
             ease: 'easeInOutQuad',
             time: 5000,
             scale: .4,
-        })
+        });
 
         let strongBlur = new PIXI.filters.BlurFilter(50, 16);
 
@@ -427,12 +430,13 @@ export class Renderer {
         greyTeamMatrix.tint(0x222222, true);
         colorMap['default'] = greyTeamMatrix;
 
+        const filterSfxPool: ArrayPool<FilterSFX> = new ArrayPool(() => new FilterSFX(filterSfxPool, viewport));
         const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
         const flashPool: ArrayPool<FlashSFX> = new ArrayPool(() => new FlashSFX(flashPool, createGraphics(satelliteTexture)));
-        const renderables: ArrayPool<Renderable>[] = [pulsePool, flashPool, targetFlashPool, satelliteTracesPool];
+        const renderables: ArrayPool<Renderable>[] = [filterSfxPool, pulsePool, flashPool, targetFlashPool, satelliteTracesPool];
 
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
-        const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), colorMap));
+        const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), filterSfxPool, colorMap));
 
         game.forEachEntity(entity => entity.gfx = null);
         const renderInitializers = {
@@ -516,6 +520,48 @@ function createGraphics(texture: PIXI.Texture) {
     const gfx = PIXI.Sprite.from(texture);
     gfx.anchor.set(0.5, 0.5);
     return gfx;
+}
+
+class FilterSFX<T extends PIXI.Filter = PIXI.Filter> implements Renderable {
+    private filter: T;
+    private lifetimeMS: number;
+    private ent: Entity;
+    private tickFn: (vp: Viewport, ms: number) => void;
+    constructor(readonly pool: ArrayPool<FilterSFX>, readonly viewport: Viewport) {}
+
+    init(ent: Entity, lifetimeMS: number, filter: T, tickFn: (vp: Viewport, ms: number) => void) {
+        this.ent = ent;
+        this.tickFn = tickFn;
+        this.lifetimeMS = lifetimeMS;
+        this.filter = filter;
+        this.viewport.filters.push(filter);
+    }
+
+    tick(elapsedMS: number): void {
+        this.lifetimeMS -= elapsedMS;
+        if (this.lifetimeMS < 0) {
+            this.destroy();
+            return;
+        }
+
+        // const bounds = this.viewport.getVisibleBounds();
+        // if (!bounds.contains(this.ent.position.x, this.ent.position.y)) {
+        //     this.filter.enabled = false;
+        //     return;
+        // }
+
+        this.filter.enabled = true;
+        this.tickFn(this.viewport, elapsedMS);
+    }
+
+    destroy(): void {
+        if (this.pool.release(this)) {
+            const idx = this.viewport.filters.indexOf(this.filter);
+            this.viewport.filters.splice(idx, 1);
+            // can't destroy because it seems to cause crashes... odd
+            // this.filter.destroy();
+        }
+    }
 }
 
 class SFX<T extends PIXI.Container = PIXI.Container> implements Renderable {
@@ -660,13 +706,14 @@ const circlePercent = Math.PI * 2 * 0.01;
 class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     private lastSize: number;
     private lastMaxLevel: number;
+    private shockwaveInt = new ComboInterpolator();
     private sizeInt = new Interpolator();
     private planetAudio: PlanetAudio;
     private statusBarAlphaInt = new Interpolator();
-    private statusBarAlphaLoop = new LoopInterpolator();
+    private statusBarAlphaLoop = new ComboInterpolator();
     rings: PIXI.Container;
     statusBars: PIXI.Graphics;
-    constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly colorMap: any) {
+    constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly fpool: ArrayPool<FilterSFX>, readonly colorMap: any) {
         super(pool, gfx);
     }
 
@@ -675,7 +722,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.setupRings(planet);
         this.planetAudio = new PlanetAudio(planet, audio);
 
-        this.statusBarAlphaLoop.init(this.statusBarAlphaInt.init(1000, 0.6, 0.8));
+        this.statusBarAlphaLoop.init([this.statusBarAlphaInt.init(1000, 0.6, 0.8)], 'reverse');
         this.lastSize = planet.size;
         this.lastMaxLevel = planet.maxLevel;
         this.sizeInt.init(0, 0, planet.size);
@@ -709,6 +756,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
 
         const planet = this.ent;
         if (this.lastSize !== planet.size) {
+            this.shockwave(planet);
             this.sizeInt.init(2000, this.lastSize, planet.size, backInOut);
             this.lastSize = planet.size;
         }
@@ -738,6 +786,30 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
             this.rings.children[i].visible = (planet.level <= i + 1);
         }
         this.rings.position = planet.position;
+    }
+
+    private shockwave(planet: Planet) {
+        const growing = (this.lastSize < planet.size);
+        const filter = new ShockwaveFilter();
+        filter.radius = -1;
+        filter.brightness = 1.2;
+        filter.time = growing ? 0 : 1.5;
+        const duration = 1500;
+        const amplitude = 20;
+        this.shockwaveInt.init([
+            new Interpolator().init(200, 1, amplitude),
+            new Interpolator().init(duration - 800, amplitude, amplitude),
+            new Interpolator().init(600, amplitude, 1, cubicOut),
+        ], 'stop');
+        this.fpool.take().init(planet, duration, filter, (vp, ms) => {
+            const screenPos = vp.worldTransform.apply(planet.position);
+            filter.center = screenPos;
+            filter.time += (growing ? (ms / 1000) : -(ms / 1000));
+            filter.wavelength = 100 * vp.scale.x;
+            filter.speed = 300 * vp.scale.x;
+            filter.amplitude = this.shockwaveInt.tick(ms) * vp.scale.x;
+            console.log(this.shockwaveInt.value)
+        });
     }
 
     private drawStatusBar(planet: Planet, percentage: number, radius: number, grey: number, color: number) {

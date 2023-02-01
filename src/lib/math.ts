@@ -284,26 +284,54 @@ export class Interpolator {
         }
         return this.value;
     }
+
+    reverse() {
+        this.init(this.lifetime, this.target, this.initial, this.timeFn);
+    }
 }
 
-export class LoopInterpolator {
-    private interp: Interpolator;
-    private initial: number;
-    get finished() { return this.interp.value === this.initial; }
+type InterpolatorEnding = 'stop' | 'reverse' | 'loop' | 'reset';
+export class ComboInterpolator {
+    private interps: Interpolator[];
+    private direction: number;
+    private idx: number;
+    private ending: InterpolatorEnding;
+    private get interp() { return this.interps[this.idx]; }
+
+    finished: boolean;
     get value() { return this.interp.value; }
 
-    init(interpolator: Interpolator) {
-        this.interp = interpolator;
-        this.initial = (this.interp as any).initial;
+    init(interpolators: Interpolator[], ending: InterpolatorEnding) {
+        this.finished = false;
+        this.interps = interpolators;
+        this.direction = 1;
+        this.idx = 0;
+        this.ending = ending;
         return this;
     }
 
     tick(elapsedMS: number) {
         if (this.interp.finished) {
-            // reverse
-            const p = this.interp as any;
-            this.interp.init(p.lifetime, p.target, p.initial, p.timeFn);
+            this.idx += this.direction;
+            if (this.idx === this.interps.length || this.idx < 0) {
+                this.handleEnding();
+            }
         }
         return this.interp.tick(elapsedMS);
+    }
+
+    private handleEnding() {
+        if (this.ending === 'loop') {
+            this.idx = 0;
+        } else if (this.ending === 'reset') {
+            this.idx = 0;
+        } else if (this.ending === 'stop') {
+            this.idx -= 1;
+            this.direction = 0;
+        } else if (this.ending === 'reverse') {
+            this.direction *= -1;
+            this.idx += this.direction;
+            this.interps.forEach(int => int.reverse());
+        }
     }
 }
