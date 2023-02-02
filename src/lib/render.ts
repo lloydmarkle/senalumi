@@ -448,6 +448,7 @@ export class Renderer {
             },
         };
 
+        // app.ticker.stop();
         app.ticker.add((delta) => {
             this.viewstate.set({ tx: viewport.x, ty: viewport.y, scale: viewport.scaled });
             this.dbg.tick(app);
@@ -792,21 +793,20 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         const growing = (this.lastSize < planet.size);
         const filter = new ShockwaveFilter();
         filter.radius = -1;
-        filter.brightness = 1.2;
         filter.time = growing ? 0 : 1.5;
         const duration = 1500;
         const amplitude = 20;
         this.shockwaveInt.init([
-            new Interpolator().init(200, 1, amplitude),
+            new Interpolator().init(200, 0, amplitude),
             new Interpolator().init(duration - 800, amplitude, amplitude),
-            new Interpolator().init(600, amplitude, 1, cubicOut),
+            new Interpolator().init(600, amplitude, 0, cubicOut),
         ], 'stop');
         this.fpool.take().init(planet, duration, filter, (vp, ms) => {
             const screenPos = vp.worldTransform.apply(planet.position);
             filter.center = screenPos;
             filter.time += (growing ? (ms / 1000) : -(ms / 1000));
-            filter.wavelength = 100 * vp.scale.x;
-            filter.speed = 300 * vp.scale.x;
+            filter.wavelength = 150 * vp.scale.x;
+            filter.speed = 240 * vp.scale.x;
             filter.amplitude = this.shockwaveInt.tick(ms) * vp.scale.x;
             console.log(this.shockwaveInt.value)
         });

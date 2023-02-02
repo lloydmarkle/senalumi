@@ -108,8 +108,8 @@ export class PlanetAudio implements Renderable {
 
         const gain = adsr(this.audio.audioContext.createGain(),
             // now, .15 * duration, .002 * duration, .25 * duration, .6 * duration, .4);
-            now, .2 * duration, .05 * duration, .05 * duration, .70 * duration, .4);
-            // now, .04, .01, .01, .14, .4);
+            // now, .2 * duration, .05 * duration, .05 * duration, .70 * duration, .4);
+            now, .04, .01, .01, .14, .4);
         // const gain = context.createGain();
         // gain.gain.setValueAtTime(0.001, 0);
         // gain.gain.linearRampToValueAtTime(1, now + duration * 0.1);
@@ -120,46 +120,13 @@ export class PlanetAudio implements Renderable {
         step.connect(gain);
         step.detune.value = detune;
         step.frequency.setValueAtTime(freq, now);
-        // step.frequency.exponentialRampToValueAtTime(0.001, now + duration);
 
+        // step.type = 'triangle';
         step.start();
         step.stop(now + duration);
-
-    //     // // based on https://clockworkchilli.com/blog/3_html5_drum_machine_with_web_audio
-    //     //var noiseEnvelope = this.audio.audioContext.createGain();
-    //     var noiseEnvelope = adsr(this.audio.audioContext.createGain(), now, .01, .01, .04, .14, .2);
-    //     noiseEnvelope.connect(this.audio.main);
-    //     // noiseEnvelope.gain.setValueAtTime(1, now);
-    //     // noiseEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    //     var noiseFilter = this.audio.audioContext.createBiquadFilter();
-    //     noiseFilter.type = 'highpass';
-    //     noiseFilter.frequency.value = 1000;
-    //     noiseFilter.connect(noiseEnvelope);
-
-    //     var noise = this.audio.audioContext.createBufferSource();
-    //     noise.buffer = this.audio.noiseBuffer;
-    //     noise.connect(noiseFilter);
-
-    //     var oscEnvelope = this.audio.audioContext.createGain();
-    //     oscEnvelope.connect(this.audio.main);
-    //     oscEnvelope.gain.setValueAtTime(0.7, now);
-    //     oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5);
-
-    //     var osc = this.audio.audioContext.createOscillator();
-    //     osc.type = 'triangle';
-    //     osc.connect(oscEnvelope);
-    //     osc.frequency.setValueAtTime(freq, now);
-    //     osc.detune.value = detune;
-
-    //     osc.start();
-    //     osc.stop(now + duration);
-    //     noise.start();
-    //     noise.stop(now + duration);
     }
 
     private bendSound(freqStart: number, freqEnd: number, duration: number) {
-        // const duration = 0.1 // * game.speed ?
         const now = this.audio.audioContext.currentTime;
         const step = this.audio.audioContext.createOscillator();
 
@@ -174,31 +141,48 @@ export class PlanetAudio implements Renderable {
         step.connect(gain);
         gain.connect(this.audio.main);
 
-        step.start();
+        step.start(now);
         step.stop(now + duration);
     }
 
-    private captureSound(): void {
-        this.upgradeSound();
+    private pop(freqStart: number, freqEnd: number) {
+        const now = this.audio.audioContext.currentTime;
+        const step = this.audio.audioContext.createOscillator();
+
+        step.frequency.setValueAtTime(freqStart, now);
+        step.frequency.linearRampToValueAtTime(freqEnd, now + 0.5);
+        const gain = adsr(this.audio.audioContext.createGain(), now, .01, .01, .1, .05, .8);
+        step.connect(gain);
+        gain.connect(this.audio.main);
+
+        step.start();
+        step.stop(now + .5);
     }
-    private upgradeSound(): void {
+
+    captureSound(): void {
+        this.bendSound(Tone.mtof(60), Tone.mtof(67), 1.5);
+        this.pop(Tone.mtof(52), Tone.mtof(60));
+    }
+    upgradeSound(): void {
         // this.changeOscillator.frequency.value = "C4";
         // this.changeOscillator.frequency.rampTo("G4", 2);
         // this.changeOscillator.volume.value = 0;
         // this.changeOscillator.volume.rampTo(-100, 2)
         // this.changeOscillator.start().stop("+2");
-        this.bendSound(Tone.mtof(60), Tone.mtof(67), 1.5);
+        this.bendSound(Tone.mtof(67), Tone.mtof(72), 1.5);
+        this.pop(Tone.mtof(60), Tone.mtof(67));
     }
-    private popSound(): void {
+    popSound(): void {
         // this.changeOscillator.frequency.value = "C3";
         // this.changeOscillator.frequency.rampTo("C2", 2);
         // this.changeOscillator.volume.value = 0;
         // this.changeOscillator.volume.rampTo(-100, 2)
         // this.changeOscillator.start().stop("+2");
         this.bendSound(Tone.mtof(48), Tone.mtof(36), 1.5);
+        this.pop(Tone.mtof(53), Tone.mtof(42));
     }
 
-    private partialHealthSound(value: number): void {
+    partialHealthSound(value: number): void {
         if (this.stepOscillator.state === 'stopped') {
             // this.stepOscillator.frequency.value = "G4";
             // this.stepOscillator.volume.value = 0;
@@ -208,7 +192,7 @@ export class PlanetAudio implements Renderable {
             this.shortSound(Tone.mtof(43), value * 24);
         }
     }
-    private partialUpgradeSound(value: number): void {
+    partialUpgradeSound(value: number): void {
         if (this.stepOscillator.state === 'stopped') {
             // this.stepOscillator.frequency.value = "C4";
             // this.stepOscillator.volume.value = 0;
@@ -224,14 +208,14 @@ export class PlanetAudio implements Renderable {
             this.shortSound(Tone.mtof(48), value * 24);
         }
     }
-    private partialCaptureSound(value: number): void {
+    partialCaptureSound(value: number): void {
         if (this.stepOscillator.state === 'stopped') {
             // this.stepOscillator.frequency.value = "C3";
             // this.stepOscillator.volume.value = 0;
             // this.stepOscillator.volume.rampTo(-100, 0.2)
             // this.stepOscillator.detune.value = value * 12;
             // this.stepOscillator.start().stop("+0.2");
-            this.shortSound(Tone.mtof(48), value * 24);
+            this.shortSound(Tone.mtof(36), value * 24);
         }
     }
 }
@@ -244,6 +228,8 @@ export class ToneSound implements AudioDriver {
     primaryGain: Tone.Gain;
     main: GainNode;
     noiseBuffer: AudioBuffer;
+
+    private nextSatellitePopSoundTime = 0;
 
     get audioContext() { return Tone.getContext().rawContext; }
     constructor(readonly game: Game) {
@@ -272,9 +258,9 @@ export class ToneSound implements AudioDriver {
             }
 
             const comp = this.audioContext.createDynamicsCompressor();
-            comp.connect(this.audioContext.destination);
+            // comp.connect(this.audioContext.destination);
             this.main.gain.value = 0.1;
-            this.main.connect(comp)
+            this.main.connect(this.audioContext.destination)
 
             this.planetSynth = new Tone.PolySynth({
                 maxPolyphony: 16,
@@ -366,60 +352,66 @@ export class ToneSound implements AudioDriver {
         }
     }
 
-    satellitePop() {
-        if (!this.satSynth) {
+
+    private shortSound(freq: number, detune: number) {
+        const tnow = new Date().getTime();
+        if (tnow < this.nextSatellitePopSoundTime) {
             return;
         }
-        // this.satSynth.triggerAttackRelease("E3", .1);
-        // this.synth.triggerAttackRelease("E4", .005);
 
-        const duration = 0.4;
-        const now = this.audioContext.currentTime;
+        const context = this.audioContext;
+        const pause = 0.05 + Math.random() * 0.05;
+        const now = context.currentTime;
+        this.nextSatellitePopSoundTime = tnow + (pause * 1000);
+
+        const duration = 1.2 + Math.random() * 1.6; // * game.speed?
         var oscEnvelope = this.audioContext.createGain();
         oscEnvelope.connect(this.main);
-        oscEnvelope.gain.setValueAtTime(0.9, now);
-        oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+        oscEnvelope.gain.setValueAtTime(0.6, now);
+        oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.4);
 
         var osc = this.audioContext.createOscillator();
-        osc.type = 'triangle';
+        osc.type = 'sine';
         osc.connect(oscEnvelope);
-        osc.frequency.setValueAtTime(Tone.mtof(60), now);
-        osc.detune.value = (-12 + Math.round(Math.random() * 24)) * 100;
+        osc.frequency.setValueAtTime(freq, now);
+        osc.detune.value = detune;
 
         osc.start();
         osc.stop(now + duration);
 
-        // // // based on https://clockworkchilli.com/blog/3_html5_drum_machine_with_web_audio
-        // //var noiseEnvelope = this.audio.audioContext.createGain();
-        // var noiseEnvelope = adsr(this.audioContext.createGain(), now, .01, .01, .04, .14, .2);
-        // noiseEnvelope.connect(this.main);
-        // // noiseEnvelope.gain.setValueAtTime(1, now);
-        // // noiseEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        var oscEnvelope = this.audioContext.createGain();
+        oscEnvelope.connect(this.main);
+        oscEnvelope.gain.setValueAtTime(0.4, now);
+        oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.2);
 
-        // var noiseFilter = this.audioContext.createBiquadFilter();
-        // noiseFilter.type = 'highpass';
-        // noiseFilter.frequency.value = 1000;
-        // noiseFilter.connect(noiseEnvelope);
+        osc = this.audioContext.createOscillator();
+        osc.type = 'triangle';
+        osc.connect(oscEnvelope);
+        osc.frequency.setValueAtTime(Tone.mtof(68), now);
+        osc.detune.value = detune * 2;
 
-        // var noise = this.audioContext.createBufferSource();
-        // noise.buffer = this.noiseBuffer;
-        // noise.connect(noiseFilter);
+        osc.start();
+        osc.stop(now + duration);
+    }
 
-        // var oscEnvelope = this.audioContext.createGain();
-        // oscEnvelope.connect(this.main);
-        // oscEnvelope.gain.setValueAtTime(0.7, now);
-        // oscEnvelope.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5);
-
-        // var osc = this.audioContext.createOscillator();
-        // osc.type = 'triangle';
-        // osc.connect(oscEnvelope);
-        // osc.frequency.setValueAtTime(Tone.mtof(60), now);
-        // osc.detune.value = Math.random() * 1200;
-
-        // osc.start();
-        // osc.stop(now + duration);
-        // noise.start();
-        // noise.stop(now + duration);
+    satellitePop() {
+        if (!this.satSynth) {
+            return;
+        }
+        // const detune = [
+        //     100 * -12,
+        //     100 * -8,
+        //     100 * -5,
+        //     100 * 0,
+        //     100 * 4,
+        //     100 * 7,
+        //     100 * 10,
+        // ]
+        // let d = detune[Math.floor(Math.random() * detune.length)]
+        // this.shortSound(Tone.mtof(60), d)
+        this.shortSound(Tone.mtof(60), (-12 + Math.round(Math.random() * 24)) * 100);
+        // this.satSynth.triggerAttackRelease("E3", .1);
+        // this.synth.triggerAttackRelease("E4", .005);
     }
 }
 
