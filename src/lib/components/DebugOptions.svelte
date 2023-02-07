@@ -2,14 +2,13 @@
     import { fly } from 'svelte/transition';
     import type { Game } from '../game';
     import type { Renderer } from '../render';
-    import { PlanetAudio, Sound } from '../sound'
+    import { Sound } from '../sound'
     import Toggle from './Toggle.svelte';
 
     export let gfx: Renderer;
     export let game: Game;
 
     const audio = new Sound(game);
-    const planetAudio = new PlanetAudio(game.planets[0], audio);
 
     function spawn1K() {
         let end = game.satellites.length + 1000;
@@ -93,9 +92,9 @@
 
     <p>Standalone Sounds</p>
     <button class="option" on:click={() => audio.pulse()}>Pulse</button>
-    <button class="option" on:click={() => planetAudio.upgradeSound()}>Planet Upgrade</button>
-    <button class="option" on:click={() => planetAudio.popSound()}>Planet Pop</button>
-    <button class="option" on:click={() => planetAudio.captureSound()}>Planet Capture</button>
+    <button class="option" on:click={() => audio.planetUpgrade()}>Planet Upgrade</button>
+    <button class="option" on:click={() => audio.planetPop()}>Planet Pop</button>
+    <button class="option" on:click={() => audio.planetCapture()}>Planet Capture</button>
 
     <hr style="width:100%" />
 
@@ -114,9 +113,9 @@
     </div>
 
     <button class="option" on:click={partialAudio(n => audio.satellitePop())}>Satellite pop ({repeats}x)</button>
-    <button class="option" on:click={partialAudio(n => planetAudio.partialHealthSound(n))}>Partial health ({repeats}x)</button>
-    <button class="option" on:click={partialAudio(n => planetAudio.partialCaptureSound(n))}>Partial capture ({repeats}x)</button>
-    <button class="option" on:click={partialAudio(n => planetAudio.partialUpgradeSound(n))}>Partial upgrade ({repeats}x)</button>
+    <button class="option" on:click={partialAudio(n => audio.planetPartialHealthSound(n))}>Partial health ({repeats}x)</button>
+    <button class="option" on:click={partialAudio(n => audio.planetPartialCaptureSound(n))}>Partial capture ({repeats}x)</button>
+    <button class="option" on:click={partialAudio(n => audio.planetPartialUpgradeSound(n))}>Partial upgrade ({repeats}x)</button>
 </div>
 
 <style>
