@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { teamColor, type Team, type GameStateSnapshot } from '../game';
+    import type { Team, GameStateSnapshot } from '../game';
+    import { teamColor } from '../data';
     import * as Pancake from '@sveltejs/pancake';
 
 	export let gameState: GameStateSnapshot[];

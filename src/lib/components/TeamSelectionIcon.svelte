@@ -1,7 +1,8 @@
 <script lang="ts">
+    import { teamColor } from '../data';
+    import type { Team } from '../game';
     export let size = 48;
     export let color = 'red';
-    import { teamColor, type Team } from '../game'
     $: fillColor = '#' + teamColor(color as Team).toString(16);
 
     const csize = size / 3;

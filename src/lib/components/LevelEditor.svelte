@@ -14,11 +14,7 @@
     export let gfx: Renderer;
 
     function disableAi(game: Game) {
-        game.players.forEach(player => {
-            if ('enabled' in player) {
-                player.enabled = false;
-            }
-        })
+        game.players.forEach(player => player.ai = null);
     }
     disableAi(game);
 

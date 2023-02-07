@@ -95,8 +95,8 @@ export class AuraluxRoom extends Room<GameSchema> {
   private disableAiPlayers() {
     const usedTeams = new Set(Array.from(this.state.players.values()).map(p => p.team));
     for (const player of this.game.players) {
-      if (usedTeams.has(player.team) && 'enabled' in player) {
-        player.enabled = false;
+      if (usedTeams.has(player.team)) {
+        player.ai = null;
       }
     }
   }

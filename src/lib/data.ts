@@ -1,4 +1,15 @@
-import type { GameMap } from "./game";
+import type { GameMap, Team } from "./game";
+
+const colorMap = {
+    'red': 0xD2042D,
+    'yellow': 0xFFF44F,
+    'orange': 0xCC5500,
+    'green': 0x7CFC00,
+    'blue': 0x1111DD,
+    'violet': 0x7F00FF,
+    'pink': 0xFF10F0,
+};
+export const teamColor = (team: Team) => colorMap[team] ?? 0;
 
 export const playerTeams = [
     { value: '', label: 'Watching' },

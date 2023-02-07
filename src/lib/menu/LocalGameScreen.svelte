@@ -23,8 +23,8 @@
     function startGame() {
         $game = new Game(initializerFromMap(map));
         const player = $game.players.find(p => p.team === $localPlayer.team);
-        if (player && 'enabled' in player) {
-            player.enabled = false;
+        if (player) {
+            player.ai = null;
         }
         $game.start(0);
     }
