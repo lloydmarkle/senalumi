@@ -4,7 +4,7 @@
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
     import MapChooser from './MapChooser.svelte';
-    import { playerTeams } from '../data';
+    import { availableTeamsFromMap, playerTeams } from '../data';
 
     let { game, localPlayer } = appContext();
     let map: GameMap = null;
@@ -12,10 +12,7 @@
     $: if (map) {
         availableTeams = [
             playerTeams[0],
-            ...map.planets
-                .map(e => e.ownerTeam)
-                .filter(e => e)
-                .map(e => playerTeams.find(f => f.value === e)),
+            ...availableTeamsFromMap(map),
         ];
     }
     $: $localPlayer.team = availableTeams[1 + Math.floor(Math.random() * (availableTeams.length - 1))].value as Team;

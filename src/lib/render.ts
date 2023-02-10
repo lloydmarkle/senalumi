@@ -508,7 +508,7 @@ export class Renderer {
             const img = this.app.renderer.plugins.extract.base64(renderTexture);
             window.open(img)
             return img;
-        }finally {
+        } finally {
             this.viewport.plugins.resume('clamp');
             this.viewport.plugins.resume('clamp-zoom');
             this.viewport.scale = scale;

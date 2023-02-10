@@ -5,7 +5,7 @@
     import { delayFly, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
-    import { playerTeams } from '../data';
+    import { availableTeamsFromMap, playerTeams } from '../data';
     import MapChooser from './MapChooser.svelte';
     import BackArrow from './BackArrow.svelte';
     import MapTile from './MapTile.svelte';
@@ -19,10 +19,7 @@
     $: if (map) {
         availableTeams = [
             playerTeams[0],
-            ...map.planets
-                .map(e => e.ownerTeam)
-                .filter(e => e)
-                .map(e => playerTeams.find(f => f.value === e)),
+            ...availableTeamsFromMap(map),
         ];
     }
     $: if ($localPlayer.admin && map) {

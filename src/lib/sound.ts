@@ -101,6 +101,7 @@ export class WebAudioSound implements AudioDriver {
     constructor(readonly game: Game) {}
 
     resume() {
+        return
         if (this.ctx) {
             return;
         }
@@ -129,7 +130,7 @@ export class WebAudioSound implements AudioDriver {
 
     volume(value: number): void {
         if (this.ctx) {
-            this.main.gain.setValueAtTime(value, 0);
+            this.main.gain.value = value;
         }
     }
 

@@ -88,6 +88,125 @@ export const setLightness = (color: number, lightness: number) => {
     return parseInt(hsl.hex(c), 16);
 }
 
+export interface GameMap {
+    props: {
+        name: string,
+        img: string,
+    },
+    setup?: {
+        function: 'circle' | 'random'
+        initialSatellites: number,
+        size: number;
+        teams: Team[],
+        planetCounts: { level: number, count: number }[];
+    },
+    planets: {
+        ownerTeam?: Team,
+        initialSatellies: number,
+        level: PlanetLevel,
+        maxLevel: PlanetLevel,
+        position: Point,
+    }[],
+}
+
+function generateRandomCircleWorld(game: Game, mapSetup: GameMap['setup']) {
+    const minDistance = constants.planetRadius * constants.planetRadius * 4;
+    const worldSize = mapSetup.size;
+    const worldSize2x = mapSetup.size * 2;
+    const tree = new QuadTree<Planet>(1);
+    const positionPlanet = () => {
+        while (true)  {
+            let position = point(Math.random() * worldSize2x - worldSize, Math.random() * worldSize2x - worldSize);
+            let use = true;
+            tree.query(position, constants.planetRadius,
+                p => use = use && distSqr(position, p.position) > minDistance);
+            if (use) {
+                return position;
+            }
+        }
+    };
+
+    game.players = game.players.filter(p => mapSetup.teams.indexOf(p.team) !== -1);
+
+    const planets: Planet[] = [];
+    // position player planets in a circle
+    for (let i = 0; i < mapSetup.teams.length; i++) {
+        const angle = Math.PI * 2 * (i / mapSetup.teams.length);
+        const position = point(Math.cos(angle) * worldSize, Math.sin(angle) * worldSize);
+        const planet = new Planet(game, position, 1);
+        planet.capture(game.players[i]);
+
+        planets.push(planet);
+        tree.insert(planet, constants.planetRadius);
+    }
+    // position other planets randomly
+    for (const { level, count } of mapSetup.planetCounts) {
+        for (let j = 0; j < count; j++) {
+            const position = positionPlanet();
+            planets.push(new Planet(game, position, level as PlanetLevel));
+            tree.insert(planets[planets.length - 1], constants.planetRadius);
+        }
+    }
+
+    // add initial satelliets to each planet
+    game.planets = planets;
+    for (let i = 0; i < mapSetup.initialSatellites; i++){
+        game.pulse();
+    }
+}
+
+function setupWorld(game: Game) {
+    generateRandomCircleWorld(game, {
+        function: 'circle',
+        initialSatellites: 100,
+        size: 1000,
+        teams: ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'pink'],
+        planetCounts: [
+            { level: 3, count: game.players.length / 4 },
+            { level: 2, count: game.players.length / 2 },
+            { level: 1, count: game.players.length },
+        ],
+    });
+}
+
+export interface GameEvent {
+    type: 'planet-upgrade' | 'planet-capture' | 'planet-lost';
+    team: Team;
+}
+export interface GameStateSnapshot {
+    time: number;
+    satelliteCounts: Map<Team, number>;
+    events: GameEvent[];
+}
+const createSnapshot = (time: number): GameStateSnapshot => ({
+    time,
+    satelliteCounts: new Map(),
+    events: [],
+});
+
+export type WorldInitializer = (game: Game) => void;
+
+export function initializerFromMap(map: GameMap) {
+    return (game: Game) => {
+        if (map.setup) {
+            generateRandomCircleWorld(game, map.setup);
+        } else {
+            map.planets.forEach(p => {
+                const planet = new Planet(game, p.position, p.maxLevel);
+                if (p.ownerTeam) {
+                    const player = game.players.find(player => player.team === p.ownerTeam);
+                    planet.capture(player);
+                    planet.level = p.level;
+                    for (let i = 0; i < p.initialSatellies; i++) {
+                        game.spawnSatellite(planet);
+                    }
+                }
+                game.planets.push(planet);
+            });
+        }
+    };
+}
+
 export class Player {
     readonly color: number;
     readonly satelliteColor: number;
@@ -111,112 +230,6 @@ export class Player {
         });
         return sats;
     }
-}
-
-interface WorldConfig {
-    worldSize: number;
-    level3Planets: number;
-    level2Planets: number;
-    level1Planets: number;
-}
-function generateRandomCircleWorld(game: Game, { worldSize, level3Planets, level2Planets, level1Planets }: WorldConfig) {
-    const planets: Planet[] = [];
-    const minDistance = constants.planetRadius * constants.planetRadius * 4;
-    const worldSize2x = worldSize * 2;
-    const tree = new QuadTree<Planet>(1);
-    const positionPlanet = () => {
-        while (true)  {
-            let position = point(Math.random() * worldSize2x - worldSize, Math.random() * worldSize2x - worldSize);
-            let use = true;
-            tree.query(position, constants.planetRadius,
-                p => use = use && distSqr(position, p.position) > minDistance);
-            if (use) {
-                return position;
-            }
-        }
-    };
-
-    for (let i = 0; i < level3Planets; i++) {
-        const angle = Math.PI * 2 * (i / level3Planets);
-        const position = point(Math.cos(angle) * worldSize, Math.sin(angle) * worldSize);
-        planets.push(new Planet(game, position, 3));
-        tree.insert(planets[planets.length - 1], constants.planetRadius);
-    }
-    for (let i = 0; i < level2Planets; i++) {
-        const position = positionPlanet();
-        planets.push(new Planet(game, position, 2));
-        tree.insert(planets[planets.length - 1], constants.planetRadius);
-    }
-    for (let i = 0; i < level1Planets; i++) {
-        const position = positionPlanet();
-        planets.push(new Planet(game, position, 1));
-        tree.insert(planets[planets.length - 1], constants.planetRadius);
-    }
-    return planets;
-}
-
-function setupWorld(game: Game) {
-    game.planets = generateRandomCircleWorld(game, {
-        worldSize: 1000,
-        level3Planets: game.players.length,
-        level2Planets: game.players.length / 2,
-        level1Planets: game.players.length,
-    });
-    game.players.forEach((player, i) => game.planets[i].capture(player));
-
-    // add 100 satelliets to each planet
-    const initialSatellites = 100;
-    for (let i = 0; i < initialSatellites; i++){
-        game.pulse();
-    }
-}
-
-export interface GameMap {
-    props: {
-        name: string,
-        img: string,
-    },
-    planets: {
-        ownerTeam?: Team,
-        initialSatellies: number,
-        level: PlanetLevel,
-        maxLevel: PlanetLevel,
-        position: Point,
-    }[],
-}
-
-export interface GameEvent {
-    type: 'planet-upgrade' | 'planet-capture' | 'planet-lost';
-    team: Team;
-}
-export interface GameStateSnapshot {
-    time: number;
-    satelliteCounts: Map<Team, number>;
-    events: GameEvent[];
-}
-const createSnapshot = (time: number): GameStateSnapshot => ({
-    time,
-    satelliteCounts: new Map(),
-    events: [],
-});
-
-export type WorldInitializer = (game: Game) => void;
-
-export function initializerFromMap(map: GameMap) {
-    return game => {
-        game.planets = map.planets.map(p => {
-            const planet = new Planet(game, p.position, p.maxLevel);
-            if (p.ownerTeam) {
-                const player = game.players.find(player => player.team === p.ownerTeam);
-                planet.capture(player);
-                planet.level = p.level;
-                for (let i = 0; i < p.initialSatellies; i++) {
-                    game.spawnSatellite(planet);
-                }
-            }
-            return planet;
-        });
-    };
 }
 
 export class Game {
@@ -629,7 +642,7 @@ export class Satellite implements Entity, Moveable {
     readonly owner: Player;
     destroyedBy: string;
 
-    private mover: Mover;
+    mover: Mover;
     private rotationSpeed: number;
 
     constructor() {}
