@@ -1,7 +1,7 @@
 <script lang="ts">
     import Select from '../components/Select.svelte';
     import { Game, type GameMap } from '../game';
-    import { convertToRemoteGame, GameSchema, type PlayerSchema } from '../net-game';
+    import { convertToRemoteGame, type PlayerSchema } from '../net-game';
     import { delayFly, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
@@ -43,6 +43,7 @@
     };
 
     gameState.onChange = () => {
+        gameState = $room.state;
         if (gameState.running && !$game) {
             $game = convertToRemoteGame(new Game(), $room);
         }
@@ -75,7 +76,7 @@
 </script>
 
 <button transition:delayFly class="back-button" on:click={leaveRoom}><BackArrow /> Multiplayer</button>
-<h1 transition:delayFly><span>Game </span>{gameState.label}</h1>
+<h1 transition:delayFly><span>Game</span> {gameState.label}</h1>
 <div transition:delayFly>Map</div>
 {#if $localPlayer.admin}
     <MapChooser bind:selectedMap={map} />

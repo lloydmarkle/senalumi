@@ -1,10 +1,8 @@
 <script lang="ts">
     import DebugOptions from "./lib/components/DebugOptions.svelte";
     import GameView from "./lib/components/GameView.svelte";
-    import LevelEditor from "./lib/components/LevelEditor.svelte";
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import Scoreboard from "./lib/components/Scoreboard.svelte";
-    import TeamList from "./lib/components/PlayerTable.svelte";
     import { appContext } from "./context";
     import type { Player } from "./lib/game";
     import PlayerTable from "./lib/components/PlayerTable.svelte";
@@ -51,10 +49,6 @@
 <svelte:body on:keypress={keypress} />
 
 <GameView game={$game} {player} let:gfx>
-    {#if $menu === 'edit'}
-        <LevelEditor game={$game} {gfx} />
-    {/if}
-
     {#if showScore}
         <OverlayBackground>
             <div class="vstack">
@@ -76,7 +70,7 @@
     {/if}
 
     {#if $room}
-        <TeamList room={$room} />
+        <PlayerTable room={$room} />
     {/if}
 
     {#if showDebugOptions}

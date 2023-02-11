@@ -5,7 +5,7 @@ import { Game, GameMap, initializerFromMap, Team } from './src/lib/game';
 
 // enable performance.now() on both app and server
 import { performance } from 'perf_hooks';
-import { playerTeams } from './src/lib/data';
+import { availableTeamsFromMap, playerTeams } from './src/lib/data';
 (global as any).performance = performance;
 
 export class AuraluxRoom extends Room<GameSchema> {
@@ -65,9 +65,7 @@ export class AuraluxRoom extends Room<GameSchema> {
       // set available colors based on map
       this.state.config.colours = [
         playerTeams[0].value,
-        ...map.planets
-            .map(e => e.ownerTeam)
-            .filter(e => e)
+        ...availableTeamsFromMap(map).map(e => e.value),
       ];
       // re-assign players who now have an invalid colour
       this.state.players.forEach(player => {

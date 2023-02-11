@@ -2,28 +2,25 @@
     import { fly } from 'svelte/transition';
     import Select from './Select.svelte';
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
-    import { Game, type GameMap, Planet, type Team, initializerFromMap } from "../game";
+    import { Game, type GameMap, Planet, type Team, initializerFromMap, Satellite } from "../game";
     import { distSqr, originPoint, QuadTree } from "../math";
     import type { Renderer } from "../render";
-    import { appContext } from '../../context';
     import { playerTeams } from '../data';
 
-    let context = appContext();
-
+    export let mapProps: GameMap['props'];
     export let game: Game;
     export let gfx: Renderer;
 
-    function disableAi(game: Game) {
+    function hackGame(game: Game) {
+        game.start(0);
         game.players.forEach(player => player.ai = null);
+        game.pulse = () => {};
     }
-    disableAi(game);
+    hackGame(game);
 
-    let mapProps: GameMap['props'] = {
-        name: 'Map name',
-        img: '',
-    };
     let drag = { planet: null };
     $: document.body.classList.toggle('dragging', drag.planet);
+    $: console.log('map props',mapProps)
 
     let debugPlanet: Planet;
     function mouseUp(ev: MouseEvent) {
@@ -53,6 +50,7 @@
     function assignPlanetOwner(planet: Planet, team?: Team) {
         const player = game.players.find(p => p.team === team);
         planet.capture(player);
+        updatePlanet();
     }
 
     let promptDelete = false;
@@ -69,8 +67,25 @@
     }
 
     function updatePlanet() {
-        // svelte hack
+        // svelte hack to update ui
         debugPlanet = debugPlanet;
+
+        // update initial satellites
+        const expectedSatellites = debugPlanet.owner ? debugPlanet.initialSatellites : 0;
+        let sats: Satellite[] = [];
+        game.collisionTree.query(debugPlanet.position, debugPlanet.orbitDistance * 2, sat => sats.push(sat));
+        // remove any satellites from the team (if team changes)
+        sats.filter(s => s.owner !== debugPlanet.owner).forEach(s => s.destroy());
+        sats = sats.filter(s => s.owner === debugPlanet.owner);
+        // add any new sats (when initial gets bigger)
+        while (sats.length < expectedSatellites) {
+            game.spawnSatellite(debugPlanet);
+            sats.push(null); // placeholder just to change array length
+        }
+        // remove sats (when initial gets smaller)
+        while (sats.length > expectedSatellites) {
+            sats.pop().destroy();
+        }
     }
 
     function exportMap() {
@@ -107,17 +122,15 @@
         input.accept = 'application/json';
         input.multiple = false;
         input.onchange = (ev: any) => {
-            // set to null to force App.svelte to mount a new GameView
-            context.game.set(null);
+            // set to null to force LevelEditorScreen to mount a new GameView
+            game = null;
             const file = ev.target.files[0];
             const reader = new FileReader();
             reader.addEventListener('load', (event) => {
                 const map: GameMap = JSON.parse(event.target.result.toString());
+                // persist mapProps so that it reloads when the component reloads
                 mapProps = map.props;
                 game = new Game(initializerFromMap(map));
-                disableAi(game);
-                game.start(0);
-                context.game.set(game);
             });
             reader.readAsText(file);
         }
@@ -189,6 +202,7 @@
         right: 4rem;
         padding: 1rem 2rem;
         opacity: 0.2;
+        background: grey;
         transition: opacity 0.3s
     }
     .world-settings:hover {
@@ -208,18 +222,21 @@
     }
     .drag-box::before {
         position: absolute;
-        top:-1rem; bottom:0; left:-1rem; right:0;
+        top: -1em;
+        left: -1em;
         border-radius: 100%;
-        padding: 4rem;
+        width: 8em;
+        height: 8em;
         content:'';
-        background:rgba(0, 0, 0, .1);
+        background:rgba(0, 0, 0, .4);
+        transition: background 0.2s;
         z-index: -1;
     }
-    .drag-box::before:hover {
-        background: rgba(0, 0, 0, .8);
+    .drag-box:hover::before {
+        background: rgba(0, 0, 0, .7);
     }
     .drag-box:active {
-        filter: invert(50%);
+        filter: invert(20%);
     }
 
     .hstack {

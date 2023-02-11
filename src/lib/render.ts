@@ -468,7 +468,7 @@ export class Renderer {
             }
             state.removed.forEach(sat => flashPool.take().init(sat, flashContainer, audio));
 
-            // a little weird to have the UI clear this...
+            // a little weird to have the UI clear this but it works better for network games
             state.removed.clear();
             state.log = null;
 
@@ -808,7 +808,6 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
             filter.wavelength = 150 * vp.scale.x;
             filter.speed = 240 * vp.scale.x;
             filter.amplitude = this.shockwaveInt.tick(ms) * vp.scale.x;
-            console.log(this.shockwaveInt.value)
         });
     }
 

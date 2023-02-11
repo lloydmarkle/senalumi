@@ -2,11 +2,12 @@
     import { setContext } from 'svelte';
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
+    import LevelEditorScreen from './LevelEditorScreen.svelte';
     import { Context, key } from './context';
 
     let context = new Context();
     setContext(key, context);
-    const { game } = context;
+    const { game, menu } = context;
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
@@ -29,7 +30,9 @@
     // $game.start(0);
 </script>
 
-{#if $game}
+{#if $menu === 'edit'}
+    <LevelEditorScreen />
+{:else if $game}
     <GameScreen />
 {:else}
     <MenuScreen />

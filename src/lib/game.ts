@@ -253,11 +253,6 @@ export class Game {
         lastPulseTime: 0,
         running: false,
     };
-    private resetGamestate() {
-        this.state.elapsedMS = 0;
-        this.state.log = null;
-        this.state.removed.clear();
-    }
 
     constructor(private initializeWorld: WorldInitializer = setupWorld) {
         const aiStats: AIConfig = {
@@ -297,7 +292,8 @@ export class Game {
     }
 
     tick(time: number) {
-        this.resetGamestate();
+        this.state.elapsedMS = 0;
+        this.state.log = null;
         if (!this.state.running) {
             return this.state;
         }
@@ -674,10 +670,7 @@ export class Satellite implements Entity, Moveable {
     }
 
     moveToPoint(point: Point) {
-        this.mover = new MoveSequence([
-            new PointMover(point),
-            new OrbitMover({ orbitDistance: Math.random() * 20, position: point }),
-        ]);
+        this.mover = new OrbitMover({ orbitDistance: Math.random() * 20, position: point });
     }
 
     tick(elapsedMS: number) {

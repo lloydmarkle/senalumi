@@ -1,21 +1,15 @@
 <script lang="ts">
-    import { Game } from '../game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
 
-    let { menu, game } = appContext();
-    function chooseEditor() {
-        $menu = 'edit';
-        $game = new Game();
-        $game.start(0);
-    }
+    let { menu } = appContext();
 </script>
 
 <h1 transition:delayFly={1}>Auralux - Clone</h1>
 <div class="vstack">
     <button class="large-button" transition:delayFly on:click={() => $menu = 'local'}>Single Player</button>
     <button class="large-button" transition:delayFly on:click={() => $menu = 'remote'}>Multiplayer</button>
-    <button class="large-button" transition:delayFly on:click={chooseEditor}>Map Editor</button>
+    <button class="large-button" transition:delayFly on:click={() => $menu = 'edit'}>Map Editor</button>
 </div>
 
 <style>
