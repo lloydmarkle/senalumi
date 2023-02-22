@@ -13,7 +13,14 @@
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400, delay: 0 });
 
-    const { menu } = appContext();
+    const { menu, room } = appContext();
+    function goHome() {
+        if ($room) {
+            $room.leave();
+            $room = null;
+        }
+        $menu = 'start';
+    }
 
     const demoGame = new Game();
     demoGame.start(0);
@@ -28,17 +35,17 @@
             </div>
         {:else if $menu === 'local'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow /> Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
                 <LocalGameScreen />
             </div>
         {:else if $menu === 'remote'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow />Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow />Auralux - Clone</button>
                 <RemoteGameScreen />
             </div>
         {:else if $menu === 'lobby'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={() => $menu = 'start'}><BackArrow /> Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
                 <RemoteLobbyScreen />
             </div>
         {/if}

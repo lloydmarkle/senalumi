@@ -70,7 +70,9 @@
     {/if}
 
     {#if $room}
-        <PlayerTable room={$room} />
+        <div>
+            <PlayerTable room={$room} />
+        </div>
     {/if}
 
     {#if showDebugOptions}

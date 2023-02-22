@@ -59,6 +59,7 @@
 
     function leaveRoom() {
         $room.leave();
+        $room = null;
         $menu = 'remote';
     }
 
