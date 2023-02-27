@@ -7,10 +7,9 @@
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
     import { availableTeamsFromMap, playerTeams } from '../data';
     import MapChooser from './MapChooser.svelte';
-    import BackArrow from './BackArrow.svelte';
     import MapTile from './MapTile.svelte';
 
-    const { localPlayer, room, menu, game } = appContext();
+    const { localPlayer, room, game } = appContext();
 
     let map: GameMap;
     let players: PlayerSchema[] = [];
@@ -26,6 +25,8 @@
         gameState.config.gameMap = JSON.stringify(map);
         syncConfig();
     }
+    $: waitingForReady = players.some(p => !p.ready) || !map;
+    $: waitMessage = map ? '(Waiting for players)' : '(Waiting for players and map)';
 
     let gameState = $room.state;
     // load game properties from room
@@ -36,6 +37,7 @@
                 ? ($localPlayer = player)
                 : player
         ));
+    resetPlayers();
     gameState.players.onAdd = player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
@@ -57,12 +59,6 @@
 
     const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 
-    function leaveRoom() {
-        $room.leave();
-        $room = null;
-        $menu = 'remote';
-    }
-
     function updatePlayer(player: PlayerSchema) {
         $room.send('player:info', player);
     }
@@ -76,8 +72,7 @@
     }
 </script>
 
-<button transition:delayFly class="back-button" on:click={leaveRoom}><BackArrow /> Multiplayer</button>
-<h1 transition:delayFly><span>Game</span> {gameState.label}</h1>
+<h3 transition:delayFly><span>Game</span> {gameState.label}</h3>
 <div transition:delayFly>Map</div>
 {#if $localPlayer.admin}
     <MapChooser bind:selectedMap={map} />
@@ -159,15 +154,11 @@
     </tbody>
 </table>
 <div transition:delayFly class="hstack">
-    <h2>
-        {#if gameState.running}
-        Start in {Math.abs(gameState.gameTimeMS / 1000).toFixed(1)}
-        {:else}
-        Waiting for players
-        {/if}
-    </h2>
     {#if $localPlayer.admin && !gameState.running}
-        <button disabled={players.some(p => !p.ready) || !map} on:click={startGame}>Start game</button>
+        <button disabled={waitingForReady} on:click={startGame}>Start Game</button>
+    {/if}
+    {#if waitingForReady}
+        <div>{waitMessage}</div>
     {/if}
 </div>
 
@@ -180,7 +171,7 @@
         grid-column: 1;
     }
 
-    h1 span {
+    h3 span {
         opacity: 0.8;
     }
 
@@ -189,14 +180,8 @@
     }
 
     button {
+        text-align: start;
         padding: 1rem 2rem;
-    }
-    .back-button {
-        display: block;
-        padding: 0.5rem 2rem 0.5rem 0rem;
-        font-size: 2rem;
-        border: none;
-        background: none;
     }
 
     .options-grid {
@@ -209,6 +194,7 @@
     table {
         table-layout: fixed;
         border-collapse: collapse;
+        /* width: 100px; */
     }
     thead th:nth-child(3) {
         width: 80%;

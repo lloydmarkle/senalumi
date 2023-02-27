@@ -8,6 +8,9 @@ import { performance } from 'perf_hooks';
 import { availableTeamsFromMap, playerTeams } from './src/lib/data';
 (global as any).performance = performance;
 
+const seconds = 1000;
+const rejoinTimeLimit = 30 * seconds;
+
 export class AuraluxRoom extends Room<GameSchema> {
   private game: Game;
   // When room is initialized
@@ -18,6 +21,7 @@ export class AuraluxRoom extends Room<GameSchema> {
 
     this.onMessage('player:info', (client, msg: PlayerSchema) => {
       const player = this.state.players.get(client.sessionId);
+      console.log('update player', player)
       const found = Array.from(this.state.players.values()).find(e => e.team === msg.team);
       if (found && msg.team && !this.state.config.allowCoop && found.sessionId !== client.sessionId) {
         // fail! someone already chose this color?
@@ -94,7 +98,7 @@ export class AuraluxRoom extends Room<GameSchema> {
     const usedTeams = new Set(Array.from(this.state.players.values()).map(p => p.team));
     for (const player of this.game.players) {
       if (usedTeams.has(player.team)) {
-        player.ai = null;
+        player.ai.enabled = false;
       }
     }
   }
@@ -113,8 +117,11 @@ export class AuraluxRoom extends Room<GameSchema> {
     if (this.state.players.size === 0) {
       player.admin = true;
     }
-    player.team = this.findTeam();
-    this.state.players.set(client.sessionId, player);
+    if (!this.state.running) {
+      // not started so assign player to a team
+      player.team = this.findTeam();
+      this.state.players.set(client.sessionId, player);
+    }
   }
 
   private findTeam(): Team {
@@ -131,11 +138,25 @@ export class AuraluxRoom extends Room<GameSchema> {
 
   // When a client leaves the room
   onLeave(client: Client, consented: boolean) {
+    const team = this.state.players.get(client.sessionId).team;
     this.state.players.delete(client.sessionId);
     // reset admin
     if (this.state.players.size) {
       this.state.players.values().next().value.admin = true;
     }
+    // reactivate AI if noplayer does not re-join
+    const reactivateAi = () => {
+      let teams = [];
+      this.state.players.forEach(e => teams.push(e.team))
+      if (!teams.includes(team)) {
+        console.log('re-enabling ai', team);
+        const player = this.game.players.find(e => e.team === team)
+        if (player) {
+          player.ai.enabled = true;
+        }
+      }
+    }
+    this.clock.setTimeout(reactivateAi, rejoinTimeLimit);
   }
 
   // Cleanup callback, called after there are no more clients in the room. (see `autoDispose`)

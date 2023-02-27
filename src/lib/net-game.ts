@@ -246,7 +246,7 @@ export class GameSchema extends Schema {
         }
         tick.removed.forEach(sat => {
             // keep dead entites around a few seconds after delete to make sure they sync final state to client
-            this.toRemove.set(sat.id, this.gameTimeMS + 5000);
+            this.toRemove.set(sat.id, this.gameTimeMS + 10000);
             this.satellites.get(sat.id)?.synchronizeFromEntity();
         });
 
@@ -313,10 +313,13 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
     (game as any).planets = [];
     game.tick = (time) => {
         game.state.elapsedMS = time;
+        game.state.gameTimeMS = room.state.gameTimeMS;
         game.state.running = room.state.running;
-        // interpolate and returna result that is derived from the game log and removed satellies
-        // see below for state synchornization from colyseus callback
-        game.forEachEntity(ent => ent.tick(time));
+        if (room.state.gameTimeMS >= 0) {
+            // interpolate and return a result that is derived from the game log and removed satellies
+            // see below for state synchornization from colyseus callback
+            game.forEachEntity(ent => ent.tick(time));
+        }
         return game.state;
     };
 

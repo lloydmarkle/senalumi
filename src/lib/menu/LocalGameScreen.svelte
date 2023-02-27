@@ -21,13 +21,13 @@
         $game = new Game(initializerFromMap(map));
         const player = $game.players.find(p => p.team === $localPlayer.team);
         if (player) {
-            player.ai = null;
+            player.ai.enabled = false;
         }
         $game.start(0);
     }
 </script>
 
-<h1 transition:delayFly>Single player</h1>
+<h3 transition:delayFly>Single player</h3>
 <div class="vstack">
     <div transition:delayFly>Map</div>
     <MapChooser bind:selectedMap={map} />

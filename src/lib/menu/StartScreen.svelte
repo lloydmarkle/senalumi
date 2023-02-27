@@ -14,6 +14,6 @@
 
 <style>
 .large-button {
-    padding: 1rem 4rem;
+    padding: 1em 4em;
 }
 </style>

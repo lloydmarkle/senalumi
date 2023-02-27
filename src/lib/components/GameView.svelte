@@ -1,11 +1,22 @@
 <script lang="ts">
     import { onDestroy, onMount } from "svelte";
+    import { writable } from "svelte/store";
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
     import type { Game, Player } from "../game";
     import { Renderer } from "../render";
+    import { fly } from "svelte/transition";
 
     export let game: Game;
     export let player: Player = null;
+
+    let warmupTime = writable(0);
+    let warmupWatcher = setInterval(() => {
+        $warmupTime = game.state.gameTimeMS;
+        if (game.state.gameTimeMS >= 0) {
+            clearInterval(warmupWatcher)
+            $warmupTime = 0;
+        }
+    }, 0);
 
     let gfx: Renderer;
     let el: HTMLCanvasElement;
@@ -18,6 +29,19 @@
 </script>
 
 <canvas bind:this={el} />
+
+{#if $warmupTime < 0}
+<div
+    class="warmup-container vstack"
+    out:fly={{ y:-100, opacity: 0, duration: 1000 }}
+>
+    <strong>Warmup</strong>
+    <div class="hstack">
+        <span>Game starts in:</span>
+        <em>{($warmupTime / -1000).toFixed(1)} seconds</em>
+    </div>
+</div>
+{/if}
 
 {#if gfx && gfx.dbg.config.showPlanetStats}
     <WorldSpaceOverlay {gfx}>
@@ -42,5 +66,17 @@
         transform-origin: 0 0;
         padding: 0;
         margin: 0;
+    }
+
+    .warmup-container {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, 0);
+        gap: 0em;
+        padding: 1em 2em;
+        border-bottom-left-radius: 1em;
+        border-bottom-right-radius: 1em;
+        background: linear-gradient(to bottom, rgba(200, 200, 200, 0.2), rgba(200, 200, 200, 0.4));
     }
 </style>

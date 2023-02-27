@@ -22,6 +22,12 @@
         $menu = 'start';
     }
 
+    function leaveRoom() {
+        $room.leave();
+        $room = null;
+        $menu = 'remote';
+    }
+
     const demoGame = new Game();
     demoGame.start(0);
 </script>
@@ -45,7 +51,10 @@
             </div>
         {:else if $menu === 'lobby'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
+                <div class="hstack">
+                    <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
+                    <button transition:delayFly class="back-button" on:click={leaveRoom}><BackArrow />Multiplayer</button>
+                </div>
                 <RemoteLobbyScreen />
             </div>
         {/if}
@@ -62,20 +71,24 @@
 
     .menu-page {
         background: black;
-        padding: 1rem 4rem 4rem;
+        padding: 1em 4em 4em;
         align-self: center;
         justify-self: center;
         grid-row: 1;
         grid-column: 1;
+
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
     }
 
     button {
-        padding: 1rem 2rem;
+        text-align: start;
+        padding: 1em 2em;
     }
     .back-button {
         display: block;
-        padding: 0.5rem 2rem 0.5rem 0rem;
-        font-size: 2rem;
+        padding: 0.5em 0em;
         border: none;
         background: none;
     }

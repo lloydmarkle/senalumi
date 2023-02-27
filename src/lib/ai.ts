@@ -48,12 +48,16 @@ export interface AIConfig {
 }
 export abstract class AIPlayer {
     private nextThink: number;
+    enabled = true;
 
     constructor(readonly config: AIConfig) {}
 
     abstract tick(player: IPlayer, ms: number): void;
 
     protected shouldTick(ms: number) {
+        if (!this.enabled) {
+            return false;
+        }
         this.nextThink -= ms;
         if (this.nextThink > 0) {
             return false;

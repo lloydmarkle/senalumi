@@ -11,7 +11,7 @@
     }
 </script>
 
-<span transition:delayFly={3} class="hstack map-select">
+<div transition:delayFly={3} class="hstack map-select">
     {#each gameMaps as map}
         <button
             class:selected-map={selectedMap === map}
@@ -19,14 +19,15 @@
             <MapTile {map} />
         </button>
     {/each}
-</span>
+</div>
 
 <style>
     .map-select {
-        max-width: 60vw;
-        overflow-x: scroll;
-        gap: 2rem;
-        padding: 1rem 1rem;
+        max-height: calc(4em + 160px);
+        flex-wrap: wrap;
+        overflow-y: scroll;
+        gap: 1.2em;
+        padding: 1em 1em;
         background: #1a1a1a;
         justify-content: flex-start;
     }

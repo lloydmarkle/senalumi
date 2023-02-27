@@ -20,7 +20,7 @@ export const constants = {
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
     satelliteRadius: 8,
-    gameCountDown: 5, // seconds
+    gameCountDown: 10, // seconds
     // sprite is (currently) 300px
     planetRadius: 150,
 };
@@ -210,13 +210,13 @@ export function initializerFromMap(map: GameMap) {
 export class Player {
     readonly color: number;
     readonly satelliteColor: number;
-    constructor(readonly game: Game, readonly team: Team, public ai?: AIPlayer) {
+    constructor(readonly game: Game, readonly team: Team, readonly ai: AIPlayer) {
         this.color = setLightness(teamColor(team), 50);
         this.satelliteColor = setLightness(teamColor(team), 75);
     }
 
     tick(ms: number): void {
-        this.ai?.tick(this, ms);
+        this.ai.tick(this, ms);
     }
 
     selection(planet: Planet) {

@@ -37,7 +37,7 @@
     }
 </script>
 
-<h1 transition:delayFly>Multiplayer</h1>
+<h3 transition:delayFly>Multiplayer</h3>
 <div class="root vstack">
     <span transition:delayFly class="hstack">
         <label for="player-name">Player name</label>

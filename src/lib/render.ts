@@ -1,6 +1,6 @@
 import { backInOut, backOut, cubicIn, cubicOut } from 'svelte/easing';
 import { writable, type Readable, type Writable } from 'svelte/store';
-import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, ComboInterpolator } from './math';
+import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, ComboInterpolator, point } from './math';
 import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
@@ -321,8 +321,8 @@ export class Renderer {
 
         // create viewport
         const viewport = this.viewport = new Viewport({
-            worldWidth: 100000,
-            worldHeight: 100000,
+            worldWidth: game.config.maxWorld * 4,
+            worldHeight: game.config.maxWorld * 4,
             // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
             interaction: app.renderer.plugins.interaction,
         });
@@ -337,21 +337,26 @@ export class Renderer {
             .decelerate();
 
         viewport.clampZoom({
-            maxScale: 3,
+            maxScale: 3.5,
             minScale: 0.2,
         });
         viewport.clamp({
-            top: -game.config.maxWorld,
-            bottom: game.config.maxWorld,
-            left: -game.config.maxWorld,
-            right: game.config.maxWorld,
+            top: -game.config.maxWorld * 2,
+            bottom: game.config.maxWorld * 2,
+            left: -game.config.maxWorld * 2,
+            right: game.config.maxWorld * 2,
         });
+
+        // start screen animation
+        this.setScreenshotPosition();
         viewport.moveCenter(0, 0);
+        const startPosition = (player && game.planets.find(e => e.owner === player))?.position ?? point(0, 0);
         viewport.animate({
+            position: startPosition,
             removeOnInterrupt: true,
             ease: 'easeInOutQuad',
-            time: 5000,
-            scale: .4,
+            time: 3000,
+            scale: 1.5,
         });
 
         let strongBlur = new PIXI.filters.BlurFilter(50, 16);
@@ -482,25 +487,12 @@ export class Renderer {
 
     base64Screenshot() {
         const size = 128;
-        const margin = 200;
-        const halfMargin = margin * 0.5;
-
-        let bounds = PIXI.Rectangle.EMPTY;
-        for (const p of this.game.planets) {
-            const radius = p.orbitDistance;
-            const diameter = radius * 2;
-            bounds = bounds.enlarge(new PIXI.Rectangle(p.position.x - radius, p.position.y - radius, diameter, diameter));
-        }
-
         const corner = this.viewport.corner.clone();
         const scale = this.viewport.scale.clone();
         this.viewport.plugins.pause('clamp');
         this.viewport.plugins.pause('clamp-zoom');
         try {
-            const scale = Math.min(size / (bounds.width + margin), size / (bounds.height + margin));
-            this.viewport.scale.set(scale);
-            this.viewport.moveCorner(bounds.x - halfMargin, bounds.y - halfMargin);
-
+            this.setScreenshotPosition(size);
             // https://www.html5gamedevs.com/topic/23467-how-to-get-the-screen-buffer-as-an-image/
             let renderTexture = PIXI.RenderTexture.create({ width: size, height: size });
             this.app.renderer.render(this.viewport, { renderTexture });
@@ -514,6 +506,22 @@ export class Renderer {
             this.viewport.scale = scale;
             this.viewport.corner = corner;
         }
+    }
+
+    private setScreenshotPosition(size = 128) {
+        const margin = 200;
+        const halfMargin = margin * 0.5;
+
+        let bounds = PIXI.Rectangle.EMPTY;
+        for (const p of this.game.planets) {
+            const radius = p.orbitDistance;
+            const diameter = radius * 2;
+            bounds = bounds.enlarge(new PIXI.Rectangle(p.position.x - radius, p.position.y - radius, diameter, diameter));
+        }
+
+        const scale = Math.min(size / (bounds.width + margin), size / (bounds.height + margin));
+        this.viewport.scale.set(scale);
+        this.viewport.moveCorner(bounds.x - halfMargin, bounds.y - halfMargin);
     }
 }
 

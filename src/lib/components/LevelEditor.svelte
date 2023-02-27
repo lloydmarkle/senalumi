@@ -13,7 +13,7 @@
 
     function hackGame(game: Game) {
         game.start(0);
-        game.players.forEach(player => player.ai = null);
+        game.players.forEach(player => player.ai.enabled = false);
         game.pulse = () => {};
     }
     hackGame(game);
