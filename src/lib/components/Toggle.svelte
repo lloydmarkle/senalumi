@@ -13,17 +13,34 @@
 <style>
 button {
     color: white;
-    background-color: #000;
-    border-radius: 0.5rem;
-    padding: 0.5em 0.5em;
+    background-color: var(--theme-background-3);
+    border-radius: var(--theme-border-radius);
+    padding: 0.5em 1em;
+    position: relative;
 }
 button span {
     padding: 0 0.5em;
+    position: relative;
+    transition: color .2s ease-in-out;
 }
 
 [role="switch"][aria-checked="true"] :first-child,
 [role="switch"][aria-checked="false"] :last-child {
-    color: #000;
+    color: var(--theme-background-3);
+}
+
+button::before {
+    content: '';
+    position: absolute;
+    padding: .7em 1.2em;
     background: #fff;
+    border-radius: var(--theme-border-radius);
+    transition: transform .2s ease-in-out;
+}
+[role="switch"][aria-checked="false"]::before {
+    transform: translate(100%, 0);
+}
+[role="switch"][aria-checked="true"]::before {
+    color: var(--theme-background-3);
 }
 </style>

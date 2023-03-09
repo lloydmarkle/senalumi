@@ -11,7 +11,7 @@
     import { appContext } from "./context";
     import { fly } from 'svelte/transition';
 
-    const myFly = (el: Element) => fly(el, { y: -40, duration: 400, delay: 0 });
+    const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
     const { menu, room } = appContext();
     function goHome() {
@@ -32,7 +32,9 @@
     demoGame.start(0);
 </script>
 
-<!-- <GameView game={demoGame} /> -->
+<!-- <GameView
+    game={demoGame}
+    initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/> -->
 <OverlayBackground blurBackground>
     <div class="menu">
         {#if $menu === 'start'}
@@ -70,7 +72,7 @@
     }
 
     .menu-page {
-        background: black;
+        background: var(--theme-background-3);
         padding: 1em 4em 4em;
         align-self: center;
         justify-self: center;
@@ -80,6 +82,9 @@
         display: flex;
         flex-direction: column;
         align-items: stretch;
+        border-radius: var(--theme-border-radius);
+
+        box-shadow: 0em 3em 3em -1em var(--theme-background-2);
     }
 
     button {

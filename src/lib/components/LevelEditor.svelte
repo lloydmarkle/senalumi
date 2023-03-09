@@ -1,17 +1,22 @@
 <script lang="ts">
     import { fly } from 'svelte/transition';
-    import Select from './Select.svelte';
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
-    import { Game, type GameMap, Planet, type Team, initializerFromMap, Satellite } from "../game";
-    import { distSqr, originPoint, QuadTree } from "../math";
+    import TeamSelectionIcon from './TeamSelectionIcon.svelte';
+    import { Game, type GameMap, Planet, initializerFromMap, Satellite } from "../game";
+    import { distSqr, originPoint, point, QuadTree, type Point } from "../math";
     import type { Renderer } from "../render";
     import { playerTeams } from '../data';
+    import { appContext } from '../../context';
+
 
     export let mapProps: GameMap['props'];
     export let game: Game;
     export let gfx: Renderer;
 
+    const { menu } = appContext();
+
     function hackGame(game: Game) {
+        game.planets.forEach(p => p.destroy());
         game.start(0);
         game.players.forEach(player => player.ai.enabled = false);
         game.pulse = () => {};
@@ -20,12 +25,11 @@
 
     let drag = { planet: null };
     $: document.body.classList.toggle('dragging', drag.planet);
-    $: console.log('map props',mapProps)
 
-    let debugPlanet: Planet;
+    let selectedPlanet: Planet;
     function mouseUp(ev: MouseEvent) {
         drag.planet = null;
-        debugPlanet = null;
+        selectedPlanet = null;
 
         const worldPosition = gfx.viewport.toWorld(ev);
         const planetMap = new QuadTree<Planet>(1);
@@ -33,53 +37,73 @@
         game.planets.forEach(p => planetMap.insert(p, game.config.planetRadius));
         planetMap.query(worldPosition, 5, planet => {
             if (distSqr(planet.position, worldPosition) < radiusSquare) {
-                debugPlanet = planet
+                selectedPlanet = planet;
+                gfx.viewport.animate({
+                    position: selectedPlanet.position,
+                    time: 500,
+                    scale: .75,
+                    ease: 'easeInOutQuad',
+                });
             }
         });
     }
 
+    $: selectionNeighbours = selectedPlanet ? findNearest(selectedPlanet) : null;
+    function findNearest(planet: Planet) {
+        const mid = (p1: Point, p2: Point) => point((p1.x + p2.x) * .5, (p1.y + p2.y) * .5);
+        const sortedPlanets = game.planets
+            .sort((a, b) => distSqr(planet.position, a.position) - distSqr(planet.position, b.position));
+        const closePlanets = sortedPlanets.filter(p => p !== planet && distSqr(planet.position, p.position) < 1000000);
+        const planets = (closePlanets.length < 6) ? sortedPlanets.slice(0, 6) : closePlanets;
+        return planets.map<[Planet, number, Point]>(p => [p, Math.sqrt(distSqr(planet.position, p.position)), mid(planet.position, p.position)]);
+    }
+
     function mouseMove(ev: MouseEvent) {
         if (drag.planet) {
-            debugPlanet = debugPlanet; // hack to update selection box while dragging
+            selectedPlanet = selectedPlanet; // hack to update selection box while dragging
             const worldPosition = gfx.viewport.toWorld(ev);
             drag.planet.position.x = worldPosition.x;
             drag.planet.position.y = worldPosition.y;
         }
     }
 
-    function assignPlanetOwner(planet: Planet, team?: Team) {
+    function assignPlanetOwner(planet: Planet, team?: string) {
         const player = game.players.find(p => p.team === team);
         planet.capture(player);
         updatePlanet();
     }
 
     let promptDelete = false;
-    $: if (!debugPlanet) promptDelete = false;
+    $: if (!selectedPlanet) promptDelete = false;
     function deletePlanet(planet: Planet) {
-        debugPlanet = null;
+        let sats: Satellite[] = [];
+        game.collisionTree.query(planet.position, planet.orbitDistance * 2, sat => sats.push(sat));
+        sats.filter(sat => sat.owner === planet.owner).forEach(sat => sat.destroy());
+
+        selectedPlanet = null;
         game.planets = game.planets.filter(p => p !== planet);
         planet.destroy();
     }
 
     function newPlanet() {
-        debugPlanet = new Planet(game, originPoint(), 1);
-        game.planets = [...game.planets, debugPlanet];
+        selectedPlanet = new Planet(game, originPoint(), 1);
+        game.planets = [...game.planets, selectedPlanet];
     }
 
     function updatePlanet() {
         // svelte hack to update ui
-        debugPlanet = debugPlanet;
+        selectedPlanet = selectedPlanet;
 
         // update initial satellites
-        const expectedSatellites = debugPlanet.owner ? debugPlanet.initialSatellites : 0;
+        const expectedSatellites = selectedPlanet.owner ? selectedPlanet.initialSatellites : 0;
         let sats: Satellite[] = [];
-        game.collisionTree.query(debugPlanet.position, debugPlanet.orbitDistance * 2, sat => sats.push(sat));
+        game.collisionTree.query(selectedPlanet.position, selectedPlanet.orbitDistance * 2, sat => sats.push(sat));
         // remove any satellites from the team (if team changes)
-        sats.filter(s => s.owner !== debugPlanet.owner).forEach(s => s.destroy());
-        sats = sats.filter(s => s.owner === debugPlanet.owner);
+        sats.filter(s => s.owner !== selectedPlanet.owner).forEach(s => s.destroy());
+        sats = sats.filter(s => s.owner === selectedPlanet.owner);
         // add any new sats (when initial gets bigger)
         while (sats.length < expectedSatellites) {
-            game.spawnSatellite(debugPlanet);
+            game.spawnSatellite(selectedPlanet);
             sats.push(null); // placeholder just to change array length
         }
         // remove sats (when initial gets smaller)
@@ -137,59 +161,107 @@
         input.click();
         setTimeout(() => document.body.removeChild(input), 0);
     }
+
+    function hackPlanet(debugPlanet: Planet, prop: keyof Planet, value: any): any {
+        (debugPlanet as any)[prop] = value;
+        updatePlanet();
+    }
+
+    let planetLevels = [1, 2, 3, 4];
 </script>
 
 <svelte:body
     on:mouseup={mouseUp}
     on:mousemove={mouseMove} />
 
-<div class="world-settings vstack">
+<div class="world-settings hstack">
     <span>
-        <input type="text" name="map-name" id="map-name" bind:value={mapProps.name}>
         <label for="map-name">Map name</label>
+        <input type="text" name="map-name" id="map-name" bind:value={mapProps.name}>
     </span>
     <button on:click={newPlanet}>+ Planet</button>
     <button on:click={importMap}>Load</button>
     <button on:click={exportMap}>Save</button>
+    <button on:click={() => $menu = 'start'}>Quit</button>
 </div>
 
-{#if debugPlanet}
+{#if selectedPlanet}
     <WorldSpaceOverlay {gfx}>
-        <div in:fly={{ y: -10 }} style="--planet-radius:{game.config.planetRadius * 2}px; transform:translate({debugPlanet.position.x}px, {debugPlanet.position.y}px)">
+        <svg
+            aria-hidden="true"
+            class="svg-box"
+            viewBox="{-game.config.maxWorld} {-game.config.maxWorld} {game.config.maxWorld * 2} {game.config.maxWorld * 2}"
+            xmlns="http://www.w3.org/2000/svg">
+            {#each selectionNeighbours as [neighbour, dist, mid]}
+                <circle
+                    cx="{neighbour.position.x}"
+                    cy="{neighbour.position.y}"
+                    r="{10}" fill="#fff" />
+                <text fill="#fff" x={mid.x} y={mid.y}>{dist.toFixed(2)}</text>
+                <path fill="none" stroke="#fff" d="M{selectedPlanet.position.x},{selectedPlanet.position.y} L{neighbour.position.x},{neighbour.position.y}" />
+            {/each}
+        </svg>
+
+        <div in:fly={{ y: -10 }}
+            class="planet-editor"
+            style="--planet-radius:{game.config.planetRadius * 2}px; height:0; transform:translate({selectedPlanet.position.x}px, {selectedPlanet.position.y}px)"
+        >
             <div class="planet-box">
                 <div
                     class="drag-box"
-                    on:mousedown|stopPropagation={() => drag.planet = debugPlanet}
+                    on:mousedown|stopPropagation={() => drag.planet = selectedPlanet}
                 >Move</div>
             </div>
-            <div on:mouseup|stopPropagation class="planet-editor">
-                <span class="hstack">
-                    <input type="range" min="1" max="4" bind:value={debugPlanet.maxLevel} on:change={updatePlanet} />
-                    <span>Max Level {debugPlanet.maxLevel}</span>
-                </span>
-                <span class="hstack">
-                    <input type="range" min={debugPlanet.owner ? 1 : 0} max={debugPlanet.maxLevel} on:change={updatePlanet} bind:value={debugPlanet.level} />
-                    <span>Level {debugPlanet.level} (max {debugPlanet.maxLevel})</span>
-                </span>
-                <span class="hstack">
-                    <span>Team</span>
-                    <Select options={playerTeams} value={debugPlanet.owner?.team} on:select={ev => assignPlanetOwner(debugPlanet, ev.detail.value)} />
-                </span>
-                {#if debugPlanet.owner}
-                <span class="hstack">
-                    <input type="range" min="0" max="1000" step="25" on:change={updatePlanet} bind:value={debugPlanet.initialSatellites} />
-                    <span>Initial satellites {debugPlanet.initialSatellites}</span>
-                </span>
+            <div on:mouseup|stopPropagation class="planet-props">
+                <div class="hstack">
+                    <span>Max Level {selectedPlanet.maxLevel}</span>
+                    <div>
+                        {#each planetLevels as level}
+                            <button
+                                on:click={() => hackPlanet(selectedPlanet, 'maxLevel', level)}
+                                class:selected-button={level === selectedPlanet.maxLevel}
+                            >{level}</button>
+                        {/each}
+                    </div>
+                </div>
+                {#if selectedPlanet.owner}
+                    <div class="hstack">
+                        <span>Starting level {selectedPlanet.level}</span>
+                        <div>
+                            {#each planetLevels as level}
+                                <button
+                                    on:click={() => hackPlanet(selectedPlanet, 'level', level)} disabled={level > selectedPlanet.maxLevel}
+                                    class:selected-button={level === selectedPlanet.level}
+                                >{level}</button>
+                            {/each}
+                        </div>
+                    </div>
                 {/if}
-                <span class="hstack">
+                <div class="hstack">
+                    <span>Team</span>
+                    <div>
+                        {#each playerTeams as team}
+                            <button class="list-button" on:click={() => assignPlanetOwner(selectedPlanet, team.value)}>
+                                <TeamSelectionIcon color={team.value} />
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+                {#if selectedPlanet.owner}
+                    <div class="hstack">
+                        <span>Initial satellites {selectedPlanet.initialSatellites}</span>
+                        <input type="range" min="0" max="1000" step="25" on:change={updatePlanet} bind:value={selectedPlanet.initialSatellites} />
+                    </div>
+                {/if}
+                <div class="hstack">
                     {#if promptDelete}
-                        <span>Confirm delete?</span>
-                        <button on:click={() => deletePlanet(debugPlanet)}>Yes</button>
+                        <span>Really delete?</span>
+                        <button on:click={() => deletePlanet(selectedPlanet)}>Yes</button>
                         <button on:click={() => promptDelete = false}>No</button>
                     {:else}
                         <button on:click={() => promptDelete = true}>Delete</button>
                     {/if}
-                </span>
+                </div>
             </div>
         </div>
     </WorldSpaceOverlay>
@@ -198,15 +270,26 @@
 <style>
     .world-settings {
         position: fixed;
-        bottom: 5rem;
-        right: 4rem;
+        top: 1em;
+        right: 2em;
         padding: 1rem 2rem;
         opacity: 0.2;
-        background: grey;
+        background: var(--theme-background);
+        border-radius: var(--theme-border-radius);
         transition: opacity 0.3s
     }
     .world-settings:hover {
         opacity:1
+    }
+
+    .list-button {
+        background: var(--theme-background);
+        padding: 0;
+    }
+    .selected-button {
+        z-index: 1;
+        position: relative;
+        box-shadow: 0px 0px 4px 2px var(--theme-link);
     }
 
     .world-settings button {
@@ -222,18 +305,18 @@
     }
     .drag-box::before {
         position: absolute;
-        top: -1em;
-        left: -1em;
-        border-radius: 100%;
+        transform: translate(-33%, -40%);
         width: 8em;
         height: 8em;
+        border-radius: 100%;
         content:'';
-        background:rgba(0, 0, 0, .4);
+        box-shadow: 0px 0px 6px 1px var(--theme-foreground);
+        background: var(--theme-gradient-bg1);
         transition: background 0.2s;
         z-index: -1;
     }
     .drag-box:hover::before {
-        background: rgba(0, 0, 0, .7);
+        background: var(--theme-gradient-fg1);
     }
     .drag-box:active {
         filter: invert(20%);
@@ -247,31 +330,38 @@
         gap: 0.5rem
     }
 
-    .vstack {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-around;
-        gap: 1rem
+    .svg-box {
+        position:absolute;
+        top:0; bottom:0; left:0; right:0;
+        transform: translate(-50%, -50%) scale(15.6 /* but.... why?? */);
+        pointer-events:none;
     }
+
     .planet-editor {
         position: relative;
-        top: calc(var(--planet-radius) * -1.5);
-        left: calc(var(--planet-radius) * 0.5);
+    }
+    .planet-props {
+        position: relative;
+        transform: translateX(-50%);
+        top: calc(var(--planet-radius) * -0.5);
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
         padding: 1rem 2rem;
-        background: linear-gradient(to bottom, rgba(50, 50, 50, 0.9), rgba(50, 50, 50, 0.8));
-        box-shadow: 0px 0px 4px 2px blue;
+        border-bottom-right-radius: var(--theme-border-radius);
+        border-bottom-left-radius: var(--theme-border-radius);
+        background: linear-gradient(to bottom, var(--theme-gradient-fg1), var(--theme-gradient-fg2));
+        box-shadow: 0px 0px 4px 2px var(--theme-link);
     }
 
     .planet-box {
         position: relative;
-        top: calc(var(--planet-radius) * -0.5);
-        left: calc(var(--planet-radius) * -0.5);
+        transform: translate(-50%, -50%);
         width: var(--planet-radius);
         height: var(--planet-radius);
-        box-shadow: 0px 0px 4px 2px blue;
+        box-shadow: 0px -1px 4px 2px var(--theme-link);
+        border-top-right-radius: var(--theme-border-radius);
+        border-top-left-radius: var(--theme-border-radius);
 
         display: flex;
         justify-content: center;

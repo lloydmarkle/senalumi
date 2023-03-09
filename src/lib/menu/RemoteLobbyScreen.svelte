@@ -202,12 +202,12 @@
     th {
         text-align: left;
         background: rgb(200, 200, 200, 0.4);
-        padding: 1rem 2rem;
+        padding: 1rem .5rem;
     }
     tbody tr:nth-child(even) {
         background: rgb(200, 200, 200, 0.2);
     }
     td {
-        padding: 1rem 2rem;
+        padding: 1rem .5rem;
     }
 </style>

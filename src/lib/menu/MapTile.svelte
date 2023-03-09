@@ -15,8 +15,8 @@
         aspect-ratio: 1;
         width: 160px;
         position: relative;
-        background: black;
-        border-radius: 1rem;
+        background: var(--theme-background-3);
+        border-radius: var(--theme-border-radius);
     }
     img {
         position: relative;

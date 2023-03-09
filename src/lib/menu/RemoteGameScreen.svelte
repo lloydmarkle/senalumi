@@ -72,7 +72,7 @@
             </thead>
             <tbody transition:delayFly={0}>
                 {#each rooms as room}
-                    <tr transition:delayFly>
+                    <tr>
                         <td>{room.metadata.label}</td>
                         <td>{room.metadata.state}</td>
                         <td>{room.clients} / {room.maxClients ?? 16}</td>
@@ -94,6 +94,9 @@
         position: absolute;
     }
 
+    .root {
+        min-width: 60vw;
+    }
     .grid-box {
         display: grid;
         width: 100%;
@@ -103,19 +106,26 @@
     table {
         table-layout: fixed;
         border-collapse: collapse;
+        min-height: 16em;
+        max-height: 24em;
+        width: 100%;
+        display: block;
+        overflow-y: scroll;
     }
-    thead th:nth-child(3) {
-        width: 80%;
+    thead th:nth-child(1) {
+        width: 100%;
     }
     th {
+        position: sticky;
+        top: 0;
         text-align: left;
-        background: rgb(200, 200, 200, 0.4);
-        padding: 1rem 2rem;
+        background: var(--theme-background);
+        padding: 1em .5em;
     }
     tbody tr:nth-child(even) {
         background: rgb(200, 200, 200, 0.2);
     }
     td {
-        padding: 1rem 2rem;
+        padding: 1em .5em;
     }
 </style>

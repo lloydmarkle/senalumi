@@ -123,8 +123,9 @@
         padding: 0.5em 0em;
     }
     .debug-background {
-        background: linear-gradient(to bottom, rgba(200, 200, 200, 0.1), rgba(200, 200, 200, 0.3));
+        background: var(--theme-gradient-background);
         backdrop-filter: blur(10px);
+        border-radius: var(--theme-border-radius);
     }
 
     .banner {

@@ -33,13 +33,13 @@
     .themed {
         max-width: 15rem;
         --height: 3rem;
-        --background: black;
-        --listBackground: black;
-        --itemActiveBackground: rgba(200, 200, 200, 0.4);
-        --itemHoverBG: rgba(200, 200, 200, 0.2);
+        --background: var(--theme-background-3);
+        --listBackground: var(--theme-background-3);
+        --itemActiveBackground: var(--theme-gradient-bg1);
+        --itemHoverBG: var(--theme-gradient-bg2);
         --itemPadding: 0.25rem 0.5rem;
-        --borderRadius: 0px;
-        --itemFirstBorderRadius: 0px;
-        --listBorderRadius: 0px;
+        --borderRadius: var(--theme-border-radius);
+        --itemFirstBorderRadius: var(--theme-border-radius);
+        --listBorderRadius: var(--theme-border-radius);
     }
 </style>

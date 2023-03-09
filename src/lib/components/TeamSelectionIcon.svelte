@@ -5,6 +5,7 @@
     export let color = 'red';
     $: fillColor = '#' + teamColor(color as Team).toString(16);
 
+    const mid = size / 2;
     const csize = size / 3;
 </script>
 <svg
@@ -13,5 +14,5 @@
   height="{size}px"
   viewBox="0 0 {size} {size}"
   xmlns="http://www.w3.org/2000/svg">
-  <circle cx="{csize}" cy="{csize + size / 6}" r="{csize}" fill="{fillColor}"/>
+  <circle cx="{mid}" cy="{mid}" r="{csize}" fill="{fillColor}"/>
 </svg>

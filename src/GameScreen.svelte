@@ -84,7 +84,7 @@
     .scoreboard {
         align-items: flex-start;
 		margin: 0 auto;
-        background: rgba(0,0,0, 0.5);
+        background: var(--theme-gradient-fg2);
         width: 80vw;
     }
     .chart {

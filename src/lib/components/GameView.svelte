@@ -5,9 +5,11 @@
     import type { Game, Player } from "../game";
     import { Renderer } from "../render";
     import { fly } from "svelte/transition";
+    import type { IAnimateOptions } from "pixi-viewport";
 
     export let game: Game;
     export let player: Player = null;
+    export let initialZoom: IAnimateOptions = null;
 
     let warmupTime = writable(0);
     let warmupWatcher = setInterval(() => {
@@ -22,6 +24,9 @@
     let el: HTMLCanvasElement;
     onMount(() => {
         gfx = new Renderer(el, game, player);
+        if (initialZoom) {
+            gfx.viewport.animate(initialZoom);
+        }
     });
     onDestroy(() => {
         gfx.destroy();
@@ -75,8 +80,8 @@
         transform: translate(-50%, 0);
         gap: 0em;
         padding: 1em 2em;
-        border-bottom-left-radius: 1em;
-        border-bottom-right-radius: 1em;
-        background: linear-gradient(to bottom, rgba(200, 200, 200, 0.2), rgba(200, 200, 200, 0.4));
+        border-bottom-left-radius: var(--theme-border-radius);
+        border-bottom-right-radius: var(--theme-border-radius);
+        background: var(--theme-gradient-background);
     }
 </style>

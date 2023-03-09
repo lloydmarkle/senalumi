@@ -7,7 +7,7 @@
 {#if $viewport}
 <div class="viewport-content-container">
     <div class="viewport-transform" style="transform:translate({$viewport.tx}px, {$viewport.ty}px) scale({$viewport.scale})">
-        <slot />
+      <slot />
     </div>
 </div>
 {/if}
@@ -21,11 +21,9 @@
     overflow: hidden;
   }
   .viewport-transform {
-    top: 0; left: 0;
     position: absolute;
+    height: 0;
     pointer-events: auto;
     transform-origin: 0 0;
-    padding: 0;
-    margin: 0;
   }
 </style>

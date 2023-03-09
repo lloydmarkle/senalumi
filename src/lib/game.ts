@@ -451,7 +451,7 @@ export class Planet implements Entity {
     capture(owner: Player) {
         this._health = 100;
         this._upgrade = 0;
-        this.level = 1;
+        this.level = owner ? 1 : 0;
         this._candidateOwner = null;
         this._owner = owner;
     }

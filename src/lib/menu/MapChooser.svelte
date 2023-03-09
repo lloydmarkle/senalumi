@@ -23,6 +23,7 @@
 
 <style>
     .map-select {
+        border-radius: var(--theme-border-radius);
         max-height: calc(4em + 160px);
         flex-wrap: wrap;
         overflow-y: scroll;
@@ -34,9 +35,20 @@
 
     button {
         padding: 0;
+        position: relative;
     }
 
-    .selected-map {
-        box-shadow: 0px 0px 2px 4px cornflowerblue;
+    button::after {
+        content: '';
+        position: absolute;
+        display: block;
+        top:0; bottom:0; left:0; right: 0;
+        transition: opacity 0.5s ease-in-out;
+        opacity: 0;
+        box-shadow: 0px 0px 8px 6px var(--theme-link);
+        border-radius: var(--theme-border-radius);
+    }
+    .selected-map::after {
+        opacity: 1;
     }
 </style>
