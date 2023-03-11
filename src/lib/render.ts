@@ -457,7 +457,15 @@ export class Renderer {
         app.ticker.add((delta) => {
             this.viewstate.set({ tx: viewport.x, ty: viewport.y, scale: viewport.scaled });
             this.dbg.tick(app);
-            const state = game.tick(app.ticker.elapsedMS);
+            let elapsedMS = app.ticker.elapsedMS;
+            // if we switch tabs, elapsedMS can get very large (seconds or minutes) and that will
+            // mess up physics so process large pauses in 50ms increments. 50ms is chosen arbitrarily
+            // here's more background https://codeincomplete.com/articles/javascript-game-foundations-the-game-loop/
+            while (elapsedMS > 50) {
+                game.tick(50);
+                elapsedMS -= 50;
+            }
+            const state = game.tick(elapsedMS);
 
             game.forEachEntity(entity => {
                 if (!entity.gfx) {
