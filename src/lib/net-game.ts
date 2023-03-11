@@ -14,6 +14,7 @@ export class PlayerSchema extends Schema {
         public ready = false,
         public admin = false,
         public team: Team = '' as any,
+        public ping = 0,
     ) { super() }
 }
 defineTypes(PlayerSchema, {
@@ -21,6 +22,7 @@ defineTypes(PlayerSchema, {
     team: 'string',
     admin: 'boolean',
     ready: 'boolean',
+    ping: 'number',
 });
 
 export class PlanetSchema extends Schema {
@@ -244,11 +246,13 @@ export class GameSchema extends Schema {
                 this.satellites.delete(entityId);
             }
         }
+
+        // keep removed entites around a few seconds after delete to make sure they sync final state to client
         tick.removed.forEach(sat => {
-            // keep dead entites around a few seconds after delete to make sure they sync final state to client
             this.toRemove.set(sat.id, this.gameTimeMS + 10000);
-            this.satellites.get(sat.id)?.synchronizeFromEntity();
+            this.satellites.get(sat.id).synchronizeFromEntity();
         });
+        tick.removed.clear();
 
         game.forEachEntity(ent => {
             if (ent.type === 'Planet') {
@@ -280,32 +284,32 @@ import * as Colyseus from 'colyseus.js';
 import { point, type Point } from './math';
 
 export async function listGameRooms() {
-    const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
     try {
+        const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
         const rooms = await client.getAvailableRooms('auralux');
         return rooms;
-    } catch(e) {
-        console.log("ROOM ERROR", e);
+    } catch (e) {
+        console.error('Unable to list game rooms', e);
+        return [];
     }
 }
 
 //  hack the game into a client-only mode
 export async function joinRemoteGame(playerName: string, gameName: string) {
     const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
-    // client.getAvailableRooms('auralux');
-    try {
-        const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { playerName, label: gameName });
-        room.onError((code, msg) => {
-            console.error('error', code, msg);
-        });
-        room.onLeave((code) => {
-            console.log('leave', code);
-        });
-        room.onMessage('message', m => console.log(m));
-        return room;
-    } catch(e) {
-        console.log("JOIN ERROR", e);
-    }
+    const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { playerName, label: gameName });
+
+    room.onError((code, msg) => {
+        console.error('error', code, msg);
+    });
+
+    room.onMessage('ping', () => room.send('pong'));
+
+    room.onLeave((code) => {
+        console.log('leave-code', code);
+    });
+
+    return room;
 }
 
 export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>) {

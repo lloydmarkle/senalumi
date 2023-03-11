@@ -15,7 +15,7 @@
     let warmupWatcher = setInterval(() => {
         $warmupTime = game.state.gameTimeMS;
         if (game.state.gameTimeMS >= 0) {
-            clearInterval(warmupWatcher)
+            clearInterval(warmupWatcher);
             $warmupTime = 0;
         }
     }, 0);
@@ -29,6 +29,7 @@
         }
     });
     onDestroy(() => {
+        clearInterval(warmupWatcher);
         gfx.destroy();
     });
 </script>
@@ -38,7 +39,7 @@
 {#if $warmupTime < 0}
 <div
     class="warmup-container vstack"
-    out:fly={{ y:-100, opacity: 0, duration: 1000 }}
+    transition:fly|local={{ y:-100, opacity: 0, duration: 1000 }}
 >
     <strong>Warmup</strong>
     <div class="hstack">

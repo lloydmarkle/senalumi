@@ -1,13 +1,14 @@
 <script lang="ts">
     import Select from '../components/Select.svelte';
     import { Game, type GameMap } from '../game';
-    import { convertToRemoteGame, type PlayerSchema } from '../net-game';
+    import { convertToRemoteGame, PlayerSchema,  } from '../net-game';
     import { delayFly, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
     import { availableTeamsFromMap, playerTeams } from '../data';
     import MapChooser from './MapChooser.svelte';
     import MapTile from './MapTile.svelte';
+    import { tick } from 'svelte';
 
     const { localPlayer, room, game } = appContext();
 
@@ -37,16 +38,23 @@
                 ? ($localPlayer = player)
                 : player
         ));
-    resetPlayers();
+    gameState.players.forEach(player => {
+        player.onChange = resetPlayers;
+        player.onRemove = resetPlayers;
+    })
     gameState.players.onAdd = player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
         resetPlayers();
     };
+    resetPlayers();
 
-    gameState.onChange = () => {
+    gameState.onChange = async () => {
         gameState = $room.state;
         if (gameState.running && !$game) {
+            // clear gameState callbacks so we don't keep holding a reference to this component
+            gameState.onChange = null;
+            gameState.config.onChange = null;
             $game = convertToRemoteGame(new Game(), $room);
         }
     }
@@ -128,6 +136,7 @@
             <th>Ready</th>
             <th>Name</th>
             <th>Team</th>
+            <th>Latency</th>
         </tr>
     </thead>
     <tbody>
@@ -138,6 +147,7 @@
             <td><input type="checkbox" bind:checked={player.ready}  on:change={() => updatePlayer(player)} /></td>
             <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
             <td><Select options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+            <td>{player.ping}ms</td>
         {:else}
             <td>{player.admin ? 'Admin' : ''}</td>
             <td>{player.ready ? 'Ready' : 'Not ready'}</td>
@@ -148,6 +158,7 @@
                     <span>{teamName(player.team)}</span>
                 </div>
             </td>
+            <td>{player.ping}ms</td>
         {/if}
         </tr>
     {/each}
@@ -194,20 +205,28 @@
     table {
         table-layout: fixed;
         border-collapse: collapse;
-        /* width: 100px; */
+        width: 100px;
+        min-height: 8em;
+        max-height: 16em;
+        width: 100%;
+        display: block;
+        overflow-y: scroll;
     }
     thead th:nth-child(3) {
         width: 80%;
     }
     th {
         text-align: left;
-        background: rgb(200, 200, 200, 0.4);
-        padding: 1rem .5rem;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--theme-background);
+        padding: 1em .5em;
     }
     tbody tr:nth-child(even) {
         background: rgb(200, 200, 200, 0.2);
     }
     td {
-        padding: 1rem .5rem;
+        padding: .5em .5em;
     }
 </style>

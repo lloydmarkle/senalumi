@@ -552,6 +552,10 @@ class PlanetMover implements Mover {
 function applyImpact(moveable: Moveable, point: Point, impact: number, rate: number) {
     let dirX = point.x - moveable.position.x;
     let dirY = point.y - moveable.position.y;
+    if (dirX === dirY && dirX === 0) {
+        // do nothing because this will give us div/0 below
+        return;
+    }
     const invLen = 1 / Math.sqrt(dirX * dirX + dirY * dirY);
     dirX *= invLen;
     dirY *= invLen;
@@ -657,7 +661,8 @@ export class Satellite implements Entity, Moveable {
         this.mover = nullMover;
         const angle = Math.random() * Math.PI * 2;
         const speed = Math.random() * constants.maxSatelliteVelocity;
-        self.velocity = point(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        self.velocity.x = Math.cos(angle) * speed;
+        this.velocity.y = Math.sin(angle) * speed;
         return this;
     }
 

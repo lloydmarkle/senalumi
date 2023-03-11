@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { setContext } from 'svelte';
+    import { afterUpdate, beforeUpdate, setContext } from 'svelte';
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
@@ -27,7 +27,7 @@
     // $game = new Game();
     // $game = new Game(p2Game);
     // $localPlayer.team = $game.players[0].team;
-    // $game.start(0);
+    // $game.start(5);
 </script>
 
 {#if $menu === 'edit'}

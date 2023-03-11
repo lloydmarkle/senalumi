@@ -12,6 +12,10 @@
 
     let players: PlayerSchema[] = [];
     const resetPlayers = () => players = Array.from(gameState.players.values());
+    gameState.players.forEach(player => {
+        player.onChange = resetPlayers;
+        player.onRemove = resetPlayers;
+    });
     gameState.players.onAdd = player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
@@ -40,7 +44,7 @@
                     <span>{teamName(player.team)}</span>
                 </div>
             </td>
-            <td>0ms</td>
+            <td>{player.ping}ms</td>
         </tr>
     {/each}
     </tbody>

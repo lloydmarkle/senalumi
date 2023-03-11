@@ -80,6 +80,7 @@
         grid-column: 1;
 
         display: flex;
+        position:relative;
         flex-direction: column;
         align-items: stretch;
         border-radius: var(--theme-border-radius);

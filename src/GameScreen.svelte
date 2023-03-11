@@ -10,24 +10,29 @@
 
     const { room, menu, game, localPlayer } = appContext();
     async function quitGame() {
-        $menu = 'start';
+        showScore = false;
         $room?.leave();
         $room = null;
         $game = null;
+        $menu = 'start';
     }
 
     let gameState = $game.log || [];
-    const int = setInterval(() => {
+    const scoreUpdateInterval = setInterval(() => {
         gameState = $game.log || []
     }, 5000);
     onDestroy(() => {
-        clearInterval(int);
+        clearInterval(scoreUpdateInterval);
     })
 
     let player: Player;
     $: if ($game && $localPlayer.team) {
         player = $game.players.find(p => p.team === $localPlayer.team);
     }
+
+    $room.onLeave(() => {
+
+    })
 
     let showScore = false;
     let showDebugOptions = false;
@@ -70,9 +75,7 @@
     {/if}
 
     {#if $room}
-        <div>
-            <PlayerTable room={$room} />
-        </div>
+
     {/if}
 
     {#if showDebugOptions}
