@@ -11,6 +11,7 @@
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
+    import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     const { localPlayer } = context;
     let p2Game = g => {
         g.planets = [

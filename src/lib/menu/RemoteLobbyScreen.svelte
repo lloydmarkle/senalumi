@@ -8,7 +8,6 @@
     import { availableTeamsFromMap, playerTeams } from '../data';
     import MapChooser from './MapChooser.svelte';
     import MapTile from './MapTile.svelte';
-    import { tick } from 'svelte';
 
     const { localPlayer, room, game } = appContext();
 
