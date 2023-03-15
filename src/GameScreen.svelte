@@ -9,7 +9,6 @@
     import { onDestroy } from "svelte";
     import { writable } from "svelte/store";
     import { fly } from "svelte/transition";
-    import Toggle from "./lib/components/Toggle.svelte";
     import ExpandingMenu from "./lib/components/ExpandingMenu.svelte";
 
     const { room, menu, game, localPlayer } = appContext();
@@ -104,13 +103,13 @@
     {#if showDebugOptions}
         <DebugOptions game={$game} {gfx} />
     {/if}
-
-    <div class="menu-toggle">
-        <ExpandingMenu>
-            <button on:click={quitGame}>Quit</button>
-        </ExpandingMenu>
-    </div>
 </GameView>
+
+<div class="menu-toggle">
+    <ExpandingMenu>
+        <button on:click={quitGame}>Quit</button>
+    </ExpandingMenu>
+</div>
 
 <style>
     .scoreboard {

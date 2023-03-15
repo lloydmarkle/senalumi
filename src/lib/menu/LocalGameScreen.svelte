@@ -1,10 +1,10 @@
 <script lang="ts">
-    import Select from '../components/Select.svelte';
     import { Game, initializerFromMap, type GameMap, type Team } from '../game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
     import MapChooser from './MapChooser.svelte';
     import { availableTeamsFromMap, playerTeams } from '../data';
+    import TeamSelect from '../components/TeamSelect.svelte';
 
     let { game, localPlayer } = appContext();
     let map: GameMap = null;
@@ -15,7 +15,11 @@
             ...availableTeamsFromMap(map),
         ];
     }
-    $: $localPlayer.team = availableTeams[1 + Math.floor(Math.random() * (availableTeams.length - 1))].value as Team;
+    $: $localPlayer.team = $localPlayer.team !== undefined && availableTeams.find(t => t.value === $localPlayer.team)
+        ? $localPlayer.team : selectRandom(availableTeams).value as Team;
+
+    const selectRandom = (items: any[]) =>
+        items[1 + Math.floor(Math.random() * (items.length - 1))];
 
     function startGame() {
         $game = new Game(initializerFromMap(map));
@@ -33,10 +37,23 @@
     <MapChooser bind:selectedMap={map} />
     <span transition:delayFly class="hstack">
         <div>Team</div>
-        <Select options={availableTeams} bind:value={$localPlayer.team} on:select={ev => $localPlayer.team = ev.detail.value} />
+        <TeamSelect options={availableTeams} bind:value={$localPlayer.team} />
+        {#if !$localPlayer.team}
+            <span class="watching">(Watch)</span>
+        {/if}
     </span>
     <button
         transition:delayFly
         disabled={map === null}
         on:click={startGame}>Launch</button>
 </div>
+
+<style>
+    .watching {
+        animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: .6; }
+        40%, 60% { opacity: 1; }
+    }
+</style>

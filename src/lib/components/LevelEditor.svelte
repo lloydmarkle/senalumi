@@ -7,6 +7,7 @@
     import type { Renderer } from "../render";
     import { playerTeams } from '../data';
     import { appContext } from '../../context';
+    import TeamSelect from './TeamSelect.svelte';
 
 
     export let mapProps: GameMap['props'];
@@ -239,13 +240,7 @@
                 {/if}
                 <div class="hstack">
                     <span>Team</span>
-                    <div>
-                        {#each playerTeams as team}
-                            <button class="list-button" on:click={() => assignPlanetOwner(selectedPlanet, team.value)}>
-                                <TeamSelectionIcon color={team.value} />
-                            </button>
-                        {/each}
-                    </div>
+                    <TeamSelect options={playerTeams} value={selectedPlanet?.owner?.team} on:select={ev => assignPlanetOwner(selectedPlanet, ev.detail.team)} />
                 </div>
                 {#if selectedPlanet.owner}
                     <div class="hstack">

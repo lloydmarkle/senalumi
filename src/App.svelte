@@ -12,6 +12,7 @@
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
+    import VolumeControl from './lib/components/VolumeControl.svelte';
     const { localPlayer } = context;
     let p2Game = g => {
         g.planets = [
@@ -38,3 +39,11 @@
 {:else}
     <MenuScreen />
 {/if}
+
+<ExpandingMenu>
+    <button>Quit</button>
+    <VolumeControl />
+    <button>Sound</button>
+    <button>Other</button>
+    <button>More stuff</button>
+</ExpandingMenu>

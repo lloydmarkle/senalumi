@@ -1,5 +1,4 @@
 <script lang="ts">
-    import Select from '../components/Select.svelte';
     import { Game, type GameMap } from '../game';
     import { convertToRemoteGame, PlayerSchema,  } from '../net-game';
     import { delayFly, fly } from './transitions';
@@ -8,6 +7,7 @@
     import { availableTeamsFromMap, playerTeams } from '../data';
     import MapChooser from './MapChooser.svelte';
     import MapTile from './MapTile.svelte';
+    import TeamSelect from '../components/TeamSelect.svelte';
 
     const { localPlayer, room, game } = appContext();
 
@@ -145,7 +145,7 @@
             <td>{player.admin ? 'Admin' : ''}</td>
             <td><input type="checkbox" bind:checked={player.ready}  on:change={() => updatePlayer(player)} /></td>
             <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
-            <td><Select options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+            <td><TeamSelect size={24} options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
             <td>{player.ping}ms</td>
         {:else}
             <td>{player.admin ? 'Admin' : ''}</td>
