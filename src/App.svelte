@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { afterUpdate, beforeUpdate, setContext } from 'svelte';
+    import { setContext } from 'svelte';
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
@@ -7,12 +7,13 @@
 
     let context = new Context();
     setContext(key, context);
-    const { game, menu } = context;
+    const { game, menu, prefs, audio, room } = context;
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     import VolumeControl from './lib/components/VolumeControl.svelte';
+    import Toggle from './lib/components/Toggle.svelte';
     const { localPlayer } = context;
     let p2Game = g => {
         g.planets = [
@@ -30,7 +31,24 @@
     // $game = new Game(p2Game);
     // $localPlayer.team = $game.players[0].team;
     // $game.start(5);
+
+    let quitToggle = false;
+    function quitGame() {
+        $room?.leave();
+        $room = null;
+        $game = null;
+        $menu = 'start';
+    }
+
+    function initializeAudio() {
+        audio.resume();
+        audio.volume($prefs.soundVolume);
+    }
+
+    $: hasGame = !!$game;
 </script>
+
+<svelte:window on:click|once={initializeAudio} />
 
 {#if $menu === 'edit'}
     <LevelEditorScreen />
@@ -40,10 +58,37 @@
     <MenuScreen />
 {/if}
 
-<ExpandingMenu>
-    <button>Quit</button>
-    <VolumeControl />
-    <button>Sound</button>
-    <button>Other</button>
-    <button>More stuff</button>
-</ExpandingMenu>
+<div class="prefs-menu">
+    <ExpandingMenu isOpen={!hasGame} closeable={hasGame}>
+        <VolumeControl bind:volume={$prefs.soundVolume} />
+        {#if !$game}
+            <Toggle id={"background-demo"} bind:state={$prefs.showDemoGame}>Demo game</Toggle>
+        {/if}
+        {#if $game}
+            <div>
+                {#if quitToggle}
+                    <span>Really leave?</span>
+                    <button on:click={() => quitGame()}>Yes</button>
+                    <button on:click={() => quitToggle = false}>No</button>
+                {:else}
+                    <button on:click={() => quitToggle = true}>Quit</button>
+                {/if}
+            </div>
+        {/if}
+    </ExpandingMenu>
+</div>
+
+<style>
+    .prefs-menu {
+        position: fixed;
+        top: 1em;
+        left: 1em;
+        opacity: 0.3;
+        background: var(--theme-background);
+        border-radius: var(--theme-border-radius);
+        transition: opacity 0.3s;
+    }
+    .prefs-menu:hover {
+        opacity: .8
+    }
+</style>

@@ -1,14 +1,12 @@
 <script lang="ts">
     import { fly } from 'svelte/transition';
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
-    import TeamSelectionIcon from './TeamSelectionIcon.svelte';
     import { Game, type GameMap, Planet, initializerFromMap, Satellite } from "../game";
     import { distSqr, originPoint, point, QuadTree, type Point } from "../math";
     import type { Renderer } from "../render";
     import { playerTeams } from '../data';
     import { appContext } from '../../context';
     import TeamSelect from './TeamSelect.svelte';
-
 
     export let mapProps: GameMap['props'];
     export let game: Game;
@@ -277,10 +275,6 @@
         opacity:1
     }
 
-    .list-button {
-        background: var(--theme-background);
-        padding: 0;
-    }
     .selected-button {
         z-index: 1;
         position: relative;

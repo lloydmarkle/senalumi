@@ -4,15 +4,17 @@
     import type { Game, Player } from "../game";
     import { Renderer } from "../render";
     import type { IAnimateOptions } from "pixi-viewport";
+    import type { Sound } from "../sound";
 
     export let game: Game;
+    export let audio: Sound;
     export let player: Player = null;
     export let initialZoom: IAnimateOptions = null;
 
     let gfx: Renderer;
     let el: HTMLCanvasElement;
     onMount(() => {
-        gfx = new Renderer(el, game, player);
+        gfx = new Renderer(el, game, audio, player);
         if (initialZoom) {
             gfx.viewport.animate(initialZoom);
         }

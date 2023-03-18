@@ -1,7 +1,10 @@
 <script lang="ts">
-    import { fly } from "svelte/transition";
+    import { fly, scale } from "svelte/transition";
     import { cubicOut } from 'svelte/easing';
+
     // some fun based on https://www.sliderrevolution.com/resources/css-hamburger-menu/
+    export let isOpen = false;
+    export let closeable = true;
     let open = false;
 
     const animLen = 400;
@@ -16,23 +19,35 @@
     });
 </script>
 
-<div class="root">
-    {#if open}
-        <div class="content-container" in:expand={{ delay: 0 }} out:expand|local={{ delay: animLen }}>
+<svelte:body on:click={() => open = false} />
+
+<div class="root"
+    on:click|stopPropagation={() => null}
+    on:keypress={() => null}
+>
+    {#if isOpen || open}
+        <div class="content-container"
+            class:top-padding={closeable}
+            in:expand={{ delay: 0 }}
+            out:expand|local={{ delay: animLen }}
+        >
             <div class="content" in:fly={{ y:-10, delay: animLen }} out:fly|local={{ y:-10, delay: 0 }}>
                 <slot />
             </div>
         </div>
     {/if}
-    <button
-        class="menu"
-        class:open={open}
-        on:click={() => open = !open }
-    >
-        <div class="bar" />
-        <div class="bar" />
-        <div class="bar" />
-    </button>
+    {#if closeable}
+        <button
+            class="menu"
+            class:open={isOpen || open}
+            transition:scale={{ duration: animLen }}
+            on:click={() => open = !open }
+        >
+            <div class="bar" />
+            <div class="bar" />
+            <div class="bar" />
+        </button>
+    {/if}
 </div>
 
 <style>
@@ -42,6 +57,7 @@
     background: var(--theme-background);
     border-radius: var(--theme-border-radius);
 }
+
 .menu {
     background: none;
     display: flex;
@@ -64,7 +80,7 @@
     transition: transform 350ms, opacity 350ms;
 }
 
-.menu.open::before {
+.menu::before {
     content: '';
     position: absolute;
     width: 2.2em;
@@ -72,8 +88,12 @@
     left: .5em;
     top: 0.4em;
     border-radius: 100%;
-    opacity: .8;
+    opacity: 0;
+    transition: opacity .2s;
     border: .15em solid var(--theme-foreground);
+}
+.menu.open::before {
+    opacity: .8;
 }
 .menu.open .bar {
     width: 1.5em;
@@ -91,10 +111,13 @@
     left: 0em;
     top: 0em;
     padding: 1em;
-    padding-top: 4em;
-    background: var(--theme-background);
+    background:  var(--theme-background);
     border-radius: var(--theme-border-radius);
     position: absolute;
+    transition: padding-top .3s;
+}
+.top-padding {
+    padding-top: 4em;
 }
 
 .content {

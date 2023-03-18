@@ -1,25 +1,29 @@
 <script lang="ts">
     // derived from https://www.smashingmagazine.com/2017/09/building-inclusive-toggle-buttons/
     export let id: string;
-    export let checked: boolean = false;
+    export let state: boolean = false;
 </script>
 
-<button role="switch" aria-checked="{checked}" aria-labelledby={id} on:click={() => checked = !checked} on:click>
-    <span>on</span>
-    <span>off</span>
-</button>
-<span {id}><slot /></span>
+<div>
+    <button role="switch" aria-checked="{state}" aria-labelledby={id} on:click={() => state = !state} on:click>
+        <span>on</span><span>off</span>
+    </button>
+    <span {id}><slot /></span>
+</div>
 
 <style>
 button {
     color: white;
     background-color: var(--theme-background-3);
     border-radius: var(--theme-border-radius);
-    padding: 0.5em 1em;
+    padding: 0.5em;
     position: relative;
+    min-width: 7em;
 }
 button span {
     padding: 0 0.5em;
+    width: 1.5em;
+    display: inline-block;
     position: relative;
     transition: color .2s ease-in-out;
 }
@@ -38,7 +42,7 @@ button::before {
     transition: transform .2s ease-in-out;
 }
 [role="switch"][aria-checked="false"]::before {
-    transform: translate(100%, 0);
+    transform: translate(110%, 0);
 }
 [role="switch"][aria-checked="true"]::before {
     color: var(--theme-background-3);

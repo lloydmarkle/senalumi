@@ -1,4 +1,4 @@
-import type { Planet, Game, Team, Renderable } from "./game";
+import type { Planet, Team, Renderable } from "./game";
 
 const A4 = 440;
 function mtof(note: number): number {
@@ -98,10 +98,9 @@ export class WebAudioSound implements AudioDriver {
     noiseBuffer: AudioBuffer;
     main: GainNode;
 
-    constructor(readonly game: Game) {}
+    constructor() {}
 
     resume() {
-        return
         if (this.ctx) {
             return;
         }
@@ -130,7 +129,7 @@ export class WebAudioSound implements AudioDriver {
 
     volume(value: number): void {
         if (this.ctx) {
-            this.main.gain.value = value;
+            this.main.gain.setValueAtTime(value * .1, 0);
         }
     }
 

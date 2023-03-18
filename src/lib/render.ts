@@ -309,7 +309,7 @@ export class Renderer {
     readonly viewport: Viewport;
     readonly dbg: DebugRender;
 
-    constructor(element: HTMLCanvasElement, private game: Game, player?: Player) {
+    constructor(element: HTMLCanvasElement, private game: Game, audio: Sound, player?: Player) {
         const app = new PIXI.Application({
             view: element,
             // forceCanvas: true,
@@ -403,11 +403,6 @@ export class Renderer {
                 game.moveSatellites(player, selection, point);
             }
         }
-
-        const audio = new Sound(game);
-        viewport.once('pointerdown', async () => audio.resume());
-        viewport.once('wheel', () => audio.resume());
-        viewport.on('zoomed', () => audio.volume(viewport.scale.x / 3));
 
         const cull = new Simple();
         // cull.addList(satelliteContainer.children);

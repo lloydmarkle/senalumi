@@ -9,16 +9,8 @@
     import { onDestroy } from "svelte";
     import { writable } from "svelte/store";
     import { fly } from "svelte/transition";
-    import ExpandingMenu from "./lib/components/ExpandingMenu.svelte";
 
-    const { room, menu, game, localPlayer } = appContext();
-    async function quitGame() {
-        showScore = false;
-        $room?.leave();
-        $room = null;
-        $game = null;
-        $menu = 'start';
-    }
+    const { room, game, audio, localPlayer } = appContext();
 
     let warmupTime = writable(0);
     let warmupWatcher = setInterval(() => {
@@ -67,7 +59,7 @@
 
 <svelte:body on:keypress={keypress} />
 
-<GameView game={$game} {player} let:gfx>
+<GameView game={$game} {audio} {player} let:gfx>
     {#if $warmupTime < 0}
         <div
             class="warmup-container vstack"
@@ -105,12 +97,6 @@
     {/if}
 </GameView>
 
-<div class="menu-toggle">
-    <ExpandingMenu>
-        <button on:click={quitGame}>Quit</button>
-    </ExpandingMenu>
-</div>
-
 <style>
     .scoreboard {
         align-items: flex-start;
@@ -141,18 +127,5 @@
         border-bottom-left-radius: var(--theme-border-radius);
         border-bottom-right-radius: var(--theme-border-radius);
         background: var(--theme-gradient-background);
-    }
-
-    .menu-toggle {
-        position: fixed;
-        top: 1em;
-        left: 1em;
-        opacity: 0.3;
-        background: var(--theme-background);
-        border-radius: var(--theme-border-radius);
-        transition: opacity 0.3s;
-    }
-    .menu-toggle:hover {
-        opacity: .8
     }
 </style>

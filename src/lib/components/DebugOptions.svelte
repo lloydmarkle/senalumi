@@ -1,14 +1,14 @@
 <script lang="ts">
+    import { appContext } from '../../context';
     import { fly } from 'svelte/transition';
     import type { Game } from '../game';
     import type { Renderer } from '../render';
-    import { Sound } from '../sound'
     import Toggle from './Toggle.svelte';
 
     export let gfx: Renderer;
     export let game: Game;
 
-    const audio = new Sound(game);
+    const { audio } = appContext();
 
     function spawn1K() {
         let end = game.satellites.length + 1000;
@@ -33,8 +33,6 @@
     }
 </script>
 
-<svelte:body on:click={() => audio.resume()} />
-
 <div class="debug-background banner" transition:fly={{ y: -50 }}>
     <p>Debug</p>
 </div>
@@ -43,7 +41,7 @@
     {#if gfx}
         <p>Settings</p>
         <div class="option">
-            <Toggle id="show-overlay" bind:checked={gfx.dbg.config.showStats}>
+            <Toggle id="show-overlay" bind:state={gfx.dbg.config.showStats}>
                 Show Stats
             </Toggle>
         </div>
@@ -52,7 +50,7 @@
             <label for="debug-game-speed">Game speed</label>
         </div>
         <div class="option">
-            <Toggle id="show-pulse-animation" bind:checked={gfx.dbg.config.enablePulseAnimation}>
+            <Toggle id="show-pulse-animation" bind:state={gfx.dbg.config.enablePulseAnimation}>
                 Pulse Animation
             </Toggle>
         </div>
@@ -65,18 +63,18 @@
             <label for="debug-update-frequency">Update frequency (ms)</label>
         </div>
         <div class="option">
-            <Toggle id="show-quad-tree" bind:checked={gfx.dbg.config.showQuadTree}>
+            <Toggle id="show-quad-tree" bind:state={gfx.dbg.config.showQuadTree}>
                 Show collisions
             </Toggle>
         </div>
         <div class="option">
-            <Toggle id="show-planet-stats" bind:checked={gfx.dbg.config.showPlanetStats}>
+            <Toggle id="show-planet-stats" bind:state={gfx.dbg.config.showPlanetStats}>
                 Show Planet Stats
             </Toggle>
         </div>
         {#each game.players as player}
             <div class="option">
-                <Toggle id="show-player-selection-{player.team}" bind:checked={gfx.dbg.config.showPlayerSelection[player.team]}>
+                <Toggle id="show-player-selection-{player.team}" bind:state={gfx.dbg.config.showPlayerSelection[player.team]}>
                     Show <span style="background:#{player.color.toString(16)}">{player.team}</span> player selection
                 </Toggle>
             </div>

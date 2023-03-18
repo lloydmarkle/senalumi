@@ -13,7 +13,7 @@
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
-    const { menu, room } = appContext();
+    const { menu, room, audio, prefs } = appContext();
     function goHome() {
         if ($room) {
             $room.leave();
@@ -32,9 +32,13 @@
     demoGame.start(0);
 </script>
 
-<!-- <GameView
-    game={demoGame}
-    initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/> -->
+{#if $prefs.showDemoGame}
+    <GameView
+        game={demoGame}
+        {audio}
+        initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
+{/if}
+
 <OverlayBackground blurBackground>
     <div class="menu">
         {#if $menu === 'start'}
