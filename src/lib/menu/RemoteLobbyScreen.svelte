@@ -33,9 +33,7 @@
     const resetPlayers = () =>
         (players = Array.from(gameState.players.entries(), ([key, player]) =>
             // capture local player in app context
-            key === $room.sessionId
-                ? ($localPlayer = player)
-                : player
+            key === $room.sessionId ? ($localPlayer = player) : player
         ));
     gameState.players.forEach(player => {
         player.onChange = resetPlayers;
@@ -49,11 +47,10 @@
     resetPlayers();
 
     gameState.onChange = async () => {
-        gameState = $room.state;
         if (gameState.running && !$game) {
-            // clear gameState callbacks so we don't keep holding a reference to this component
-            gameState.onChange = null;
-            gameState.config.onChange = null;
+            // clear any listeners so we don't accidentally hold on to svelte components
+            // when they should be removed
+            $room.removeAllListeners();
             $game = convertToRemoteGame(new Game(), $room);
         }
     }

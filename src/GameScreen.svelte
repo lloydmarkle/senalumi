@@ -4,7 +4,6 @@
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import Scoreboard from "./lib/components/Scoreboard.svelte";
     import { appContext } from "./context";
-    import type { Player } from "./lib/game";
     import PlayerTable from "./lib/components/PlayerTable.svelte";
     import { onDestroy } from "svelte";
     import { writable } from "svelte/store";
@@ -27,14 +26,12 @@
     }, 5000);
 
     onDestroy(() => {
-        clearInterval(scoreUpdateInterval);
         clearInterval(warmupWatcher);
+        clearInterval(scoreUpdateInterval);
     });
 
-    let player: Player;
-    $: if ($game && $localPlayer.team) {
-        player = $game.players.find(p => p.team === $localPlayer.team);
-    }
+    $: player = ($game && $localPlayer.team)
+        ? $game.players.find(p => p.team === $localPlayer.team) : null;
 
     $room?.onLeave(() => {
 

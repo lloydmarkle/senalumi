@@ -14,6 +14,7 @@
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     import VolumeControl from './lib/components/VolumeControl.svelte';
     import Toggle from './lib/components/Toggle.svelte';
+    import ConfirmButton from './lib/components/ConfirmButton.svelte';
     const { localPlayer } = context;
     let p2Game = g => {
         g.planets = [
@@ -32,7 +33,6 @@
     // $localPlayer.team = $game.players[0].team;
     // $game.start(5);
 
-    let quitToggle = false;
     function quitGame() {
         $room?.leave();
         $room = null;
@@ -45,7 +45,7 @@
         audio.volume($prefs.soundVolume);
     }
 
-    $: hasGame = !!$game;
+    $: hasGame = !!$game || $menu === 'edit';
 </script>
 
 <svelte:window on:click|once={initializeAudio} />
@@ -61,19 +61,15 @@
 <div class="prefs-menu">
     <ExpandingMenu isOpen={!hasGame} closeable={hasGame}>
         <VolumeControl bind:volume={$prefs.soundVolume} />
-        {#if !$game}
+        {#if !hasGame}
             <Toggle id={"background-demo"} bind:state={$prefs.showDemoGame}>Demo game</Toggle>
         {/if}
-        {#if $game}
-            <div>
-                {#if quitToggle}
-                    <span>Really leave?</span>
-                    <button on:click={() => quitGame()}>Yes</button>
-                    <button on:click={() => quitToggle = false}>No</button>
-                {:else}
-                    <button on:click={() => quitToggle = true}>Quit</button>
-                {/if}
-            </div>
+        {#if hasGame}
+            <ConfirmButton
+                text={'Quit'}
+                confirmText={'Really leave?'}
+                actionFn={quitGame}
+            />
         {/if}
     </ExpandingMenu>
 </div>

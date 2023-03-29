@@ -7,6 +7,7 @@
     import { playerTeams } from '../data';
     import { appContext } from '../../context';
     import TeamSelect from './TeamSelect.svelte';
+    import ConfirmButton from './ConfirmButton.svelte';
 
     export let mapProps: GameMap['props'];
     export let game: Game;
@@ -72,8 +73,6 @@
         updatePlanet();
     }
 
-    let promptDelete = false;
-    $: if (!selectedPlanet) promptDelete = false;
     function deletePlanet(planet: Planet) {
         let sats: Satellite[] = [];
         game.collisionTree.query(planet.position, planet.orbitDistance * 2, sat => sats.push(sat));
@@ -181,7 +180,6 @@
     <button on:click={newPlanet}>+ Planet</button>
     <button on:click={importMap}>Load</button>
     <button on:click={exportMap}>Save</button>
-    <button on:click={() => $menu = 'start'}>Quit</button>
 </div>
 
 {#if selectedPlanet}
@@ -246,15 +244,11 @@
                         <input type="range" min="0" max="1000" step="25" on:change={updatePlanet} bind:value={selectedPlanet.initialSatellites} />
                     </div>
                 {/if}
-                <div class="hstack">
-                    {#if promptDelete}
-                        <span>Really delete?</span>
-                        <button on:click={() => deletePlanet(selectedPlanet)}>Yes</button>
-                        <button on:click={() => promptDelete = false}>No</button>
-                    {:else}
-                        <button on:click={() => promptDelete = true}>Delete</button>
-                    {/if}
-                </div>
+                <ConfirmButton
+                    text={'Delete'}
+                    confirmText={'Really delete?'}
+                    actionFn={() => deletePlanet(selectedPlanet)}
+                />
             </div>
         </div>
     </WorldSpaceOverlay>
