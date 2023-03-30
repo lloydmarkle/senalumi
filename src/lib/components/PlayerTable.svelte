@@ -5,10 +5,14 @@
     import TeamSelectionIcon from "./TeamSelectionIcon.svelte";
 
     export let room: Room<GameSchema>
+    export let localPlayer: PlayerSchema;
+
+    function updatePlayer() {
+        console.log('changing player', localPlayer.displayName)
+        room.send('player:info', localPlayer);
+    }
 
     let gameState = room.state;
-
-    const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 
     let players: PlayerSchema[] = [];
     const resetPlayers = () => players = Array.from(gameState.players.values());
@@ -37,13 +41,12 @@
         {#each players as player}
         <tr>
             <td>{player.admin ? '♚' : ''}</td>
-            <td>{player.displayName}</td>
-            <td>
-                <div class="hstack player-color">
-                    <TeamSelectionIcon size={20} color={player.team} />
-                    <span>{teamName(player.team)}</span>
-                </div>
-            </td>
+            {#if player === localPlayer}
+                <td contenteditable=true on:blur={updatePlayer} bind:textContent={player.displayName}>{player.displayName}</td>
+            {:else}
+                <td>{player.displayName}</td>
+            {/if}
+            <td><TeamSelectionIcon size={20} color={player.team} /></td>
             <td>{player.ping}ms</td>
         </tr>
     {/each}
@@ -51,16 +54,12 @@
 </table>
 
 <style>
-    .player-color {
-        justify-content: flex-start;
-    }
-
     table {
         font-size: .8rem;
         table-layout: fixed;
         border-collapse: collapse;
     }
-    thead th:nth-child(3) {
+    thead th:nth-child(2) {
         width: 80%;
     }
     th {

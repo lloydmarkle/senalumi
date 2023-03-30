@@ -28,21 +28,6 @@ function adsr(gain: GainNode, T: number, a: number, d: number, s: number, r: num
     return gain;
 }
 
-interface AudioDriver {
-    resume(): void;
-
-    pulse(): void;
-    satellitePop(): void;
-    planetCapture(): void;
-    planetUpgrade(): void;
-    planetPartialHealthSound(value: number): void;
-    planetPartialUpgradeSound(value: number): void;
-    planetPartialCaptureSound(value: number): void;
-    planetPop(): void;
-
-    volume(value: number): void;
-}
-
 export class PlanetAudio implements Renderable {
     private lastState: {
         health: number,
@@ -90,13 +75,15 @@ export class PlanetAudio implements Renderable {
 }
 
 // mostly based on https://ui.dev/web-audio-api
-export class WebAudioSound implements AudioDriver {
+export class Sound {
     private nextSatellitePopSoundTime = 0;
     private nextShortSoundTime = 0;
 
-    ctx: AudioContext;
-    noiseBuffer: AudioBuffer;
-    main: GainNode;
+    private ctx: AudioContext;
+    private noiseBuffer: AudioBuffer;
+    private main: GainNode;
+
+    menu?: MenuAudio;
 
     constructor() {}
 
@@ -125,6 +112,8 @@ export class WebAudioSound implements AudioDriver {
         for (var i = 0; i < this.noiseBuffer.length; i++) {
             noiseBufferOutput[i] = Math.random() * 2 - 1;
         }
+
+        this.menu = new MenuAudio(this.ctx, this.main);
     }
 
     volume(value: number): void {
@@ -305,4 +294,39 @@ export class WebAudioSound implements AudioDriver {
     }
 }
 
-export class Sound extends WebAudioSound {}
+class MenuAudio {
+    constructor(
+        private ctx: AudioContext,
+        private main: GainNode,
+    ) {}
+
+    menuNavigateForward() {
+        this.shortSound(mtof(36), 0 * 24);
+    }
+
+    private shortSound(freq: number, detune: number) {
+        const context = this.ctx;
+        const pause = 0.1;
+        const duration = .2 // * game.speed ?
+        const now = context.currentTime;
+
+        const gain = adsr(this.ctx.createGain(),
+            // now, .15 * duration, .002 * duration, .25 * duration, .6 * duration, .4);
+            // now, .2 * duration, .05 * duration, .05 * duration, .70 * duration, .4);
+            now, .04, .01, .01, .14, .4);
+        // const gain = context.createGain();
+        // gain.gain.setValueAtTime(0.001, 0);
+        // gain.gain.linearRampToValueAtTime(1, now + duration * 0.1);
+        // gain.gain.linearRampToValueAtTime(0.001, now + duration);
+        gain.connect(this.main);
+
+        const step = context.createOscillator();
+        step.connect(gain);
+        step.detune.value = detune;
+        step.frequency.setValueAtTime(freq, now);
+
+        // step.type = 'triangle';
+        step.start();
+        step.stop(now + duration);
+    }
+}

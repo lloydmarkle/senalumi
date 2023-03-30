@@ -29,12 +29,7 @@
     $: waitMessage = map ? '(Waiting for players)' : '(Waiting for players and map)';
 
     let gameState = $room.state;
-    // load game properties from room
-    const resetPlayers = () =>
-        (players = Array.from(gameState.players.entries(), ([key, player]) =>
-            // capture local player in app context
-            key === $room.sessionId ? ($localPlayer = player) : player
-        ));
+    const resetPlayers = () => players = Array.from(gameState.players.values());
     gameState.players.forEach(player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
@@ -47,10 +42,16 @@
     resetPlayers();
 
     gameState.onChange = async () => {
+        $localPlayer = gameState.players.get($room.sessionId);
         if (gameState.running && !$game) {
-            // clear any listeners so we don't accidentally hold on to svelte components
-            // when they should be removed
-            $room.removeAllListeners();
+            // clear locally added listeners so we don't hold on to a reference to this svelte component
+            gameState.onChange = null;
+            gameState.config.onChange = null;
+            gameState.players.onAdd = null;
+            gameState.players.forEach(p => {
+                p.onChange = null;
+                p.onRemove = null;
+            });
             $game = convertToRemoteGame(new Game(), $room);
         }
     }

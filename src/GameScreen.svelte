@@ -73,26 +73,25 @@
     {#if showScore}
         <OverlayBackground>
             <div class="hstack scoreboard">
-                <span class="chart">
+                <div class="chart">
                     <Scoreboard {gameState} />
-                </span>
-                {#if $room}
-                    <span class="player-table">
-                        <PlayerTable room={$room} />
-                    </span>
-                {/if}
+                </div>
             </div>
         </OverlayBackground>
-    {/if}
-
-    {#if $room}
-
     {/if}
 
     {#if showDebugOptions}
         <DebugOptions game={$game} {gfx} />
     {/if}
 </GameView>
+
+<div class="fullscreen-container">
+    {#if $room}
+    <div class="player-table">
+        <PlayerTable room={$room} localPlayer={$localPlayer} />
+    </div>
+    {/if}
+</div>
 
 <style>
     .scoreboard {
@@ -109,9 +108,24 @@
 		max-height: 60em;
 	}
 
+    .fullscreen-container {
+        pointer-events: none;
+        position: absolute;
+        top:0; left:0 ;
+        width: 100vw;
+        height: 100vh;
+    }
     .player-table {
-        padding-top: 3em;
-        padding-right: 1em;
+        pointer-events: all;
+        position: absolute;
+        width: 20em;
+        left: 1em;
+        bottom: 1em;
+        opacity: .5;
+        transition: opacity .3s;
+    }
+    .player-table:hover {
+        opacity: 1;
     }
 
     .warmup-container {

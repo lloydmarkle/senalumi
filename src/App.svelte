@@ -48,7 +48,7 @@
     $: hasGame = !!$game || $menu === 'edit';
 </script>
 
-<svelte:window on:click|once={initializeAudio} />
+<svelte:window on:click|once|capture={initializeAudio} />
 
 {#if $menu === 'edit'}
     <LevelEditorScreen />
