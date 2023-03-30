@@ -10,6 +10,7 @@
     import { Game } from "./lib/game";
     import { appContext } from "./context";
     import { fly } from 'svelte/transition';
+    import { audioQueue } from "./lib/components/audio-effect";
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
@@ -47,19 +48,19 @@
             </div>
         {:else if $menu === 'local'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
                 <LocalGameScreen />
             </div>
         {:else if $menu === 'remote'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow />Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow />Auralux - Clone</button>
                 <RemoteGameScreen />
             </div>
         {:else if $menu === 'lobby'}
             <div transition:myFly class="menu-page">
                 <div class="hstack">
-                    <button transition:delayFly={1} class="back-button" on:click={goHome}><BackArrow /> Auralux - Clone</button>
-                    <button transition:delayFly class="back-button" on:click={leaveRoom}><BackArrow />Multiplayer</button>
+                    <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
+                    <button transition:delayFly class="back-button" on:click={leaveRoom} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</button>
                 </div>
                 <RemoteLobbyScreen />
             </div>

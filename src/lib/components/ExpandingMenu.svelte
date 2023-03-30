@@ -1,6 +1,7 @@
 <script lang="ts">
     import { fly, scale } from "svelte/transition";
     import { cubicOut } from 'svelte/easing';
+    import { audioQueue } from "./audio-effect";
 
     // some fun based on https://www.sliderrevolution.com/resources/css-hamburger-menu/
     export let isOpen = false;
@@ -40,6 +41,7 @@
         <button
             class="menu"
             class:open={isOpen || open}
+            use:audioQueue={isOpen || open ? 'menuClose' : 'menuOpen'}
             transition:scale={{ duration: animLen }}
             on:click={() => open = !open }
         >

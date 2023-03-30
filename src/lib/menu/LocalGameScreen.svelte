@@ -5,6 +5,7 @@
     import MapChooser from './MapChooser.svelte';
     import { availableTeamsFromMap, playerTeams } from '../data';
     import TeamSelect from '../components/TeamSelect.svelte';
+    import { audioQueue } from '../components/audio-effect';
 
     let { game, localPlayer } = appContext();
     let map: GameMap = null;
@@ -43,6 +44,7 @@
         {/if}
     </span>
     <button
+        use:audioQueue={'button'}
         transition:delayFly
         disabled={map === null}
         on:click={startGame}>Launch</button>

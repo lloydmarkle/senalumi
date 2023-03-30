@@ -3,6 +3,7 @@
     import { gameMaps } from '../data';
     import { delayFly } from './transitions';
     import MapTile from './MapTile.svelte';
+    import { audioQueue } from '../components/audio-effect';
 
     export let selectedMap: GameMap;
 
@@ -14,6 +15,7 @@
 <div transition:delayFly={3} class="hstack map-select">
     {#each gameMaps as map}
         <button
+            use:audioQueue={'button'}
             class:selected-map={selectedMap === map}
             on:click={() => setMapFunction(map)}>
             <MapTile {map} />

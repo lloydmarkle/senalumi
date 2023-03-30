@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
+    import { audioQueue } from "./audio-effect";
     import TeamSelectionIcon from "./TeamSelectionIcon.svelte";
 
     let dispatch = createEventDispatcher();
@@ -17,6 +18,7 @@
 <div class="hstack">
     {#each options as team}
         <button
+            use:audioQueue={'teamSelect'}
             class:selected={value === team.value}
             class="list-button"
             on:click={() => selectTeam(team)}>

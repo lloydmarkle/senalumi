@@ -8,6 +8,7 @@
     import { appContext } from '../../context';
     import TeamSelect from './TeamSelect.svelte';
     import ConfirmButton from './ConfirmButton.svelte';
+    import { audioQueue } from './audio-effect';
 
     export let mapProps: GameMap['props'];
     export let game: Game;
@@ -177,9 +178,9 @@
         <label for="map-name">Map name</label>
         <input type="text" name="map-name" id="map-name" bind:value={mapProps.name}>
     </span>
-    <button on:click={newPlanet}>+ Planet</button>
-    <button on:click={importMap}>Load</button>
-    <button on:click={exportMap}>Save</button>
+    <button on:click={newPlanet} use:audioQueue={'button'}>+ Planet</button>
+    <button on:click={importMap} use:audioQueue={'button'}>Load</button>
+    <button on:click={exportMap} use:audioQueue={'button'}>Save</button>
 </div>
 
 {#if selectedPlanet}
@@ -215,6 +216,7 @@
                     <div>
                         {#each planetLevels as level}
                             <button
+                                use:audioQueue={'button'}
                                 on:click={() => hackPlanet(selectedPlanet, 'maxLevel', level)}
                                 class:selected-button={level === selectedPlanet.maxLevel}
                             >{level}</button>
@@ -227,6 +229,7 @@
                         <div>
                             {#each planetLevels as level}
                                 <button
+                                    use:audioQueue={'button'}
                                     on:click={() => hackPlanet(selectedPlanet, 'level', level)} disabled={level > selectedPlanet.maxLevel}
                                     class:selected-button={level === selectedPlanet.level}
                                 >{level}</button>

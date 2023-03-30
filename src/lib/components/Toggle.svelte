@@ -1,11 +1,14 @@
 <script lang="ts">
+    import { audioQueue } from "./audio-effect";
+
+
     // derived from https://www.smashingmagazine.com/2017/09/building-inclusive-toggle-buttons/
     export let id: string;
     export let state: boolean = false;
 </script>
 
 <div>
-    <button role="switch" aria-checked="{state}" aria-labelledby={id} on:click={() => state = !state} on:click>
+    <button role="switch" aria-checked="{state}" aria-labelledby={id} on:click={() => state = !state} on:click use:audioQueue={'toggle'}>
         <span>on</span><span>off</span>
     </button>
     <span {id}><slot /></span>

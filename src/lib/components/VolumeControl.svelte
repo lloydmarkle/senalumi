@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { audioQueue } from "./audio-effect";
+
+
     let hoverVolume: number;
     export let volume: number = 0;
     let levels = [0, .2, .4, .6, .8, 1];
@@ -7,7 +10,9 @@
 <div class="volume-buttons">
     <span>Volume {volume * 100}%</span>
     {#each levels as level}
-        <button class="vlevel"
+        <button
+            use:audioQueue={'button'}
+            class="vlevel"
             class:volume={volume >= level}
             class:over={hoverVolume >= level}
             on:focus={null}

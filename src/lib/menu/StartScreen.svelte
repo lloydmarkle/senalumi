@@ -1,18 +1,16 @@
 <script lang="ts">
     import { appContext } from '../../context';
+    import { audioQueue } from '../components/audio-effect';
     import { delayFly } from './transitions';
 
-    let { menu, audio } = appContext();
-    function buttonAudio() {
-        audio.menu.menuNavigateForward();
-    }
+    let { menu } = appContext();
 </script>
 
 <h1 transition:delayFly={1}>Auralux - Clone</h1>
 <div class="vstack">
-    <button class="large-button" transition:delayFly on:click={buttonAudio} on:click={() => $menu = 'local'}>Single Player</button>
-    <button class="large-button" transition:delayFly on:click={buttonAudio} on:click={() => $menu = 'remote'}>Multiplayer</button>
-    <button class="large-button" transition:delayFly on:click={buttonAudio} on:click={() => $menu = 'edit'}>Map Editor</button>
+    <button class="large-button" transition:delayFly use:audioQueue={'forwardNavigation'} on:click={() => $menu = 'local'}>Single Player</button>
+    <button class="large-button" transition:delayFly use:audioQueue={'forwardNavigation'} on:click={() => $menu = 'remote'}>Multiplayer</button>
+    <button class="large-button" transition:delayFly use:audioQueue={'forwardNavigation'} on:click={() => $menu = 'edit'}>Map Editor</button>
 </div>
 
 <style>

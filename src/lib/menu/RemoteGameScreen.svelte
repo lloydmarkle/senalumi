@@ -7,6 +7,7 @@
     import type { RoomAvailable } from 'colyseus.js';
     import { blur, type BlurParams } from 'svelte/transition';
     import LoadingIndicator from '../components/LoadingIndicator.svelte';
+    import { audioQueue } from '../components/audio-effect';
 
     let { room, localPlayer, menu } = appContext();
 
@@ -105,11 +106,11 @@
             <span class="hstack" transition:delayFly={1}>
                 <label for="room-name">Game name</label>
                 <input type="text" id="room-name" name="room-name" bind:value={roomName} />
-                <button transition:delayFly on:click={() => roomName = generateRoomName()}>↻</button>
-                <button transition:delayFly on:click={() => joinRoom(roomName)}>Create and join</button>
+                <button transition:delayFly use:audioQueue={'button'} on:click={() => roomName = generateRoomName()}>↻</button>
+                <button transition:delayFly use:audioQueue={'button'} on:click={() => joinRoom(roomName)}>Create and join</button>
             </span>
         {:else}
-            <button style="width:30%" on:click={() => roomName = generateRoomName()}>Create new game</button>
+            <button style="width:30%" use:audioQueue={'button'} on:click={() => roomName = generateRoomName()}>Create new game</button>
         {/if}
     </span>
 </div>

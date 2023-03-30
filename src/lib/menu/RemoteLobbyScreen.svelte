@@ -8,8 +8,9 @@
     import MapChooser from './MapChooser.svelte';
     import MapTile from './MapTile.svelte';
     import TeamSelect from '../components/TeamSelect.svelte';
+    import { audioQueue } from '../components/audio-effect';
 
-    const { localPlayer, room, game } = appContext();
+    const { localPlayer, room, game, audio } = appContext();
 
     let map: GameMap;
     let players: PlayerSchema[] = [];
@@ -66,11 +67,13 @@
 
     function updatePlayer(player: PlayerSchema) {
         $room.send('player:info', player);
+        audio.menu.button();
     }
 
     function syncConfig() {
         $room.send('game:config', gameState.config);
     }
+
     function startGame() {
         gameState.config.startGame = true;
         syncConfig();
@@ -141,7 +144,7 @@
         <tr transition:delayFly>
         {#if !gameState.running && player === $localPlayer}
             <td>{player.admin ? 'Admin' : ''}</td>
-            <td><input type="checkbox" bind:checked={player.ready}  on:change={() => updatePlayer(player)} /></td>
+            <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
             <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
             <td><TeamSelect size={24} options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
             <td>{player.ping}ms</td>
@@ -163,7 +166,7 @@
 </table>
 <div transition:delayFly class="hstack">
     {#if $localPlayer.admin && !gameState.running}
-        <button disabled={waitingForReady} on:click={startGame}>Start Game</button>
+        <button disabled={waitingForReady} use:audioQueue={'button'} on:click={startGame}>Start Game</button>
     {/if}
     {#if waitingForReady}
         <div>{waitMessage}</div>
