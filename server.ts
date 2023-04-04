@@ -92,10 +92,10 @@ export class AuraluxRoom extends Room<GameSchema> {
 
             // if everyone is ready, start the game!
             if (msg.startGame) {
+                this.disableAiPlayers();
                 this.game.config.gameSpeed = msg.gameSpeed;
                 this.game.config.pulseRate = msg.pulseRate;
                 this.game.config.gameCountDown = msg.warmupSeconds;
-                this.disableAiPlayers();
                 this.game.start();
                 this.metadata.state = 'Started';
             }

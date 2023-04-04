@@ -31,19 +31,15 @@
 
     let gameState = $room.state;
     const resetPlayers = () => players = Array.from(gameState.players.values());
-    gameState.players.forEach(player => {
-        player.onChange = resetPlayers;
-        player.onRemove = resetPlayers;
-    })
     gameState.players.onAdd = player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
         resetPlayers();
     };
-    resetPlayers();
+    gameState.players.triggerAll();
+    $localPlayer = gameState.players.get($room.sessionId);
 
     gameState.onChange = async () => {
-        $localPlayer = gameState.players.get($room.sessionId);
         if (gameState.running && !$game) {
             // clear locally added listeners so we don't hold on to a reference to this svelte component
             gameState.onChange = null;
@@ -56,12 +52,14 @@
             $game = convertToRemoteGame(new Game(), $room);
         }
     }
-    gameState.config.onChange = () => {
+    const readConfig = () => {
         const newMap: GameMap = JSON.parse(gameState.config.gameMap);
         if (newMap.props.img !== map?.props.img) {
             map = newMap;
         }
     }
+    gameState.config.onChange = readConfig;
+    readConfig();
 
     const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 

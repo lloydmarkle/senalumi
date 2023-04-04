@@ -3,11 +3,11 @@
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
-    import { Context, key } from './context';
+    import { Context, key, type MenuScreens } from './context';
 
     let context = new Context();
     setContext(key, context);
-    const { game, menu, prefs, audio, room } = context;
+    const { game, menu, prefs, audio, room, localPlayer } = context;
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
@@ -15,7 +15,7 @@
     import VolumeControl from './lib/components/VolumeControl.svelte';
     import Toggle from './lib/components/Toggle.svelte';
     import ConfirmButton from './lib/components/ConfirmButton.svelte';
-    const { localPlayer } = context;
+    import { joinRemoteGame } from './lib/net-game';
     let p2Game = g => {
         g.planets = [
             new Planet(g, point(-200, 0), 3),
@@ -46,6 +46,30 @@
     }
 
     $: hasGame = !!$game || $menu === 'edit';
+
+    async function initializeFromUrl(pathname: string) {
+        async function joinRemote(pathname: string): Promise<MenuScreens> {
+            const roomName = pathname.split('/')[2]
+            $room = await joinRemoteGame($localPlayer.displayName, roomName);
+            return 'lobby';
+        }
+
+        $menu =
+            (pathname === '/single-player' || pathname === '/sp') ? 'local' :
+            (pathname === '/multi-player' || pathname === '/mp') ? 'remote' :
+            (pathname.startsWith('/mp/')) ? await joinRemote(pathname) :
+            'start'
+    }
+    initializeFromUrl(location.pathname.trim());
+
+    menu.subscribe(m => {
+        const url =
+            (m === 'local') ? '/single-player' :
+            (m === 'remote') ? '/multi-player' :
+            (m === 'lobby') ? `/mp/${$room.state.label}` :
+            '/'
+        history.pushState(null, null, url);
+    });
 </script>
 
 <svelte:window on:click|once|capture={initializeAudio} />

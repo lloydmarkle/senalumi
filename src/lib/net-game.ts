@@ -26,17 +26,15 @@ defineTypes(PlayerSchema, {
 });
 
 export class PlanetSchema extends Schema {
-    constructor(readonly ent: Planet) { super() }
-
-    synchronizeFromEntity() {
-        this.owner = this.ent.owner?.team;
-        this.level = this.ent.level;
-        this.maxLevel = this.ent.maxLevel;
-        this.health = this.ent.health
-        this.upgrade = this.ent.upgrade
-        this.candidateOwner = this.ent.candidateOwner?.team
-        this.px = this.ent.position.x;
-        this.py = this.ent.position.y;
+    synchronizeFromEntity(ent: Planet) {
+        this.owner = ent.owner?.team;
+        this.level = ent.level;
+        this.maxLevel = ent.maxLevel;
+        this.health = ent.health
+        this.upgrade = ent.upgrade
+        this.candidateOwner = ent.candidateOwner?.team
+        this.px = ent.position.x;
+        this.py = ent.position.y;
     }
 
     static synchronizeTo(planet: Planet, game: Game, changes: DataChange<any>[]) {
@@ -83,16 +81,14 @@ export interface PlanetSchema extends Schema {
 }
 
 export class SatelliteSchema extends Schema {
-    constructor(readonly ent: Satellite) { super() }
-
-    synchronizeFromEntity() {
-        this.id = this.ent.id;
-        this.owner = this.ent.owner.team;
-        this.vx = this.ent.velocity.x;
-        this.vy = this.ent.velocity.y;
-        this.px = this.ent.position.x;
-        this.py = this.ent.position.y;
-        this.destroyedBy = this.ent.destroyedBy;
+    synchronizeFromEntity(ent: Satellite) {
+        this.id = ent.id;
+        this.owner = ent.owner.team;
+        this.vx = ent.velocity.x;
+        this.vy = ent.velocity.y;
+        this.px = ent.position.x;
+        this.py = ent.position.y;
+        this.destroyedBy = ent.destroyedBy;
     }
 
     static synchronizeTo(sat: Satellite, game: Game, changes: DataChange<any>[]) {
@@ -250,18 +246,18 @@ export class GameSchema extends Schema {
         // keep removed entites around a few seconds after delete to make sure they sync final state to client
         tick.removed.forEach(sat => {
             this.toRemove.set(sat.id, this.gameTimeMS + 10000);
-            this.satellites.get(sat.id).synchronizeFromEntity();
+            this.satellites.get(sat.id).synchronizeFromEntity(sat);
         });
         tick.removed.clear();
 
         game.forEachEntity(ent => {
             if (ent.type === 'Planet') {
-                const e = this.planets.get(ent.id) ?? new PlanetSchema(ent as Planet);
-                e.synchronizeFromEntity();
+                const e = this.planets.get(ent.id) ?? new PlanetSchema();
+                e.synchronizeFromEntity(ent as Planet);
                 this.planets.set(ent.id, e);
             } else if (ent.type === 'Satellite') {
-                const e = this.satellites.get(ent.id) ?? new SatelliteSchema(ent as Satellite);
-                e.synchronizeFromEntity();
+                const e = this.satellites.get(ent.id) ?? new SatelliteSchema();
+                e.synchronizeFromEntity(ent as Satellite);
                 this.satellites.set(ent.id, e);
             }
         });
@@ -309,13 +305,15 @@ export async function joinRemoteGame(playerName: string, gameName: string) {
         console.log('leave-code', code);
     });
 
+    // wait until we get gamestate
+    await new Promise(resolve => room.state.onChange = resolve)
+    room.state.onChange = null;
+
     return room;
 }
 
 export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>) {
-    game.satellites.forEach(sat => sat.destroy());
-    (game as any).planets = [];
-    game.tick = (time) => {
+    game.tick = time => {
         game.state.elapsedMS = time;
         game.state.gameTimeMS = room.state.gameTimeMS;
         game.state.running = room.state.running;
@@ -332,23 +330,32 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
     game.moveSatellites = (player, satellites, point) =>
         room.send('player:move', new PlayerMoveMessage(player, satellites, point));
 
-    state.planets.onAdd = (ent) => {
-        const planet = new Planet(game, point(ent.px, ent.py), 3);
-        ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
-        game.planets.push(planet);
-    };
+    // We add event listeners in onStateChange.once() because it is called _after_ the first
+    // full sync so we don't need to worry about onAdd() being called twice for the same entity
+    // See https://docs.colyseus.io/colyseus/state/overview/
+    room.onStateChange.once(() => {
+        state.planets.onAdd = (ent: PlanetSchema) => {
+            const planet = new Planet(game, point(ent.px, ent.py), 3);
+            game.planets.push(planet);
+            ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
+            ent.onRemove = () => planet.destroy();
+        };
 
-    state.satellites.onAdd = (ent) => {
-        const owner = game.players.find(e => e.team === ent.owner);
-        const sat = game.satellites.take().init(ent.id, owner, point(ent.px, ent.py));
-        ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, game, changes);
-        ent.onRemove = () => sat.destroy();
-    };
+        state.satellites.onAdd = (ent: SatelliteSchema) => {
+            const owner = game.players.find(e => e.team === ent.owner);
+            const sat = game.satellites.take().init(ent.id, owner, point(ent.px, ent.py));
+            ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, game, changes);
+            ent.onRemove = () => sat.destroy();
+        };
 
-    state.log.onAdd = (log) => {
-        game.state.log = log as GameStateSnapshot;
-        game.log.push(game.state.log);
-    };
+        state.log.onAdd = (log) => {
+            game.state.log = log as GameStateSnapshot;
+            game.log.push(game.state.log);
+        };
+
+        // callbacks are setup so synchronize state
+        state.triggerAll();
+    });
 
     return game;
 }

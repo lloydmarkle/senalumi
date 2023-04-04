@@ -32,6 +32,7 @@
                 // above finished. If this component is destroyed, do nothing
                 return;
             }
+
             $room = gameRoom;
             $menu = 'lobby';
         } catch (e) {

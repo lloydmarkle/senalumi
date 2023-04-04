@@ -7,25 +7,18 @@
     export let room: Room<GameSchema>
     export let localPlayer: PlayerSchema;
 
-    function updatePlayer() {
-        console.log('changing player', localPlayer.displayName)
-        room.send('player:info', localPlayer);
-    }
+    const updatePlayer = () => room.send('player:info', localPlayer);
 
     let gameState = room.state;
 
     let players: PlayerSchema[] = [];
     const resetPlayers = () => players = Array.from(gameState.players.values());
-    gameState.players.forEach(player => {
-        player.onChange = resetPlayers;
-        player.onRemove = resetPlayers;
-    });
     gameState.players.onAdd = player => {
         player.onChange = resetPlayers;
         player.onRemove = resetPlayers;
         resetPlayers();
     };
-    resetPlayers();
+    gameState.players.triggerAll();
 </script>
 
 <table class="room-table">
