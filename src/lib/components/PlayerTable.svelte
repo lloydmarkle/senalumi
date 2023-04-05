@@ -40,7 +40,9 @@
                 <td>{player.displayName}</td>
             {/if}
             <td><TeamSelectionIcon size={20} color={player.team} /></td>
-            <td>{player.ping}ms</td>
+            <td
+                class:disconnected={!player.connected}
+            >{player.ping}ms</td>
         </tr>
     {/each}
     </tbody>
@@ -65,5 +67,9 @@
     }
     td {
         padding: .5em 1em;
+    }
+
+    .disconnected {
+        background: var(--theme-link);
     }
 </style>

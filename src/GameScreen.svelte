@@ -8,6 +8,7 @@
     import { onDestroy } from "svelte";
     import { writable } from "svelte/store";
     import { fly } from "svelte/transition";
+    import RoomStatusMessages from "./lib/components/RoomStatusMessages.svelte";
 
     const { room, game, audio, localPlayer } = appContext();
 
@@ -32,10 +33,6 @@
 
     $: player = ($game && $localPlayer.team)
         ? $game.players.find(p => p.team === $localPlayer.team) : null;
-
-    $room?.onLeave(() => {
-
-    });
 
     let showScore = false;
     let showDebugOptions = false;
@@ -90,6 +87,7 @@
     <div class="player-table">
         <PlayerTable room={$room} localPlayer={$localPlayer} />
     </div>
+    <RoomStatusMessages room={$room} />
     {/if}
 </div>
 

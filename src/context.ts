@@ -6,16 +6,17 @@ import { GameSchema, PlayerSchema } from "./lib/net-game";
 import { uniqueNamesGenerator, colors, NumberDictionary } from 'unique-names-generator';
 import { Sound } from "./lib/sound";
 
-// I don't love this whole "context" thing and would much rather pass around
-// state as needed but between menus and level editor and remote games it was just
-// too much to try and do this cleanly. I'd like to revisit it someday but for
-// now, use a global "context" variable.
-
 export interface UserPrefs {
     userName: string;
     soundVolume: number;
     showDemoGame: boolean;
+    remoteGame?: { sessionId: string, roomId: string },
 }
+
+// I don't love this whole "context" thing and would much rather pass around
+// state as needed but between menus and level editor and remote games it was just
+// too much to try and do this cleanly. I'd like to revisit it someday but for
+// now, use a global "context" variable.
 
 export type MenuScreens = 'start' | 'local' | 'remote' | 'lobby' | 'edit'
 export class Context {
@@ -31,7 +32,17 @@ export class Context {
         this.localPlayer.subscribe(player => {
             this._prefs.userName = player.displayName;
             this.prefs.set(this._prefs);
-        })
+        });
+
+        this.room.subscribe(room => {
+            if (room) {
+                this._prefs.remoteGame = { roomId: room.id, sessionId: room.sessionId };
+            } else if (room === null) {
+                delete this._prefs.remoteGame;
+            }
+            this.prefs.set(this._prefs);
+        });
+
         this.prefs.subscribe(prefs => {
             this.audio.volume(prefs.soundVolume);
             localStorage.setItem('prefs', JSON.stringify(prefs))

@@ -29,7 +29,8 @@
             let gameRoom = await joinRemoteGame($localPlayer.displayName, roomName);
             if (destroyed) {
                 // joining can take time depending on latency so it's possible the user hits "go back" before the join
-                // above finished. If this component is destroyed, do nothing
+                // above finished. If this component is destroyed, leave the room
+                gameRoom.leave();
                 return;
             }
 

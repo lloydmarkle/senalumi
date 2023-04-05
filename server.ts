@@ -8,9 +8,6 @@ import { performance } from 'perf_hooks';
 import { availableTeamsFromMap, playerTeams } from './src/lib/data';
 (global as any).performance = performance;
 
-const seconds = 1000;
-const rejoinTimeLimit = 30 * seconds;
-
 export class AuraluxRoom extends Room<GameSchema> {
     private game: Game;
     // When room is initialized
@@ -150,20 +147,28 @@ export class AuraluxRoom extends Room<GameSchema> {
 
     // When a client leaves the room
     async onLeave(client: Client, consented: boolean) {
-        const team = this.state.players.get(client.sessionId).team;
+        const player = this.state.players.get(client.sessionId);
+
+        if (!consented) {
+            player.connected = false;
+            // allow some time for player to reconnect
+            try {
+                console.log('allow reconnect')
+                await this.allowReconnection(client, 30);
+                console.log('reconnected', client.sessionId)
+                // client returned!
+                player.connected = true;
+                return;
+            } catch (e) {
+                console.log('reconnect failed', e)
+            }
+        }
+
         this.state.players.delete(client.sessionId);
 
-        // if (!consented) {
-        //   // give player time to reconnect
-        //   await this.allowReconnection(client, 30);
-        // }
-
-        // reset admin
-        if (this.state.players.size) {
-            this.state.players.values().next().value.admin = true;
-        }
         // reactivate AI if noplayer does not re-join
         const reactivateAi = () => {
+            const team = player.team;
             let teams = [];
             this.state.players.forEach(e => teams.push(e.team))
             if (!teams.includes(team)) {
@@ -174,7 +179,12 @@ export class AuraluxRoom extends Room<GameSchema> {
                 }
             }
         }
-        this.clock.setTimeout(reactivateAi, rejoinTimeLimit);
+        reactivateAi();
+
+        // reset admin
+        if (this.state.players.size) {
+            this.state.players.values().next().value.admin = true;
+        }
     }
 
     // Cleanup callback, called after there are no more clients in the room. (see `autoDispose`)

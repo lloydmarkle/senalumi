@@ -13,6 +13,7 @@ export class PlayerSchema extends Schema {
         public sessionId: string = '',
         public ready = false,
         public admin = false,
+        public connected = true,
         public team: Team = '' as any,
         public ping = 0,
     ) { super() }
@@ -20,6 +21,7 @@ export class PlayerSchema extends Schema {
 defineTypes(PlayerSchema, {
     displayName: 'string',
     team: 'string',
+    connected: 'boolean',
     admin: 'boolean',
     ready: 'boolean',
     ping: 'number',
@@ -279,9 +281,11 @@ defineTypes(GameSchema, {
 import * as Colyseus from 'colyseus.js';
 import { point, type Point } from './math';
 
+const gameClient = () => new Colyseus.Client(`ws://${location.hostname}:2567`);
+
 export async function listGameRooms() {
     try {
-        const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
+        const client = gameClient();
         const rooms = await client.getAvailableRooms('auralux');
         return rooms;
     } catch (e) {
@@ -290,11 +294,19 @@ export async function listGameRooms() {
     }
 }
 
-//  hack the game into a client-only mode
 export async function joinRemoteGame(playerName: string, gameName: string) {
-    const client = new Colyseus.Client(`ws://${location.hostname}:2567`);
-    const room: Colyseus.Room<GameSchema> = await client.joinOrCreate('auralux', { playerName, label: gameName });
+    const client = gameClient();
+    const room = await client.joinOrCreate<GameSchema>('auralux', { playerName, label: gameName });
+    return await setupRoom(room);
+}
 
+export async function rejoinRoom(roomId: string, sessionId: string) {
+    const client = gameClient();
+    const room = await client.reconnect<GameSchema>(roomId, sessionId);
+    return await setupRoom(room);
+}
+
+async function setupRoom(room: Colyseus.Room<GameSchema>) {
     room.onError((code, msg) => {
         console.error('error', code, msg);
     });
@@ -312,6 +324,7 @@ export async function joinRemoteGame(playerName: string, gameName: string) {
     return room;
 }
 
+//  hack the game into a client-only mode
 export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>) {
     game.tick = time => {
         game.state.elapsedMS = time;

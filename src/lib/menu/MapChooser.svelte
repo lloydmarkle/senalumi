@@ -16,7 +16,7 @@
     {#each gameMaps as map}
         <button
             use:audioQueue={'button'}
-            class:selected-map={selectedMap.props.img === map.props.img}
+            class:selected-map={selectedMap?.props.img === map.props.img}
             on:click={() => setMapFunction(map)}>
             <MapTile {map} />
         </button>

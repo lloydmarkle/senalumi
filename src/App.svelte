@@ -15,7 +15,7 @@
     import VolumeControl from './lib/components/VolumeControl.svelte';
     import Toggle from './lib/components/Toggle.svelte';
     import ConfirmButton from './lib/components/ConfirmButton.svelte';
-    import { joinRemoteGame } from './lib/net-game';
+    import { joinRemoteGame, rejoinRoom } from './lib/net-game';
     let p2Game = g => {
         g.planets = [
             new Planet(g, point(-200, 0), 3),
@@ -49,15 +49,29 @@
 
     async function initializeFromUrl(pathname: string) {
         async function joinRemote(pathname: string): Promise<MenuScreens> {
-            const roomName = pathname.split('/')[2]
-            $room = await joinRemoteGame($localPlayer.displayName, roomName);
-            return 'lobby';
+            const remote = $prefs.remoteGame;
+            if (remote) {
+                try {
+                    $room = await rejoinRoom(remote.roomId, remote.sessionId);
+                    return 'lobby';
+                } catch (e) {
+                    console.log('reconnect failed',e)
+                    delete $prefs.remoteGame
+                }
+            }
+
+            const roomName = pathname.split('/')[2];
+            if (roomName) {
+                $room = await joinRemoteGame($localPlayer.displayName, roomName);
+                return 'lobby';
+            }
+
+            return 'remote';
         }
 
         $menu =
+            (pathname.startsWith('/mp/') || pathname.startsWith('/multi-player') || $prefs.remoteGame) ? await joinRemote(pathname) :
             (pathname === '/single-player' || pathname === '/sp') ? 'local' :
-            (pathname === '/multi-player' || pathname === '/mp') ? 'remote' :
-            (pathname.startsWith('/mp/')) ? await joinRemote(pathname) :
             'start'
     }
     initializeFromUrl(location.pathname.trim());
