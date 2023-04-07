@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Game, type GameMap } from '../game';
-    import { convertToRemoteGame, PlayerSchema,  } from '../net-game';
-    import { delayFly, fly } from './transitions';
+    import { convertToRemoteGame, GameSchema, joinRemoteGame, PlayerSchema, rejoinRoom,  } from '../net-game';
+    import { delayFly, fade, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
     import { availableTeamsFromMap, playerTeams } from '../data';
@@ -9,8 +9,79 @@
     import MapTile from './MapTile.svelte';
     import TeamSelect from '../components/TeamSelect.svelte';
     import { audioQueue } from '../components/audio-effect';
+    import LoadingIndicator from '../components/LoadingIndicator.svelte';
+    import { onDestroy } from 'svelte';
 
-    const { localPlayer, room, game, audio } = appContext();
+    const { localPlayer, room, game, audio, url, prefs } = appContext();
+
+    let destroyed = false;
+    onDestroy(() => {
+        destroyed = true;
+    });
+
+    let nameFromUrl = $url.split('/')[2]
+    let roomName = nameFromUrl ?? $prefs.remoteGame?.name;
+    const joinRoom = async () => {
+        const remote = $prefs.remoteGame;
+        if (remote && remote.name === nameFromUrl) {
+            try {
+                return await rejoinRoom(remote.roomId, remote.sessionId);
+            } catch (e) {
+                console.log('reconnect failed',e)
+                delete $prefs.remoteGame
+            }
+        }
+
+        try {
+            return await joinRemoteGame($localPlayer.displayName, roomName);
+        } catch (e) {
+            console.log('Unable to join game room', e);
+        }
+    };
+
+    let gameState: GameSchema;
+    const joining = joinRoom().then(r => {
+        if (destroyed) {
+            // joining can take time depending on latency so it's possible the user hits "go back" before the join
+            // above finished. If this component is destroyed before join completes then leave the room
+            r.leave();
+            return;
+        }
+
+        gameState = r.state;
+        $room = r;
+
+        const resetPlayers = () => players = Array.from(gameState.players.values());
+        gameState.players.onAdd = player => {
+            player.onChange = resetPlayers;
+            player.onRemove = resetPlayers;
+            resetPlayers();
+        };
+        gameState.players.triggerAll();
+        $localPlayer = gameState.players.get($room.sessionId);
+
+        gameState.onChange = async () => {
+            if (gameState.running && !$game) {
+                // clear locally added listeners so we don't hold on to a reference to this svelte component
+                gameState.onChange = null;
+                gameState.config.onChange = null;
+                gameState.players.onAdd = null;
+                gameState.players.forEach(p => {
+                    p.onChange = null;
+                    p.onRemove = null;
+                });
+                $game = convertToRemoteGame(new Game(), $room);
+            }
+        }
+        const readConfig = () => {
+            const newMap: GameMap = JSON.parse(gameState.config.gameMap);
+            if (newMap.props.img !== map?.props.img) {
+                map = newMap;
+            }
+        }
+        gameState.config.onChange = readConfig;
+        readConfig();
+    });
 
     let map: GameMap;
     let players: PlayerSchema[] = [];
@@ -22,44 +93,12 @@
             ...availableTeamsFromMap(map),
         ];
     }
-    $: if ($localPlayer.admin && map) {
+    $: if ($localPlayer.admin && map && gameState) {
         gameState.config.gameMap = JSON.stringify(map);
         syncConfig();
     }
     $: waitingForReady = players.some(p => !p.ready) || !map;
     $: waitMessage = map ? '(Waiting for players)' : '(Waiting for players and map)';
-
-    let gameState = $room.state;
-    const resetPlayers = () => players = Array.from(gameState.players.values());
-    gameState.players.onAdd = player => {
-        player.onChange = resetPlayers;
-        player.onRemove = resetPlayers;
-        resetPlayers();
-    };
-    gameState.players.triggerAll();
-    $localPlayer = gameState.players.get($room.sessionId);
-
-    gameState.onChange = async () => {
-        if (gameState.running && !$game) {
-            // clear locally added listeners so we don't hold on to a reference to this svelte component
-            gameState.onChange = null;
-            gameState.config.onChange = null;
-            gameState.players.onAdd = null;
-            gameState.players.forEach(p => {
-                p.onChange = null;
-                p.onRemove = null;
-            });
-            $game = convertToRemoteGame(new Game(), $room);
-        }
-    }
-    const readConfig = () => {
-        const newMap: GameMap = JSON.parse(gameState.config.gameMap);
-        if (newMap.props.img !== map?.props.img) {
-            map = newMap;
-        }
-    }
-    gameState.config.onChange = readConfig;
-    readConfig();
 
     const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 
@@ -78,100 +117,118 @@
     }
 </script>
 
-<h3 transition:delayFly><span>Game</span> {gameState.label}</h3>
-<div transition:delayFly>Map</div>
-{#if $localPlayer.admin}
-    <MapChooser bind:selectedMap={map} />
-    <details transition:delayFly class="admin-panel">
-        <summary>Configure Game</summary>
-        <div class="options-grid">
-            <span>
-                <label for="config-warmup">Warmup time (seconds):</label>
-                <input type="number" id="config-warmup" name="config-warmup" bind:value={gameState.config.warmupSeconds} on:change={syncConfig} />
-            </span>
-            <span>
-                <label for="config-speed">Play speed:</label>
-                <input type="number" id="config-speed" name="config-speed" bind:value={gameState.config.gameSpeed} on:change={syncConfig} />
-            </span>
-            <span>
-                <label for="config-pulseRate">Pulse rate:</label>
-                <input type="number" id="config-pulseRate" name="config-pulseRate" bind:value={gameState.config.pulseRate} on:change={syncConfig} />
-            </span>
-            <span>
-                <label for="config-maxWorld">World size:</label>
-                <input type="number" id="config-maxWorld" name="config-maxWorld" bind:value={gameState.config.maxWorld} on:change={syncConfig} />
-            </span>
-            <span>
-                <input type="checkbox" id="config-coop" name="config-coop" bind:checked={gameState.config.allowCoop} on:change={syncConfig} />
-                <label for="config-coop">Allow multiple players per colour</label>
-            </span>
-            <span>
-                <label for="config-maxPlayers">Max players:</label>
-                <input type="number" id="config-maxPlayers" name="config-maxPlayers" bind:value={gameState.config.maxPlayers} />
-            </span>
-            <!--
-                TODO: customize colours?
-            <span>
-                <label for="config-colours">Colours:</label>
-                <Select options={playerTeams} bind:value={player.team} on:select={() => updatePlayer(player)} />
-            </span>
-            -->
-        </div>
-    </details>
-{:else if map}
-    <span transition:delayFly class="map-tile-container">
-        {#key map}
-            <span transition:fly class="map-tile">
-                <MapTile {map} />
-            </span>
-        {/key}
-    </span>
-{/if}
-<table transition:delayFly class="player-table">
-    <thead>
-        <tr>
-            <th></th>
-            <th>Ready</th>
-            <th>Name</th>
-            <th>Team</th>
-            <th>Latency</th>
-        </tr>
-    </thead>
-    <tbody>
-    {#each players as player}
-        <tr transition:delayFly>
-        {#if !gameState.running && player === $localPlayer}
-            <td>{player.admin ? 'Admin' : ''}</td>
-            <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
-            <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
-            <td><TeamSelect size={24} options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
-            <td>{player.ping}ms</td>
-        {:else}
-            <td>{player.admin ? 'Admin' : ''}</td>
-            <td>{player.ready ? 'Ready' : 'Not ready'}</td>
-            <td>{player.displayName}</td>
-            <td>
-                <div class="hstack player-color">
-                    <TeamSelectionIcon color={player.team} />
-                    <span>{teamName(player.team)}</span>
-                </div>
-            </td>
-            <td>{player.ping}ms</td>
+<div class="root">
+{#await joining}
+    <div class="joining-spinner hstack" transition:fade|local={{ duration: 1000 }}>
+        <span>
+            <span>Joining...</span>
+            <span>{roomName}</span>
+        </span>
+        <LoadingIndicator size={80} color='#747bff' />
+    </div>
+{:then}
+    <h3 transition:delayFly><span>Game</span> {gameState.label}</h3>
+    <div transition:delayFly>Map</div>
+    {#if $localPlayer.admin}
+        <MapChooser bind:selectedMap={map} />
+        <details transition:delayFly class="admin-panel">
+            <summary>Configure Game</summary>
+            <div class="options-grid">
+                <span>
+                    <label for="config-warmup">Warmup time (seconds):</label>
+                    <input type="number" id="config-warmup" name="config-warmup" bind:value={gameState.config.warmupSeconds} on:change={syncConfig} />
+                </span>
+                <span>
+                    <label for="config-speed">Play speed:</label>
+                    <input type="number" id="config-speed" name="config-speed" bind:value={gameState.config.gameSpeed} on:change={syncConfig} />
+                </span>
+                <span>
+                    <label for="config-pulseRate">Pulse rate:</label>
+                    <input type="number" id="config-pulseRate" name="config-pulseRate" bind:value={gameState.config.pulseRate} on:change={syncConfig} />
+                </span>
+                <span>
+                    <label for="config-maxWorld">World size:</label>
+                    <input type="number" id="config-maxWorld" name="config-maxWorld" bind:value={gameState.config.maxWorld} on:change={syncConfig} />
+                </span>
+                <span>
+                    <input type="checkbox" id="config-coop" name="config-coop" bind:checked={gameState.config.allowCoop} on:change={syncConfig} />
+                    <label for="config-coop">Allow multiple players per colour</label>
+                </span>
+                <span>
+                    <label for="config-maxPlayers">Max players:</label>
+                    <input type="number" id="config-maxPlayers" name="config-maxPlayers" bind:value={gameState.config.maxPlayers} />
+                </span>
+                <!--
+                    TODO: customize colours?
+                <span>
+                    <label for="config-colours">Colours:</label>
+                    <Select options={playerTeams} bind:value={player.team} on:select={() => updatePlayer(player)} />
+                </span>
+                -->
+            </div>
+        </details>
+    {:else if map}
+        <span transition:delayFly class="map-tile-container">
+            {#key map}
+                <span transition:fly class="map-tile">
+                    <MapTile {map} />
+                </span>
+            {/key}
+        </span>
+    {/if}
+    <table transition:delayFly class="player-table">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Ready</th>
+                <th>Name</th>
+                <th>Team</th>
+                <th>Latency</th>
+            </tr>
+        </thead>
+        <tbody>
+        {#each players as player}
+            <tr transition:delayFly>
+            {#if !gameState.running && player === $localPlayer}
+                <td>{player.admin ? 'Admin' : ''}</td>
+                <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
+                <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
+                <td><TeamSelect size={24} options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+                <td>{player.ping}ms</td>
+            {:else}
+                <td>{player.admin ? 'Admin' : ''}</td>
+                <td>{player.ready ? 'Ready' : 'Not ready'}</td>
+                <td>{player.displayName}</td>
+                <td>
+                    <div class="hstack player-color">
+                        <TeamSelectionIcon color={player.team} />
+                        <span>{teamName(player.team)}</span>
+                    </div>
+                </td>
+                <td>{player.ping}ms</td>
+            {/if}
+            </tr>
+        {/each}
+        </tbody>
+    </table>
+    <div transition:delayFly class="hstack">
+        {#if $localPlayer.admin && !gameState.running}
+            <button disabled={waitingForReady} use:audioQueue={'button'} on:click={startGame}>Start Game</button>
         {/if}
-        </tr>
-    {/each}
-    </tbody>
-</table>
-<div transition:delayFly class="hstack">
-    {#if $localPlayer.admin && !gameState.running}
-        <button disabled={waitingForReady} use:audioQueue={'button'} on:click={startGame}>Start Game</button>
-    {/if}
-    {#if waitingForReady}
-        <div>{waitMessage}</div>
-    {/if}
+        {#if waitingForReady}
+            <div>{waitMessage}</div>
+        {/if}
+    </div>
+{/await}
 </div>
 
 <style>
+    .root {
+        position: relative;
+        min-width: 40em;
+        min-height: 30em;
+    }
+
     .map-tile-container {
         display:grid;
     }
@@ -182,6 +239,17 @@
 
     h3 span {
         opacity: 0.8;
+    }
+
+    .joining-spinner {
+        z-index: 2;
+        position: absolute;
+        top: 0; left:0; bottom:0; right:0;
+        margin-top: 4em;
+        justify-content: center;
+    }
+    .joining-spinner span span:first-child {
+        opacity: 0.7;
     }
 
     .player-color {

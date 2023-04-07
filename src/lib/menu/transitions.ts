@@ -1,4 +1,4 @@
-import { type FlyParams, fly as svelteFly } from 'svelte/transition';
+import { type FlyParams, fly as svelteFly, type BlurParams, blur } from 'svelte/transition';
 
 let count = 0;
 export function delayFly(el: Element, item: number = undefined) {
@@ -12,3 +12,7 @@ export function delayFly(el: Element, item: number = undefined) {
 export function fly(el: Element, opts?: FlyParams) {
     return svelteFly(el, { x: -20, ...(opts ?? {}) });
 }
+
+
+// Fade should be fine but blur performs better in firefox
+export const fade = (el: Element, props?: BlurParams) => blur(el, { amount: 0, ...props });

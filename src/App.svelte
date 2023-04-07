@@ -3,11 +3,11 @@
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
-    import { Context, key, type MenuScreens } from './context';
+    import { Context, key } from './context';
 
     let context = new Context();
     setContext(key, context);
-    const { game, menu, prefs, audio, room, localPlayer } = context;
+    const { game, url, prefs, audio, room, localPlayer } = context;
 
     import { Game, Planet } from './lib/game';
     import { point } from './lib/math';
@@ -34,10 +34,9 @@
     // $game.start(5);
 
     function quitGame() {
-        $room?.leave();
         $room = null;
         $game = null;
-        $menu = 'start';
+        $url = '/';
     }
 
     function initializeAudio() {
@@ -45,50 +44,12 @@
         audio.volume($prefs.soundVolume);
     }
 
-    $: hasGame = !!$game || $menu === 'edit';
-
-    async function initializeFromUrl(pathname: string) {
-        async function joinRemote(pathname: string): Promise<MenuScreens> {
-            const remote = $prefs.remoteGame;
-            if (remote) {
-                try {
-                    $room = await rejoinRoom(remote.roomId, remote.sessionId);
-                    return 'lobby';
-                } catch (e) {
-                    console.log('reconnect failed',e)
-                    delete $prefs.remoteGame
-                }
-            }
-
-            const roomName = pathname.split('/')[2];
-            if (roomName) {
-                $room = await joinRemoteGame($localPlayer.displayName, roomName);
-                return 'lobby';
-            }
-
-            return 'remote';
-        }
-
-        $menu =
-            (pathname.startsWith('/mp/') || pathname.startsWith('/multi-player') || $prefs.remoteGame) ? await joinRemote(pathname) :
-            (pathname === '/single-player' || pathname === '/sp') ? 'local' :
-            'start'
-    }
-    initializeFromUrl(location.pathname.trim());
-
-    menu.subscribe(m => {
-        const url =
-            (m === 'local') ? '/single-player' :
-            (m === 'remote') ? '/multi-player' :
-            (m === 'lobby') ? `/mp/${$room.state.label}` :
-            '/'
-        history.pushState(null, null, url);
-    });
+    $: hasGame = !!$game || $url === '/editor';
 </script>
 
 <svelte:window on:click|once|capture={initializeAudio} />
 
-{#if $menu === 'edit'}
+{#if $url === '/editor'}
     <LevelEditorScreen />
 {:else if $game}
     <GameScreen />

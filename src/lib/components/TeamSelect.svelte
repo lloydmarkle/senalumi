@@ -21,7 +21,8 @@
             use:audioQueue={'teamSelect'}
             class:selected={value === team.value}
             class="list-button"
-            on:click={() => selectTeam(team)}>
+            on:click={() => selectTeam(team)}
+        >
             <TeamSelectionIcon color={team.value} {size} />
         </button>
     {/each}

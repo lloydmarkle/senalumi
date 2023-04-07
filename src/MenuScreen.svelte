@@ -14,20 +14,11 @@
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
-    const { menu, room, audio, prefs } = appContext();
-    function goHome() {
-        if ($room) {
-            $room.leave();
-            $room = null;
-        }
-        $menu = 'start';
-    }
-
-    function leaveRoom() {
-        $room.leave();
+    const { url, room, audio, prefs } = appContext();
+    const goto = (urlPath: string) => () => {
         $room = null;
-        $menu = 'remote';
-    }
+        $url = urlPath;
+    };
 
     const demoGame = new Game();
     demoGame.start(0);
@@ -42,27 +33,27 @@
 
 <OverlayBackground blurBackground>
     <div class="menu">
-        {#if $menu === 'start'}
+        {#if $url === '/sp' || $url === '/single-player'}
             <div transition:myFly class="menu-page">
-                <StartScreen />
-            </div>
-        {:else if $menu === 'local'}
-            <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
                 <LocalGameScreen />
             </div>
-        {:else if $menu === 'remote'}
+        {:else if $url === '/mp' || $url === '/multi-player'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow />Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />Auralux - Clone</button>
                 <RemoteGameScreen />
             </div>
-        {:else if $menu === 'lobby'}
+        {:else if $url.startsWith('/mp/') || $url.startsWith('/multi-player/')}
             <div transition:myFly class="menu-page">
                 <div class="hstack">
-                    <button transition:delayFly={1} class="back-button" on:click={goHome} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
-                    <button transition:delayFly class="back-button" on:click={leaveRoom} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</button>
+                    <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
+                    <button transition:delayFly class="back-button" on:click={goto('/mp')} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</button>
                 </div>
                 <RemoteLobbyScreen />
+            </div>
+        {:else}
+            <div transition:myFly class="menu-page">
+                <StartScreen />
             </div>
         {/if}
     </div>

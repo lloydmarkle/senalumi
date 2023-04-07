@@ -14,5 +14,5 @@
   height="{size}px"
   viewBox="0 0 {size} {size}"
   xmlns="http://www.w3.org/2000/svg">
-  <circle cx="{mid}" cy="{mid}" r="{csize}" fill="{fillColor}"/>
+  <circle cx="{mid}" cy="{mid + 1}" r="{csize}" fill="{fillColor}"/>
 </svg>

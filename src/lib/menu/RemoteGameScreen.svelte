@@ -1,15 +1,14 @@
 <script lang="ts">
-    import { joinRemoteGame, listGameRooms } from '../net-game';
+    import { listGameRooms } from '../net-game';
     import { appContext } from '../../context';
-    import { delayFly } from './transitions';
+    import { delayFly, fade } from './transitions';
     import { uniqueNamesGenerator, adjectives, animals, colors } from 'unique-names-generator';
     import { onDestroy } from 'svelte';
     import type { RoomAvailable } from 'colyseus.js';
-    import { blur, type BlurParams } from 'svelte/transition';
     import LoadingIndicator from '../components/LoadingIndicator.svelte';
     import { audioQueue } from '../components/audio-effect';
 
-    let { room, localPlayer, menu } = appContext();
+    let { localPlayer, url } = appContext();
 
     let loading = false;
     let rooms: RoomAvailable<any>[] = [];
@@ -19,38 +18,17 @@
         loading = false;
     }
     refreshRooms();
+
     let roomRefresher = setInterval(refreshRooms, 5000);
-
-    let destroyed = false;
-    let joining = null;
-    async function joinRoom(roomName: string) {
-        joining = roomName;
-        try {
-            let gameRoom = await joinRemoteGame($localPlayer.displayName, roomName);
-            if (destroyed) {
-                // joining can take time depending on latency so it's possible the user hits "go back" before the join
-                // above finished. If this component is destroyed, leave the room
-                gameRoom.leave();
-                return;
-            }
-
-            $room = gameRoom;
-            $menu = 'lobby';
-        } catch (e) {
-            joining = null;
-            console.log('Unable to join game room', e);
-        }
-    }
-
     onDestroy(() => {
-        destroyed = true;
         clearInterval(roomRefresher);
     });
 
-    // Fade should be fine but blur performs better in firefox
-    let fade = (el: Element, props?: BlurParams) => blur(el, { amount: 0, ...props });
-
     let roomName: string = undefined;
+    function joinRoom(roomName: string) {
+        $url = `/mp/${roomName}`;
+    }
+
     function generateRoomName() {
         return uniqueNamesGenerator({
             dictionaries: [adjectives, colors, animals],
@@ -60,17 +38,7 @@
     }
 </script>
 
-{#if joining}
-<div class="joining-spinner hstack" transition:fade|local={{ duration: 2000 }}>
-    <span>
-        <span>Joining...</span>
-        <span>{joining}</span>
-    </span>
-    <LoadingIndicator size={80} color='#747bff' />
-</div>
-{/if}
-
-<div class:disabled={joining} class="root vstack">
+<div class="root vstack">
     <h3 transition:delayFly>Multiplayer</h3>
     <span transition:delayFly class="hstack">
         <label for="player-name">Player name</label>
@@ -128,28 +96,11 @@
         position: absolute;
     }
 
-    .joining-spinner {
-        z-index: 2;
-        position: absolute;
-        top: 0; left:0; bottom:0; right:0;
-        margin-top: 4em;
-        justify-content: center;
-    }
-    .joining-spinner span span:first-child {
-        opacity: 0.7;
-    }
-
     .root {
         position: relative;
-        min-width: 60vw;
+        min-width: 40em;
     }
-    .disabled::before {
-        content: '';
-        position: absolute;
-        top:0; left:0; right:0; bottom:0;
-        background: var(--theme-gradient-fg2);
-        z-index:1;
-    }
+
     .grid-box {
         display: grid;
         width: 100%;

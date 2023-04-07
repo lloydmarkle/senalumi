@@ -295,14 +295,12 @@ export async function listGameRooms() {
 }
 
 export async function joinRemoteGame(playerName: string, gameName: string) {
-    const client = gameClient();
-    const room = await client.joinOrCreate<GameSchema>('auralux', { playerName, label: gameName });
+    const room = await gameClient().joinOrCreate<GameSchema>('auralux', { playerName, label: gameName });
     return await setupRoom(room);
 }
 
 export async function rejoinRoom(roomId: string, sessionId: string) {
-    const client = gameClient();
-    const room = await client.reconnect<GameSchema>(roomId, sessionId);
+    const room = await gameClient().reconnect<GameSchema>(roomId, sessionId);
     return await setupRoom(room);
 }
 

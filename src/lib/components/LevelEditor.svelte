@@ -5,7 +5,6 @@
     import { distSqr, originPoint, point, QuadTree, type Point } from "../math";
     import type { Renderer } from "../render";
     import { playerTeams } from '../data';
-    import { appContext } from '../../context';
     import TeamSelect from './TeamSelect.svelte';
     import ConfirmButton from './ConfirmButton.svelte';
     import { audioQueue } from './audio-effect';
@@ -13,8 +12,6 @@
     export let mapProps: GameMap['props'];
     export let game: Game;
     export let gfx: Renderer;
-
-    const { menu } = appContext();
 
     function hackGame(game: Game) {
         game.planets.forEach(p => p.destroy());

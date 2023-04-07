@@ -15,6 +15,7 @@ const colyseusServerPlugin = (): Plugin => {
         }),
       });
       gameServer.listen(2567);
+      // gameServer.simulateLatency(1600)
       // gameServer.simulateLatency(800)
       // gameServer.simulateLatency(200)
       gameServer.define('auralux', AuraluxRoom)

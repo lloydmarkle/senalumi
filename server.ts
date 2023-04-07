@@ -166,7 +166,7 @@ export class AuraluxRoom extends Room<GameSchema> {
 
         this.state.players.delete(client.sessionId);
 
-        // reactivate AI if noplayer does not re-join
+        // reactivate AI if player does not re-join
         const reactivateAi = () => {
             const team = player.team;
             let teams = [];

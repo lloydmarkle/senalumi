@@ -10,7 +10,7 @@ export interface UserPrefs {
     userName: string;
     soundVolume: number;
     showDemoGame: boolean;
-    remoteGame?: { sessionId: string, roomId: string },
+    remoteGame?: { name: string, sessionId: string, roomId: string },
 }
 
 // I don't love this whole "context" thing and would much rather pass around
@@ -18,11 +18,10 @@ export interface UserPrefs {
 // too much to try and do this cleanly. I'd like to revisit it someday but for
 // now, use a global "context" variable.
 
-export type MenuScreens = 'start' | 'local' | 'remote' | 'lobby' | 'edit'
 export class Context {
     private _prefs = Context.loadPrefs();
     readonly game = writable<Game>(undefined);
-    readonly menu = writable<MenuScreens>('start');
+    readonly url = writable(location.pathname);
     readonly room = writable<Room<GameSchema>>();
     readonly prefs = writable<UserPrefs>(this._prefs);
     readonly localPlayer = writable(new PlayerSchema(this._prefs.userName));
@@ -34,9 +33,16 @@ export class Context {
             this.prefs.set(this._prefs);
         });
 
+        this.url.subscribe(url => history.pushState(null, null, url));
+
+        let lastRoom: Room<GameSchema>;
         this.room.subscribe(room => {
+            if (lastRoom) {
+                lastRoom.leave();
+            }
+            lastRoom = room;
             if (room) {
-                this._prefs.remoteGame = { roomId: room.id, sessionId: room.sessionId };
+                this._prefs.remoteGame = { name: room.state.label, roomId: room.id, sessionId: room.sessionId };
             } else if (room === null) {
                 delete this._prefs.remoteGame;
             }
