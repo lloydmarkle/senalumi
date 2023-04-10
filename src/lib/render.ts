@@ -1,14 +1,25 @@
 import { backInOut, backOut, cubicIn, cubicOut } from 'svelte/easing';
 import { writable, type Readable, type Writable } from 'svelte/store';
 import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, ComboInterpolator, point } from './math';
-import { Game, constants, type Player, setLightness, Planet, type Renderable, Satellite, type Entity } from './game';
+import { Game, constants, type Player, Planet, type Renderable, Satellite, type Entity } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
 import type { ListenerFn } from 'eventemitter3';
 import { PlanetAudio, Sound } from './sound';
+import { colorMap } from './data';
 // lots of other fun filters https://filters.pixijs.download/main/demo/index.html
 import { ShockwaveFilter } from '@pixi/filter-shockwave';
+
+import colorConvert from 'color-convert'
+const { hex, hsl } = colorConvert;
+const setLightness = (color: number, lightness: number) => {
+    const c = hex.hsl(color.toString(16));
+    c[2] = lightness;
+    return parseInt(hsl.hex(c), 16);
+}
+
+const lightColor = Object.fromEntries(Object.entries(colorMap).map(([team, val]) => [team, setLightness(val, 75)]));
 
 class Selector {
     private dragMove: ListenerFn;
@@ -265,7 +276,7 @@ class DebugRender {
                 const itemCount = new PIXI.Text(sats.length);
                 itemCount.x = planet.position.x;
                 itemCount.y = planet.position.y - 30;
-                itemCount.style.fill = setLightness(player.satelliteColor, 100);
+                itemCount.style.fill = setLightness(lightColor[player.team], 100);
                 gfx.addChild(itemCount);
             }
         });
@@ -420,7 +431,7 @@ export class Renderer {
         // dbg view (always add this last)
         this.dbg = new DebugRender(game, app, viewport, cull);
 
-        const colorMap = game.players.reduce((map, player) => {
+        const playerTintMap = game.players.reduce((map, player) => {
             let filter = new PIXI.filters.ColorMatrixFilter();
             filter.tint(player.color, true);
             map[player.team] = filter;
@@ -428,7 +439,7 @@ export class Renderer {
         }, {})
         const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
         greyTeamMatrix.tint(0x222222, true);
-        colorMap['default'] = greyTeamMatrix;
+        playerTintMap['default'] = greyTeamMatrix;
 
         const filterSfxPool: ArrayPool<FilterSFX> = new ArrayPool(() => new FilterSFX(filterSfxPool, viewport));
         const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
@@ -436,7 +447,7 @@ export class Renderer {
         const renderables: ArrayPool<Renderable>[] = [filterSfxPool, pulsePool, flashPool, targetFlashPool, satelliteTracesPool];
 
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
-        const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), filterSfxPool, colorMap));
+        const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), filterSfxPool, playerTintMap));
 
         game.forEachEntity(entity => entity.gfx = null);
         const renderInitializers = {
@@ -643,7 +654,7 @@ class PulseSFX extends SFX<PIXI.Graphics> {
         this.planet = planet;
 
         this.gfx.clear();
-        this.gfx.lineStyle(planet.orbitDistance, planet.owner.satelliteColor);
+        this.gfx.lineStyle(planet.orbitDistance, lightColor[planet.owner.team]);
         this.gfx.drawCircle(0, 0, planet.orbitDistance * 2.5);
         return super.sfxInit(container);
     }
@@ -666,7 +677,7 @@ class FlashSFX extends SFX<PIXI.Sprite> {
             this.sizeInt.init(time, 1, 4, backOut);
             // no sound because the planet plays the absorb sound
         }
-        this.gfx.tint = sat.owner.satelliteColor;
+        this.gfx.tint = lightColor[sat.owner.team];
         this.alphaInt.init(time, 1, 0.1, backInOut);
         this.xPoint.init(time, sat.position.x, sat.position.x);
         this.yPoint.init(time, sat.position.y, sat.position.y);
@@ -708,7 +719,7 @@ class SatelliteGFX extends EntityGFX<Satellite, PIXI.Sprite> {
 
     tick(elapsedMS: number) {
         super.tick(elapsedMS);
-        this.gfx.tint = this.isPlayerSatellite(this.ent) ? 0xaaaaaa : this.ent.owner.satelliteColor;
+        this.gfx.tint = this.isPlayerSatellite(this.ent) ? 0xaaaaaa : lightColor[this.ent.owner.team];
     }
 }
 

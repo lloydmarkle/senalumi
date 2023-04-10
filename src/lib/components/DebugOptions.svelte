@@ -4,6 +4,7 @@
     import type { Game } from '../game';
     import type { Renderer } from '../render';
     import Toggle from './Toggle.svelte';
+    import { teamColor } from '../data';
 
     export let gfx: Renderer;
     export let game: Game;
@@ -75,7 +76,7 @@
         {#each game.players as player}
             <div class="option">
                 <Toggle id="show-player-selection-{player.team}" bind:state={gfx.dbg.config.showPlayerSelection[player.team]}>
-                    Show <span style="background:#{player.color.toString(16)}">{player.team}</span> player selection
+                    Show <span style="background:#{teamColor(player.team).toString(16)}">{player.team}</span> player selection
                 </Toggle>
             </div>
         {/each}

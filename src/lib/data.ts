@@ -1,13 +1,14 @@
 import type { GameMap, Team } from "./game";
 
-const colorMap = {
-    'red': 0xD2042D,
-    'yellow': 0xFFF44F,
-    'orange': 0xCC5500,
-    'green': 0x7CFC00,
-    'blue': 0x1111DD,
-    'violet': 0x7F00FF,
-    'pink': 0xFF10F0,
+// set lightness to 50% for these because it looks better (especially yellow and orange)
+export const colorMap: { [key in Team]: number } = {
+    'red': 0xfa0536,
+    'yellow': 0xffee00,
+    'orange': 0xff6a00,
+    'green': 0x80ff00,
+    'blue': 0x1212ed,
+    'violet': 0x7f00ff,
+    'pink': 0xff00ee,
 };
 export const teamColor = (team: Team) => colorMap[team] ?? 0;
 

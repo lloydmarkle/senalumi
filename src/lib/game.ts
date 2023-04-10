@@ -1,6 +1,3 @@
-import colorConvert from 'color-convert'
-const { hex, hsl } = colorConvert;
-
 import { AIPlayer, AIPlayer1, AIPlayer2, AIPlayer3, type AIConfig } from './ai.js';
 import { teamColor } from './data.js';
 import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, GrowOnlyArray } from './math.js';
@@ -80,12 +77,6 @@ export interface Entity {
 
     tick(elapsedMS: number);
     destroy(): void;
-}
-
-export const setLightness = (color: number, lightness: number) => {
-    const c = hex.hsl(color.toString(16));
-    c[2] = lightness;
-    return parseInt(hsl.hex(c), 16);
 }
 
 export interface GameMap {
@@ -208,12 +199,12 @@ export function initializerFromMap(map: GameMap) {
 }
 
 export class Player {
-    readonly color: number;
-    readonly satelliteColor: number;
-    constructor(readonly game: Game, readonly team: Team, readonly ai: AIPlayer) {
-        this.color = setLightness(teamColor(team), 50);
-        this.satelliteColor = setLightness(teamColor(team), 75);
-    }
+    constructor(
+        readonly game: Game,
+        readonly team: Team,
+        readonly ai: AIPlayer,
+        readonly color = teamColor(team),
+    ) {}
 
     tick(ms: number): void {
         this.ai.tick(this, ms);
