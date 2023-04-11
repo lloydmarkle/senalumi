@@ -1,4 +1,4 @@
-import { distSqr, QuadTree, type Point } from "./math";
+import { distSqr, QuadTree, type Point } from "./math.js";
 
 // why are these types here? Because vite (or rullup) doesn't work well with circular imports
 // (ie. game imports ai, ai imports game).

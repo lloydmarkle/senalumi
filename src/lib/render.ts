@@ -196,21 +196,10 @@ class DebugRender {
             const cullStats = [];
             Object.entries(cull.stats()).forEach(stat => cullStats.push(`${stat[0]}: ${stat[1]}`));
 
-            const perfStats = [];
-            Object.keys(this.game.stats.collisionStages).forEach(stage => {
-                perfStats.push(`collision-${stage}: ${this.game.stats.collisionStages[stage].toFixed(2)}`);
-            });
-            perfStats.push(`moveTime: ${this.game.stats.moveTime.toFixed(2)}ms`);
-            perfStats.push(`collideTime: ${this.game.stats.collideTime.toFixed(2)}ms`);
-            perfStats.push(`pulseTime: ${this.game.stats.pulseTime.toFixed(2)}ms`);
-            perfStats.push(`thinkTime: ${this.game.stats.thinkTime.toFixed(2)}ms`);
-            perfStats.push(`gameTime: ${this.game.stats.gameTime.toFixed(2)}ms`);
-
             text.text = [
                 (this.overlayInfo.fps / this.overlayInfo.frames).toFixed(2) + 'fps',
                 this.game.satellites.length + ' satellites',
                 'stats: [', '  ' + stats.join('\n  '), ']',
-                'perf: [', '  ' + perfStats.join('\n  '), ']',
                 'cull: [', '  ' + cullStats.join('\n  '), ']',
             ].join('\n');
             this.overlayInfo.fps = 0;
@@ -230,7 +219,7 @@ class DebugRender {
                 return;
             }
 
-            let colors = [0xD2042D, 0xCC5500, 0xFFF44F, 0x7CFC00, 0x1111DD, 0x7F00FF, 0xFF10F0];
+            let colors = Object.values(colorMap);
 
             let q: Array<[number, QuadTree<any>]> = [];
             q.push([0, this.game.collisionTree]);

@@ -1,5 +1,12 @@
 import { Game } from '../lib/game.js';
 import { performance, PerformanceObserver } from 'perf_hooks';
+import { memoryUsage } from 'node:process';
+
+// neat little hack https://stackoverflow.com/a/75007985
+import { setFlagsFromString } from 'v8';
+import { runInNewContext } from 'vm';
+setFlagsFromString('--expose_gc');
+const megabyte = 1024 * 1024;
 
 // https://stackoverflow.com/questions/7343890
 const stats = (arr: number[], usePopulation = false) => {
@@ -19,23 +26,30 @@ describe('perf', () => {
         });
         obs.observe({ entryTypes: ['gc'] });
         const timings = [];
+        const memory = [];
 
-        // simulate several ticks of a game with 2,000 satellites
+        // simulate several ticks of a game with 200 satellites/team
         for (let i = 0; i < 10; i++) {
             const game = new Game();
-            while (game.satellites.length < 2000) {
+            game.start(0);
+            while (game.satellites.length < 200) {
                 game.pulse();
-                game.tick(20);
+                game.tick(10);
             }
 
-            const start = performance.now();
-            for (let i = 0; i < 500; i++) {
-                game.tick(16);
+            runInNewContext('gc')();
+            const mstart = memoryUsage.rss();
+            const tstart = performance.now();
+            for (let i = 0; i < 10000; i++) {
+                game.tick(20);
             }
-            timings.push(performance.now() - start);
+            timings.push(performance.now() - tstart);
+            memory.push((memoryUsage.rss() - mstart) / megabyte);
+            process.stdout.write('.')
         }
         obs.disconnect();
-        console.log(timings, entries);
-        console.log(stats(timings));
-    }).timeout(100000);
+        console.log('raw', timings, memory, entries);
+        console.log('cpu',stats(timings));
+        console.log('mem',stats(memory));
+    }).timeout(100_000);
 });

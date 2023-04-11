@@ -1,10 +1,5 @@
 import { linear } from 'svelte/easing';
 import { create as createPool } from 'deepool';
-const fakePool = (fn) => ({
-    use: () => fn(),
-    recycle: () => {},
-});
-// const createPool = fakePool;
 
 export interface Point {
     x: number;
@@ -12,12 +7,16 @@ export interface Point {
 }
 export const point = (x: number, y: number) => ({ x, y });
 export const originPoint = () => point(0, 0);
-export const copyPoint = (src: Point, tgt: Point) => {
-    tgt.x = src.x;
-    tgt.y = src.y;
+
+export const distSqr = (a: Point, b: Point) => {
+    const x = (a.x - b.x);
+    const y = (a.y - b.y);
+    return x * x + y * y
 };
 
-export const distSqr = (a: Point, b: Point) => (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+// Use a growing pool of quad tree for less gc
+const quadTreePool: Pool<QuadTree<any>> = createPool(() => new QuadTree<any>());
+const boxPool: Pool<Box> = createPool(() => new Box())
 
 class Box {
     left: number;
@@ -37,22 +36,9 @@ class Box {
     }
 
     intersectBox(box: Box) {
-        return (
-            this.contains(box.left, box.top)
-            || this.contains(box.right, box.top)
-            || this.contains(box.left, box.bottom)
-            || this.contains(box.right, box.bottom)
-        );
-    }
-
-    contains(x: number, y: number) {
-        return x > this.left && x < this.right && y > this.top && y < this.bottom;
+        return !(box.left > this.right || box.right < this.left || box.top > this.bottom || box.bottom < this.top);
     }
 }
-
-// Use a growing pool of quad tree for less gc
-const quadTreePool: Pool<QuadTree<any>> = createPool(() => new QuadTree<any>());
-const boxPool: Pool<Box> = createPool(() => new Box())
 
 // Memory efficient version based on the "loose quadtree" from https://stackoverflow.com/questions/41946007
 export class QuadTree<T extends { position: Point }> {
@@ -61,7 +47,7 @@ export class QuadTree<T extends { position: Point }> {
     private se: QuadTree<T>;
     private sw: QuadTree<T>;
     data: T[] = [];
-    constructor(readonly capacity = 10, private box: Box = null) {}
+    constructor(private capacity = 10, private box: Box = null) {}
 
     get topLeft() { return point(this.box.left, this.box.top); }
     get bottomRight() { return point(this.box.right, this.box.bottom); }
@@ -130,15 +116,16 @@ export class QuadTree<T extends { position: Point }> {
     }
 
     private subdivide(radius: number) {
-        const halfx = (this.box.left + this.box.right) / 2;
-        const halfy = (this.box.top + this.box.bottom) / 2;
+        const halfx = (this.box.left + this.box.right) * .5;
+        const halfy = (this.box.top + this.box.bottom) * .5;
         this.nw = this.setup(this.box.left, this.box.top, halfx, halfy);
         this.ne = this.setup(halfx, this.box.top, this.box.right, halfy);
         this.se = this.setup(halfx, halfy, this.box.right, this.box.bottom);
         this.sw = this.setup(this.box.left, halfy, halfx, this.box.bottom);
 
         // push points to children
-        for (const d of this.data) {
+        for (let i = 0; i < this.data.length; ++i) {
+            let d = this.data[i];
             this.child(d).add(d, radius);
         }
         this.data = [];
@@ -146,7 +133,7 @@ export class QuadTree<T extends { position: Point }> {
 
     private setup(x1: number, y1: number, x2: number, y2: number) {
         const tree = quadTreePool.use();
-        (tree as any).capacity = this.capacity;
+        tree.capacity = this.capacity;
         tree.box = boxPool.use().init(x1, y1, x2, y2);
         return tree;
     }
@@ -167,7 +154,7 @@ export class QuadTree<T extends { position: Point }> {
         if (!this.box) {
             return;
         }
-        if (!this.box.intersectBox(box) && !box.intersectBox(this.box)) {
+        if (!box.intersectBox(this.box)) {
             return;
         }
         if (this.nw) {
@@ -176,14 +163,16 @@ export class QuadTree<T extends { position: Point }> {
             this.se.findPoints(box, fn);
             this.sw.findPoints(box, fn);
         } else {
-            this.data.forEach(fn);
+            for (let i = 0; i < this.data.length; ++i) {
+                fn(this.data[i]);
+            }
         }
     }
 }
 
 interface Pool<T> {
-    use: () => T;
-    recycle: (item: T) => void;
+    use(): T;
+    recycle(item: T): void;
 }
 
 export class GrowOnlyArray<T> {
@@ -191,24 +180,37 @@ export class GrowOnlyArray<T> {
     private count = 0;
 
     forEach(fn: (item: T) => void) {
-        this.items.forEach(e => e && fn(e));
+        for (let i = 0; i < this.items.length; ++i) {
+            const e = this.items[i];
+            if (e) {
+                fn(e);
+            }
+        }
     }
 
     get length () { return this.count; }
 
     clear() {
-        for (let i = 0; i < this.items.length; i++) {
+        for (let i = 0; i < this.items.length; ++i) {
             this.items[i] = null;
         }
         this.count = 0;
     }
 
     add(item: T) {
-        let idx = this.items.findIndex(e => !e);
-        if (idx === -1) {
-            this.grow();
-            idx = this.count;
+        // this is apparently faster than this.items.findIndex()
+        let idx = -1;
+        for (let i = 0; i < this.items.length; ++i) {
+            if (!this.items[i]) {
+                idx = i;
+                break;
+            }
         }
+        if (idx === -1) {
+            idx = this.items.length;
+            this.grow();
+        }
+
         this.items[idx] = item;
         this.count += 1;
         return item;
@@ -217,19 +219,20 @@ export class GrowOnlyArray<T> {
     remove(item: T) {
         // inspired by https://github.com/pixijs/pixijs/blob/dev/packages/display/src/Container.ts#L292 and
         // https://github.com/pixijs/pixijs/blob/4cbadba3e46c4987f505e76a7f4e844d95a120cc/packages/utils/src/data/removeItems.ts#L9
-        const idx = this.items.findIndex(e => e === item);
-        if (idx === -1) {
-            return false;
+        for (let i = 0; i < this.items.length; ++i) {
+            if (this.items[i] === item) {
+                this.items[i] = null;
+                this.count -= 1;
+                return true;
+            }
         }
-        this.items[idx] = null;
-        this.count -= 1;
-        return true;
+        return false;
     }
 
     private grow() {
         let len = this.items.length;
         this.items.length += (len ?? 10);
-        for (let i = len; i < this.items.length; i++) {
+        for (let i = len; i < this.items.length; ++i) {
             this.items[i] = null;
         }
     }
@@ -245,8 +248,14 @@ export class ArrayPool<T> {
 
     get length() { return this.array.length; }
     forEach = (fn: (item: T) => void) => this.array.forEach(fn);
-    take = () => this.array.add(this.pool.use())
-    release = (item: T) => this.array.remove(item)
+    take = () => this.array.add(this.pool.use());
+    release = (item: T) => {
+        if (this.array.remove(item)) {
+            this.pool.recycle(item);
+            return true;
+        }
+        return false;
+    }
 }
 
 type EaseFn = (p: number) => number;

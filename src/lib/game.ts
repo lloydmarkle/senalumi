@@ -24,40 +24,6 @@ export const constants = {
 
 export type Team = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'violet' | 'pink';
 
-type CollisionStages = 'distance' | 'filter' | 'remove';
-type TeamStats = { [key in Team]?: number };
-class Stats {
-    public collisionStages: { [key in CollisionStages]?: number } = {};
-    public playerTime: TeamStats = {};
-    public moveTime: number = 0;
-    public collideTime: number = 0;
-    public pulseTime: number = 0;
-    public thinkTime: number = 0;
-    public gameTime: number = 0;
-
-    now() {
-        return performance.now();
-    }
-
-    recordCollide(start: number, stage: CollisionStages) {
-        this.collisionStages[stage] = (this.collisionStages[stage] ?? 0) + (this.now() - start);
-    }
-
-    recordPlayerStat(start: number, team: Team, field: TeamStats) {
-        field[team] = (field[team] ?? 0) + (this.now() - start);
-    }
-
-    elapsed(start: number) {
-        return this.now() - start;
-    }
-
-    clear() {
-        this.collisionStages = {};
-        this.playerTime = {};
-        this.thinkTime = this.moveTime = this.gameTime = this.collideTime = this.pulseTime = 0;
-    }
-}
-
 export interface Renderable {
     tick(elapsedMS: number): void;
     destroy(): void;
@@ -229,7 +195,6 @@ export class Game {
 
     planets: Planet[] = [];
     players: Player[] = [];
-    readonly stats = new Stats();
     readonly log: GameStateSnapshot[] = [];
     readonly config = constants;
     readonly satellites = new ArrayPool(() => new Satellite());
@@ -288,9 +253,7 @@ export class Game {
         if (!this.state.running) {
             return this.state;
         }
-        this.stats.clear();
 
-        const gameTime = this.stats.now();
         const elapsedMS = time * this.config.gameSpeed;
         this.state.gameTimeMS += elapsedMS;
         this.state.elapsedMS = elapsedMS;
@@ -300,34 +263,21 @@ export class Game {
 
         this.collisionTree.clean();
 
-        const moveTimer = this.stats.now();
         this.planets.forEach(planet => planet.tick(elapsedMS));
         this.satellites.forEach(sat => {
-            const collideTime = this.stats.now();
             this.collisionTree.insert(sat, constants.satelliteRadius);
-            this.stats.collideTime += this.stats.elapsed(collideTime);
             sat.tick(elapsedMS);
         });
-        this.stats.moveTime = this.stats.elapsed(moveTimer) - this.stats.collideTime;
 
         // needs to be after satellites tick otherwise the quad tree explodes
-        const thinkTime = this.stats.now();
-        this.players.forEach(player => {
-            let timer = this.stats.now();
-            player.tick(elapsedMS);
-            this.stats.recordPlayerStat(timer, player.team, this.stats.playerTime);
-        });
-        this.stats.thinkTime += this.stats.elapsed(thinkTime);
+        this.players.forEach(player => player.tick(elapsedMS));
 
-        const collideTime = this.stats.now();
         this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius, elapsedMS));
-        this.stats.collideTime += this.stats.elapsed(collideTime);
 
         // pulse is the last thing we do because planets could have changed ownership during collision detection
         const seconds = Math.floor(this.state.gameTimeMS / 1000);
         if (seconds > this.state.lastPulseTime) {
             this.state.lastPulseTime = seconds;
-            const pulseTime = this.stats.now();
             this.pulse();
 
             const map = this.snapshot.satelliteCounts;
@@ -335,27 +285,22 @@ export class Game {
             this.state.log = this.snapshot;
             this.log.push(this.snapshot);
             this.snapshot = createSnapshot(seconds);
-            this.stats.pulseTime = this.stats.elapsed(pulseTime);
         }
 
-        this.stats.gameTime = this.stats.elapsed(gameTime);
         return this.state;
     }
 
     private collide(satellites: Satellite[], radius: number, ms: number) {
         const r2 = radius * radius;
-        for (let i = 0; i < satellites.length; i++) {
-            for (let j = i; j < satellites.length; j++) {
+        for (let i = 0; i < satellites.length; ++i) {
+            for (let j = i; j < satellites.length; ++j) {
                 let sat1 = satellites[i];
                 let sat2 = satellites[j];
                 if (sat1.owner === sat2.owner) {
                     continue;
                 }
 
-                const distTimer = this.stats.now();
                 const dist = distSqr(sat1.position, sat2.position);
-                this.stats.recordCollide(distTimer, 'distance');
-
                 if (dist < r2) {
                     this.applyImpact(sat1, sat2, radius * 10, ms);
                     sat1.destroy(sat2);
@@ -584,9 +529,10 @@ class OrbitMover implements Mover {
     arrived = () => false;
     evaluate(moveable: Moveable, elapsedMS: number) {
         this.orbitRotationOffset += this.orbitSpeed * elapsedMS;
+        const radius = this.orbit.orbitDistance * this.orbitDistanceOffset;
         applySpringForce(moveable,
-            Math.cos(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.x + this.positionNoise.x,
-            Math.sin(this.orbitRotationOffset) * this.orbit.orbitDistance * this.orbitDistanceOffset + this.orbit.position.y + this.positionNoise.y,
+            Math.cos(this.orbitRotationOffset) * radius + this.orbit.position.x + this.positionNoise.x,
+            Math.sin(this.orbitRotationOffset) * radius + this.orbit.position.y + this.positionNoise.y,
             elapsedMS * this.moveNoise);
         return this;
     }
@@ -682,9 +628,7 @@ export class Satellite implements Entity, Moveable {
 
     destroy(causeEntity?: Entity) {
         const game = this.owner.game;
-        const filter = game.stats.now();
         const released = game.satellites.release(this);
-        game.stats.recordCollide(filter, 'filter');
         if (released) {
             this.gfx?.destroy();
             game.state.removed.add(this);
