@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { Room } from "colyseus.js";
-    import { playerTeams } from "../data";
     import type { GameSchema, PlayerSchema } from "../net-game";
     import TeamSelectionIcon from "./TeamSelectionIcon.svelte";
 

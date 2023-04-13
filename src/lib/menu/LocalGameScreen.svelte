@@ -39,9 +39,6 @@
     <span transition:delayFly class="hstack">
         <div>Team</div>
         <TeamSelect options={availableTeams} bind:value={$localPlayer.team} />
-        {#if !$localPlayer.team}
-            <span class="watching">(Watch)</span>
-        {/if}
     </span>
     <button
         use:audioQueue={'button'}
@@ -49,13 +46,3 @@
         disabled={map === null}
         on:click={startGame}>Launch</button>
 </div>
-
-<style>
-    .watching {
-        animation: pulse 1s infinite;
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: .6; }
-        40%, 60% { opacity: 1; }
-    }
-</style>

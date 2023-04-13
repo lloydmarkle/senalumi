@@ -2,20 +2,22 @@
     import { fly, scale } from "svelte/transition";
     import { cubicOut } from 'svelte/easing';
     import { audioQueue } from "./audio-effect";
+    import ExpandMenuButton from "./ExpandMenuButton.svelte";
 
     // some fun based on https://www.sliderrevolution.com/resources/css-hamburger-menu/
     export let isOpen = false;
     export let closeable = true;
     let open = false;
 
-    const animLen = 400;
+    const outerAnimDuration = 400;
+    const innerAnimDuration = 400;
     // slick! https://css-tricks.com/animating-with-clip-path/
     let expand = (el: Element, props: { delay: number}) => ({
         ...props,
-        duration: animLen,
+        duration: outerAnimDuration,
         easing: cubicOut,
         css: (t, u) => `
-        clip-path: inset(0% ${u * 100}% ${Math.min(100, u * 70)}% 0% round var(--theme-border-radius));
+        clip-path: inset(0% ${u * 100}% ${u * 100}% 0% round var(--theme-border-radius));
         `,
     });
 </script>
@@ -30,24 +32,26 @@
         <div class="content-container"
             class:top-padding={closeable}
             in:expand={{ delay: 0 }}
-            out:expand|local={{ delay: animLen }}
+            out:expand|local={{ delay: innerAnimDuration }}
         >
-            <div class="content" in:fly={{ y:-10, delay: animLen }} out:fly|local={{ y:-10, delay: 0 }}>
+            <div class="content"
+                in:fly={{ y:-10, delay: outerAnimDuration, duration: innerAnimDuration }}
+                out:fly|local={{ y:-10, delay: 0, duration: innerAnimDuration }}
+            >
                 <slot />
             </div>
         </div>
     {/if}
     {#if closeable}
         <button
-            class="menu"
-            class:open={isOpen || open}
-            use:audioQueue={isOpen || open ? 'menuClose' : 'menuOpen'}
-            transition:scale={{ duration: animLen }}
-            on:click={() => open = !open }
+            class="toggle-button"
+            use:audioQueue={open ? 'menuClose' : 'menuOpen'}
+            transition:scale={{ duration: outerAnimDuration }}
+            on:click={() => open = !open}
         >
-            <div class="bar" />
-            <div class="bar" />
-            <div class="bar" />
+            <slot name="button-content" open={isOpen || open}>
+                <ExpandMenuButton open={isOpen || open} />
+            </slot>
         </button>
     {/if}
 </div>
@@ -55,58 +59,17 @@
 <style>
 .root {
     /* font-size: 4em; */
-    position: absolute;
+    position: relative;
+    z-index: 10;
     background: var(--theme-background);
     border-radius: var(--theme-border-radius);
 }
 
-.menu {
-    background: none;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 1em;
-    gap: .25em;
-    position: relative;
-    transition: transform .2s;
+.toggle-button {
     border: none;
-}
-.menu:active {
-    transform: translate(0, .1em) scale(0.9);
-}
-.bar {
-    width: 2em;
-    height: .25em;
-    border-radius: var(--theme-border-radius);
-    background: var(--theme-foreground);
-    transition: transform 350ms, opacity 350ms;
-}
-
-.menu::before {
-    content: '';
-    position: absolute;
-    width: 2.2em;
-    height: 2.2em;
-    left: .5em;
-    top: 0.4em;
-    border-radius: 100%;
-    opacity: 0;
-    transition: opacity .2s;
-    border: .15em solid var(--theme-foreground);
-}
-.menu.open::before {
-    opacity: .8;
-}
-.menu.open .bar {
-    width: 1.5em;
-    transform: translate(0, -.5em) rotate(45deg);
-}
-.menu.open .bar:nth-child(1) {
-    transform: translate(0, .5em) rotate(135deg);
-}
-.menu.open .bar:nth-child(2) {
-    transform: rotate(225deg);
-    opacity: 0;
+    background: none;
+    padding: 0;
+    position: relative;
 }
 
 .content-container {

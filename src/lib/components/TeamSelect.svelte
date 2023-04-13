@@ -7,7 +7,7 @@
     type TeamInfo = { value: string, label: string };
     export let options: TeamInfo[];
     export let value: string = '';
-    export let size = 48;
+    export let size = 32;
 
     function selectTeam(team: TeamInfo) {
         value = team.value;
@@ -23,7 +23,11 @@
             class="list-button"
             on:click={() => selectTeam(team)}
         >
-            <TeamSelectionIcon color={team.value} {size} />
+            {#if team.value === ''}
+                Watch
+            {:else}
+                <TeamSelectionIcon color={team.value} {size} />
+            {/if}
         </button>
     {/each}
 </div>
@@ -44,6 +48,11 @@
         border-radius: 0;
     }
     .list-button:first-child {
+        padding: .5em;
+        margin-inline-end: .5em;
+        border-radius: var(--theme-border-radius);
+    }
+    .list-button:nth-child(2) {
         border-top-left-radius: var(--theme-border-radius);
         border-bottom-left-radius: var(--theme-border-radius);
     }

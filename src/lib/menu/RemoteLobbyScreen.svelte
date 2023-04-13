@@ -11,6 +11,7 @@
     import { audioQueue } from '../components/audio-effect';
     import LoadingIndicator from '../components/LoadingIndicator.svelte';
     import { onDestroy } from 'svelte';
+    import ExpandingMenu from '../components/ExpandingMenu.svelte';
 
     const { localPlayer, room, game, audio, url, prefs } = appContext();
 
@@ -117,7 +118,7 @@
     }
 </script>
 
-<div class="root">
+<div class="root vstack">
 {#await joining}
     <div class="joining-spinner hstack" transition:fade|local={{ duration: 1000 }}>
         <span>
@@ -131,8 +132,11 @@
     <div transition:delayFly>Map</div>
     {#if $localPlayer.admin}
         <MapChooser bind:selectedMap={map} />
-        <details transition:delayFly class="admin-panel">
-            <summary>Configure Game</summary>
+        <ExpandingMenu>
+            <div class="hstack admin-toggle" slot="button-content" let:open>
+                <span class="arrow" class:arrow-open={open} />Configure game
+            </div>
+
             <div class="options-grid">
                 <span>
                     <label for="config-warmup">Warmup time (seconds):</label>
@@ -166,7 +170,7 @@
                 </span>
                 -->
             </div>
-        </details>
+        </ExpandingMenu>
     {:else if map}
         <span transition:delayFly class="map-tile-container">
             {#key map}
@@ -193,7 +197,7 @@
                 <td>{player.admin ? 'Admin' : ''}</td>
                 <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
                 <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
-                <td><TeamSelect size={24} options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+                <td><TeamSelect options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
                 <td>{player.ping}ms</td>
             {:else}
                 <td>{player.admin ? 'Admin' : ''}</td>
@@ -227,6 +231,7 @@
         position: relative;
         min-width: 40em;
         min-height: 30em;
+        gap: .5em;
     }
 
     .map-tile-container {
@@ -242,7 +247,7 @@
     }
 
     .joining-spinner {
-        z-index: 2;
+        z-index: 20;
         position: absolute;
         top: 0; left:0; bottom:0; right:0;
         margin-top: 4em;
@@ -261,11 +266,39 @@
         padding: 1rem 2rem;
     }
 
+    /* .admin-toggle {
+        background: var(--theme-background-2);
+        transition: background .3s;
+        padding: 0 .5em;
+        border-radius: var(--theme-border-radius);
+    }
+    .admin-toggle:hover {
+        background: var(--theme-background);
+    } */
+
     .options-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         row-gap: 0.5rem;
         column-gap: 0.5rem;
+        background: var(--theme-background);
+    }
+
+    .arrow {
+        border-top: .5em solid transparent;
+        border-bottom: .5em solid transparent;
+        border-left: .5em solid var(--theme-foreground);
+        width: 0;
+        height: 0;
+
+        margin: 1em;
+        display: inline-block;
+        left: .5em;
+        position: relative;
+        transition: transform .3s;
+    }
+    .arrow-open {
+        transform: rotate(90deg);
     }
 
     table {

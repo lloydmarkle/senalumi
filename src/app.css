@@ -72,12 +72,12 @@ input {
   font-family: inherit;
 }
 input[type="text"] {
-  padding: 0.5rem 1rem;
+  padding: 0.5em 1em;
   flex-grow: 2;
 }
 input[type=checkbox] {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.2em;
+  height: 1.2em;
 }
 
 button {
