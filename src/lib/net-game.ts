@@ -8,8 +8,8 @@ import { gameMaps, playerTeams } from './data';
 export class PlayerSchema extends Schema {
     constructor(
         public displayName: string,
-        // these don't need to be in the constructor but it's short than writing a separate interface and
-        // initializing them in the constructor
+        // these don't need to be in the constructor but it's shorter than writing
+        // a separate interface and initializing them in the constructor
         public sessionId: string = '',
         public ready = false,
         public admin = false,
@@ -248,7 +248,7 @@ export class GameSchema extends Schema {
         // keep removed entites around a few seconds after delete to make sure they sync final state to client
         tick.removed.forEach(sat => {
             this.toRemove.set(sat.id, this.gameTimeMS + 10000);
-            this.satellites.get(sat.id).synchronizeFromEntity(sat);
+            this.syncSatellite(sat)
         });
         tick.removed.clear();
 
@@ -258,11 +258,15 @@ export class GameSchema extends Schema {
                 e.synchronizeFromEntity(ent as Planet);
                 this.planets.set(ent.id, e);
             } else if (ent.type === 'Satellite') {
-                const e = this.satellites.get(ent.id) ?? new SatelliteSchema();
-                e.synchronizeFromEntity(ent as Satellite);
-                this.satellites.set(ent.id, e);
+                this.syncSatellite(ent as Satellite);
             }
         });
+    }
+
+    private syncSatellite(sat: Satellite) {
+        const e = this.satellites.get(sat.id) ?? new SatelliteSchema();
+        e.synchronizeFromEntity(sat);
+        this.satellites.set(sat.id, e);
     }
 }
 defineTypes(GameSchema, {
@@ -356,7 +360,13 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
             const owner = game.players.find(e => e.team === ent.owner);
             const sat = game.satellites.take().init(ent.id, owner, point(ent.px, ent.py));
             ent.onChange = changes => SatelliteSchema.synchronizeTo(sat, game, changes);
-            ent.onRemove = () => sat.destroy();
+            ent.onRemove = () => {
+                // CAUTION! Because satellites are a pool, we may be re-using them so double check the id before
+                // destroying the satellite otherwise we may remove the wrong one
+                if (ent.id === sat.id) {
+                    sat.destroy();
+                }
+            };
         };
 
         state.log.onAdd = (log) => {

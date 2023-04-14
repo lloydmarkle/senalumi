@@ -131,7 +131,8 @@
     <h3 transition:delayFly><span>Game</span> {gameState.label}</h3>
     <div transition:delayFly>Map</div>
     {#if $localPlayer.admin}
-        <MapChooser bind:selectedMap={map} />
+        <span transition:delayFly><MapChooser bind:selectedMap={map} /></span>
+        <span transition:delayFly>
         <ExpandingMenu>
             <div class="hstack admin-toggle" slot="button-content" let:open>
                 <span class="arrow" class:arrow-open={open} />Configure game
@@ -171,6 +172,7 @@
                 -->
             </div>
         </ExpandingMenu>
+        </span>
     {:else if map}
         <span transition:delayFly class="map-tile-container">
             {#key map}

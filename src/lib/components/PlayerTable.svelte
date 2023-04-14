@@ -38,7 +38,13 @@
             {:else}
                 <td>{player.displayName}</td>
             {/if}
-            <td><TeamSelectionIcon size={20} color={player.team} /></td>
+            <td>
+            {#if !player.team}
+                Watching
+            {:else}
+                <TeamSelectionIcon size={20} color={player.team} />
+            {/if}
+            </td>
             <td
                 class:disconnected={!player.connected}
             >{player.ping}ms</td>

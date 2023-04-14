@@ -261,20 +261,7 @@ export class Game {
             return this.state;
         }
 
-        this.collisionTree.clean();
-
-        this.planets.forEach(planet => planet.tick(elapsedMS));
-        this.satellites.forEach(sat => {
-            this.collisionTree.insert(sat, constants.satelliteRadius);
-            sat.tick(elapsedMS);
-        });
-
-        // needs to be after satellites tick otherwise the quad tree explodes
-        this.players.forEach(player => player.tick(elapsedMS));
-
-        this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius, elapsedMS));
-
-        // pulse is the last thing we do because planets could have changed ownership during collision detection
+        // pulse first so that we don't re-use entities
         const seconds = Math.floor(this.state.gameTimeMS / 1000);
         if (seconds > this.state.lastPulseTime) {
             this.state.lastPulseTime = seconds;
@@ -286,6 +273,18 @@ export class Game {
             this.log.push(this.snapshot);
             this.snapshot = createSnapshot(seconds);
         }
+
+        this.collisionTree.clean();
+
+        this.planets.forEach(planet => planet.tick(elapsedMS));
+        this.satellites.forEach(sat => {
+            this.collisionTree.insert(sat, constants.satelliteRadius);
+            sat.tick(elapsedMS);
+        });
+        // needs to be after satellites tick otherwise the quad tree explodes
+        this.players.forEach(player => player.tick(elapsedMS));
+
+        this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius, elapsedMS));
 
         return this.state;
     }
