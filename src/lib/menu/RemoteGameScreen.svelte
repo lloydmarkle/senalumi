@@ -98,13 +98,15 @@
 
     .root {
         position: relative;
-        min-width: 40em;
     }
 
     .grid-box {
         display: grid;
         width: 100%;
         align-items: center;
+    }
+    .grid-box .hstack {
+        flex-wrap: wrap;
     }
 
     table {
@@ -131,5 +133,16 @@
     }
     td {
         padding: 1em .5em;
+    }
+
+    @media(min-width: 400px) {
+        .root {
+            min-width: 80vw;
+        }
+    }
+    @media(min-width: 860px) {
+        .root {
+            min-width: 40em;
+        }
     }
 </style>

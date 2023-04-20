@@ -9,32 +9,46 @@
     export let value: string = '';
     export let size = 32;
 
+    $: watchTeam = options.find(e => e.value === '');
+    $: teams = options.filter(e => e.value !== '');
+
     function selectTeam(team: TeamInfo) {
         value = team.value;
         dispatch('select', { team: team.value });
     }
 </script>
 
-<div class="hstack">
-    {#each options as team}
+<div class="hstack outer">
+    {#if watchTeam}
         <button
             use:audioQueue={'teamSelect'}
-            class:selected={value === team.value}
-            class="list-button"
-            on:click={() => selectTeam(team)}
+            class:selected={value === watchTeam.value}
+            on:click={() => selectTeam(watchTeam)}
         >
-            {#if team.value === ''}
-                Watch
-            {:else}
-                <TeamSelectionIcon color={team.value} {size} />
-            {/if}
+            Watch
         </button>
-    {/each}
+    {/if}
+    <div class="hstack inner">
+        {#each teams as team}
+            <button
+                use:audioQueue={'teamSelect'}
+                class:selected={value === team.value}
+                class="list-button"
+                on:click={() => selectTeam(team)}
+            >
+                <TeamSelectionIcon color={team.value} {size} />
+            </button>
+        {/each}
+    </div>
 </div>
 
 <style>
     .hstack {
+        flex-wrap: wrap;
+    }
+    .inner {
         gap: 0em;
+        justify-content: center;
     }
 
     .selected {
@@ -48,11 +62,6 @@
         border-radius: 0;
     }
     .list-button:first-child {
-        padding: .5em;
-        margin-inline-end: .5em;
-        border-radius: var(--theme-border-radius);
-    }
-    .list-button:nth-child(2) {
         border-top-left-radius: var(--theme-border-radius);
         border-bottom-left-radius: var(--theme-border-radius);
     }

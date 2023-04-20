@@ -34,7 +34,7 @@
 
 <h3 transition:delayFly>Single player</h3>
 <div class="vstack">
-    <div transition:delayFly>Map</div>
+    <div transition:delayFly>Map <span>{map?.props.name ?? ''}</span></div>
     <MapChooser bind:selectedMap={map} />
     <span transition:delayFly class="hstack">
         <div>Team</div>
@@ -46,3 +46,9 @@
         disabled={map === null}
         on:click={startGame}>Launch</button>
 </div>
+
+<style>
+    span {
+        opacity: .8;
+    }
+</style>

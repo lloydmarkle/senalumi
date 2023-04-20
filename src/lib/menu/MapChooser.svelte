@@ -26,10 +26,10 @@
 <style>
     .map-select {
         border-radius: var(--theme-border-radius);
-        max-height: calc(4em + 160px);
+        max-height: calc(2em + 60px);
         flex-wrap: wrap;
         overflow-y: scroll;
-        gap: 1.2em;
+        gap: .6em;
         padding: 1em 1em;
         background: #1a1a1a;
         justify-content: flex-start;
@@ -52,5 +52,18 @@
     }
     .selected-map::after {
         opacity: 1;
+    }
+
+    @media(min-width: 400px) {
+        .map-select {
+            gap: .8em;
+            max-height: calc(2em + 90px);
+        }
+    }
+    @media(min-width: 860px) {
+        .map-select {
+            gap: 1.2em;
+            max-height: calc(4em + 160px);
+        }
     }
 </style>

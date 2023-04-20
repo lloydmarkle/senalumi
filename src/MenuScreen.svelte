@@ -69,7 +69,7 @@
 
     .menu-page {
         background: var(--theme-background-3);
-        padding: 1em 4em 4em;
+        padding: 1em 1em 1em;
         align-self: center;
         justify-self: center;
         grid-row: 1;
@@ -93,5 +93,19 @@
         padding: 0.5em 0em;
         border: none;
         background: none;
+    }
+
+    @media(min-width: 400px) {
+        .menu {
+            padding-top: 6em;
+        }
+        .menu-page {
+            padding: .5em 2em 2em;
+        }
+    }
+    @media(min-width: 860px) {
+        .menu-page {
+            padding: 1em 4em 4em;
+        }
     }
 </style>

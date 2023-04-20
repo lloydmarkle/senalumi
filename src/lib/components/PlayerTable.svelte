@@ -23,7 +23,6 @@
 <table class="room-table">
     <thead>
         <tr>
-            <th></th>
             <th>Player</th>
             <th>Team</th>
             <th>Latency</th>
@@ -32,7 +31,6 @@
     <tbody>
         {#each players as player}
         <tr>
-            <td>{player.admin ? '♚' : ''}</td>
             {#if player === localPlayer}
                 <td contenteditable=true on:blur={updatePlayer} bind:textContent={player.displayName}>{player.displayName}</td>
             {:else}
@@ -47,7 +45,7 @@
             </td>
             <td
                 class:disconnected={!player.connected}
-            >{player.ping}ms</td>
+            >{player.ping}ms {player.admin ? '♚' : ''}</td>
         </tr>
     {/each}
     </tbody>

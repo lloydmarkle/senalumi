@@ -10,9 +10,18 @@
   --theme-gradient-fg1: rgba(0, 0, 0, 0.6);
   --theme-gradient-fg2: rgba(0, 0, 0, 0.8);
   --theme-gradient-background: linear-gradient(to bottom, var(--theme-gradient-bg1), var(--theme-gradient-bg2));
+  --theme-hover-opacity-on: 0.9;
+  --theme-hover-opacity-off: 0.9;
 
   --theme-link: #646cff;
   --theme-link-hover: #535bf2;
+}
+
+@media (hover: hover) {
+  :root {
+    --theme-hover-opacity-on: 0.9;
+    --theme-hover-opacity-off: 0.3;
+  }
 }
 
 :root {
@@ -72,7 +81,7 @@ input {
   font-family: inherit;
 }
 input[type="text"] {
-  padding: 0.5em 1em;
+  padding: 0.25em .5em;
   flex-grow: 2;
 }
 input[type=checkbox] {
@@ -91,7 +100,7 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover {
+button:hover, button:active {
   border-color: var(--theme-link);
 }
 button:focus,

@@ -119,11 +119,11 @@
         width: 20em;
         left: 1em;
         bottom: 1em;
-        opacity: .5;
+        opacity: var(--theme-hover-opacity-off);
         transition: opacity .3s;
     }
-    .player-table:hover {
-        opacity: 1;
+    .player-table:hover, .player-table:active {
+        opacity: var(--theme-hover-opacity);
     }
 
     .warmup-container {

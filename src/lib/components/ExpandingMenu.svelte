@@ -34,7 +34,7 @@
             in:expand={{ delay: 0 }}
             out:expand|local={{ delay: innerAnimDuration }}
         >
-            <div class="content"
+            <div
                 in:fly={{ y:-10, delay: outerAnimDuration, duration: innerAnimDuration }}
                 out:fly|local={{ y:-10, delay: 0, duration: innerAnimDuration }}
             >
@@ -83,12 +83,5 @@
 }
 .top-padding {
     padding-top: 4em;
-}
-
-.content {
-    display: flex;
-    align-items: end;
-    flex-direction: row;
-    gap: 1em;
 }
 </style>

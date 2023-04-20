@@ -260,13 +260,13 @@
         top: 1em;
         right: 2em;
         padding: 1rem 2rem;
-        opacity: 0.2;
+        opacity: var(--theme-hover-opacity-off);
         background: var(--theme-background);
         border-radius: var(--theme-border-radius);
         transition: opacity 0.3s
     }
-    .world-settings:hover {
-        opacity:1
+    .world-settings:hover, .world-settings:active {
+        opacity: var(--theme-hover-opacity);
     }
 
     .selected-button {

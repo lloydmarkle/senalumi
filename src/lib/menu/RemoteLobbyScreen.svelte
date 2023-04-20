@@ -132,7 +132,7 @@
     <div transition:delayFly>Map</div>
     {#if $localPlayer.admin}
         <span transition:delayFly><MapChooser bind:selectedMap={map} /></span>
-        <span transition:delayFly>
+        <span transition:delayFly style="width:15em">
         <ExpandingMenu>
             <div class="hstack admin-toggle" slot="button-content" let:open>
                 <span class="arrow" class:arrow-open={open} />Configure game
@@ -182,41 +182,39 @@
             {/key}
         </span>
     {/if}
-    <table transition:delayFly class="player-table">
-        <thead>
-            <tr>
-                <th></th>
-                <th>Ready</th>
-                <th>Name</th>
-                <th>Team</th>
-                <th>Latency</th>
-            </tr>
-        </thead>
-        <tbody>
-        {#each players as player}
-            <tr transition:delayFly>
-            {#if !gameState.running && player === $localPlayer}
-                <td>{player.admin ? 'Admin' : ''}</td>
-                <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
-                <td><input type="text" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
-                <td><TeamSelect options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
-                <td>{player.ping}ms</td>
-            {:else}
-                <td>{player.admin ? 'Admin' : ''}</td>
-                <td>{player.ready ? 'Ready' : 'Not ready'}</td>
-                <td>{player.displayName}</td>
-                <td>
-                    <div class="hstack player-color">
-                        <TeamSelectionIcon color={player.team} />
-                        <span>{teamName(player.team)}</span>
-                    </div>
-                </td>
-                <td>{player.ping}ms</td>
-            {/if}
-            </tr>
-        {/each}
-        </tbody>
-    </table>
+    <div class="player-table">
+        <table transition:delayFly>
+            <thead>
+                <tr>
+                    <th>Ready</th>
+                    <th>Name</th>
+                    <th>Team</th>
+                    <th>Latency</th>
+                </tr>
+            </thead>
+            <tbody>
+            {#each players as player}
+                <tr transition:delayFly>
+                {#if !gameState.running && player === $localPlayer}
+                    <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
+                    <td><input type="text" size="12" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
+                    <td><TeamSelect options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
+                {:else}
+                    <td>{player.ready ? 'Ready' : 'Not ready'}</td>
+                    <td>{player.displayName}</td>
+                    <td>
+                        <div class="hstack player-color">
+                            <TeamSelectionIcon color={player.team} />
+                            <span>{teamName(player.team)}</span>
+                        </div>
+                    </td>
+                {/if}
+                <td>{player.ping}ms {player.admin ? '(Admin)' : ''}</td>
+                </tr>
+            {/each}
+            </tbody>
+        </table>
+    </div>
     <div transition:delayFly class="hstack">
         {#if $localPlayer.admin && !gameState.running}
             <button disabled={waitingForReady} use:audioQueue={'button'} on:click={startGame}>Start Game</button>
@@ -231,7 +229,6 @@
 <style>
     .root {
         position: relative;
-        min-width: 40em;
         min-height: 30em;
         gap: .5em;
     }
@@ -268,19 +265,9 @@
         padding: 1rem 2rem;
     }
 
-    /* .admin-toggle {
-        background: var(--theme-background-2);
-        transition: background .3s;
-        padding: 0 .5em;
-        border-radius: var(--theme-border-radius);
-    }
-    .admin-toggle:hover {
-        background: var(--theme-background);
-    } */
-
     .options-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         row-gap: 0.5rem;
         column-gap: 0.5rem;
         background: var(--theme-background);
@@ -303,18 +290,19 @@
         transform: rotate(90deg);
     }
 
-    table {
-        table-layout: fixed;
-        border-collapse: collapse;
-        width: 100px;
+    .hstack {
+        flex-wrap: wrap;
+    }
+
+    .player-table {
         min-height: 8em;
         max-height: 16em;
-        width: 100%;
-        display: block;
         overflow-y: scroll;
+        max-width: calc(100vw - 2em);
     }
-    thead th:nth-child(3) {
-        width: 80%;
+    table {
+        border-collapse: collapse;
+        width: 100%;
     }
     th {
         text-align: left;
@@ -329,5 +317,22 @@
     }
     td {
         padding: .5em .5em;
+    }
+
+    @media(min-width: 400px) {
+        .root {
+            min-width: 80vw;
+        }
+        .options-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        .player-table {
+            max-width: unset;
+        }
+    }
+    @media(min-width: 860px) {
+        .root {
+            min-width: 40em;
+        }
     }
 </style>

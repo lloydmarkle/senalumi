@@ -44,10 +44,14 @@
         audio.volume($prefs.soundVolume);
     }
 
+    let screenWidth: number;
     $: hasGame = !!$game || $url === '/editor';
+    $: menuOpen = !hasGame && screenWidth > 400
 </script>
 
-<svelte:window on:click|once|capture={initializeAudio} />
+<svelte:window
+    bind:innerWidth={screenWidth}
+    on:click|once|capture={initializeAudio} />
 
 {#if $url === '/editor'}
     <LevelEditorScreen />
@@ -58,18 +62,20 @@
 {/if}
 
 <div class="prefs-menu">
-    <ExpandingMenu isOpen={!hasGame} closeable={hasGame}>
-        <VolumeControl bind:volume={$prefs.soundVolume} />
-        {#if !hasGame}
-            <Toggle id={"background-demo"} bind:state={$prefs.showDemoGame}>Demo game</Toggle>
-        {/if}
-        {#if hasGame}
-            <ConfirmButton
-                text={'Quit'}
-                confirmText={'Really leave?'}
-                actionFn={quitGame}
-            />
-        {/if}
+    <ExpandingMenu isOpen={menuOpen} closeable={!menuOpen}>
+        <div class="prefs-contents">
+            <VolumeControl bind:volume={$prefs.soundVolume} />
+            {#if !hasGame}
+                <Toggle id={"background-demo"} bind:state={$prefs.showDemoGame}>Demo</Toggle>
+            {/if}
+            {#if hasGame}
+                <ConfirmButton
+                    text={'Quit'}
+                    confirmText={'Really leave?'}
+                    actionFn={quitGame}
+                />
+            {/if}
+        </div>
     </ExpandingMenu>
 </div>
 
@@ -78,12 +84,24 @@
         position: fixed;
         top: 1em;
         left: 1em;
-        opacity: 0.3;
+        opacity: var(--theme-hover-opacity-off);
         background: var(--theme-background);
         border-radius: var(--theme-border-radius);
         transition: opacity 0.3s;
     }
     .prefs-menu:hover {
-        opacity: .8
+        opacity: var(--theme-hover-opacity-on);
+    }
+
+    .prefs-contents {
+        display: flex;
+        flex-direction: column;
+        align-items: start;
+        gap: 1em;
+    }
+    @media(min-width: 400px) {
+        .prefs-contents {
+            flex-direction: row;
+        }
     }
 </style>
