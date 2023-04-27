@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Game, initializerFromMap, type GameMap, type Team } from '../game';
+    import { Game, type GameMap, type Team } from '../game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
     import MapChooser from './MapChooser.svelte';
@@ -23,7 +23,7 @@
         items[1 + Math.floor(Math.random() * (items.length - 1))];
 
     function startGame() {
-        $game = new Game(initializerFromMap(map));
+        $game = new Game(map);
         const player = $game.players.find(p => p.team === $localPlayer.team);
         if (player) {
             player.ai.enabled = false;

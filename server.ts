@@ -1,7 +1,7 @@
 import * as http from 'http';
 import { Room, Client } from 'colyseus';
 import { GameConfigSchema, GameSchema, PlayerMoveMessage, PlayerSchema } from './src/lib/net-game';
-import { Game, GameMap, initializerFromMap, Team } from './src/lib/game';
+import { Game, GameMap, Team } from './src/lib/game';
 
 // enable performance.now() on both app and server
 import { performance } from 'perf_hooks';
@@ -63,7 +63,7 @@ export class AuraluxRoom extends Room<GameSchema> {
             }
 
             // only set some properties after game start
-            if (this.game.state.running) {
+            if (this.state.phase === 'running') {
                 this.game.config.gameSpeed = msg.gameSpeed;
                 this.game.config.pulseRate = msg.pulseRate;
                 return;
@@ -74,7 +74,7 @@ export class AuraluxRoom extends Room<GameSchema> {
             this.state.config.assign(msg);
 
             const map: GameMap = JSON.parse(msg.gameMap);
-            this.game = new Game(initializerFromMap(map));
+            this.game = new Game(map);
             // set available colors based on map
             this.state.config.colours = [
                 playerTeams[0].value,
@@ -92,9 +92,8 @@ export class AuraluxRoom extends Room<GameSchema> {
                 this.disableAiPlayers();
                 this.game.config.gameSpeed = msg.gameSpeed;
                 this.game.config.pulseRate = msg.pulseRate;
-                this.game.config.gameCountDown = msg.warmupSeconds;
                 this.game.start();
-                this.metadata.state = 'Started';
+                this.state.phase = 'running';
             }
         });
 
@@ -127,7 +126,7 @@ export class AuraluxRoom extends Room<GameSchema> {
             player.admin = true;
         }
         this.state.players.set(client.sessionId, player);
-        if (!this.state.running) {
+        if (this.state.phase === 'waiting') {
             // not started so assign player to a team
             player.team = this.findTeam();
         }

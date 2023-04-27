@@ -192,7 +192,6 @@ export interface GameLogSchema extends Schema {
 
 export class GameConfigSchema extends Schema {
     constructor(
-        public warmupSeconds = constants.gameCountDown,
         public gameSpeed = constants.gameSpeed,
         public pulseRate = constants.pulseRate,
         public maxWorld = constants.maxWorld,
@@ -204,7 +203,6 @@ export class GameConfigSchema extends Schema {
     ) { super() }
 }
 defineTypes(GameConfigSchema, {
-    warmupSeconds: 'number',
     gameSpeed: 'number',
     pulseRate: 'number',
     maxWorld: 'number',
@@ -225,14 +223,17 @@ export class GameSchema extends Schema {
         readonly planets = new MapSchema<PlanetSchema>(),
         readonly players = new MapSchema<PlayerSchema>(),
         readonly log = new ArraySchema<GameLogSchema>(),
-        public running = false,
+        public phase: 'waiting' | 'running' | 'finished' = 'waiting',
         public gameTimeMS = -1,
     ) { super() }
 
     update(game: Game, elapsedMS: number) {
+        if (this.phase !== 'running') {
+            return;
+        }
+
         const tick = game.tick(elapsedMS * game.config.gameSpeed);
-        this.running = tick.running;
-        this.gameTimeMS = tick.gameTimeMS;
+        this.gameTimeMS = game.gameTimeMS;
         if (tick.log) {
             this.log.push(new GameLogSchema(tick.log));
         }
@@ -247,7 +248,7 @@ export class GameSchema extends Schema {
 
         // keep removed entites around a few seconds after delete to make sure they sync final state to client
         tick.removed.forEach(sat => {
-            this.toRemove.set(sat.id, this.gameTimeMS + 10000);
+            this.toRemove.set(sat.id, this.gameTimeMS + 30_000);
             this.syncSatellite(sat)
         });
         tick.removed.clear();
@@ -276,7 +277,7 @@ defineTypes(GameSchema, {
     players: { map: PlayerSchema },
     log: [GameLogSchema],
     config: GameConfigSchema,
-    running: 'boolean',
+    phase: 'string',
     gameTimeMS: 'number',
     label: 'string',
 });
@@ -329,15 +330,14 @@ async function setupRoom(room: Colyseus.Room<GameSchema>) {
 //  hack the game into a client-only mode
 export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>) {
     game.tick = time => {
-        game.state.elapsedMS = time;
-        game.state.gameTimeMS = room.state.gameTimeMS;
-        game.state.running = room.state.running;
+        game.frameState.elapsedMS = time;
+        game.gameTimeMS = room.state.gameTimeMS;
         if (room.state.gameTimeMS >= 0) {
             // interpolate and return a result that is derived from the game log and removed satellies
             // see below for state synchornization from colyseus callback
             game.forEachEntity(ent => ent.tick(time));
         }
-        return game.state;
+        return game.frameState;
     };
 
     const state = room.state;
@@ -353,7 +353,10 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
             const planet = new Planet(game, point(ent.px, ent.py), 3);
             game.planets.push(planet);
             ent.onChange = changes => PlanetSchema.synchronizeTo(planet, game, changes);
-            ent.onRemove = () => planet.destroy();
+            ent.onRemove = () => {
+                game.planets = game.planets.filter(p => p !== planet);
+                planet.destroy();
+            }
         };
 
         state.satellites.onAdd = (ent: SatelliteSchema) => {
@@ -370,8 +373,8 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
         };
 
         state.log.onAdd = (log) => {
-            game.state.log = log as GameStateSnapshot;
-            game.log.push(game.state.log);
+            game.frameState.log = log as GameStateSnapshot;
+            game.log.push(game.frameState.log);
         };
 
         // callbacks are setup so synchronize state

@@ -1,7 +1,7 @@
 <script lang="ts">
     import { fly } from 'svelte/transition';
     import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
-    import { Game, type GameMap, Planet, initializerFromMap, Satellite } from "../game";
+    import { Game, type GameMap, Planet, Satellite } from "../game";
     import { distSqr, originPoint, point, QuadTree, type Point } from "../math";
     import type { Renderer } from "../render";
     import { playerTeams } from '../data';
@@ -150,7 +150,7 @@
                 const map: GameMap = JSON.parse(event.target.result.toString());
                 // persist mapProps so that it reloads when the component reloads
                 mapProps = map.props;
-                game = new Game(initializerFromMap(map));
+                game = new Game(map);
             });
             reader.readAsText(file);
         }

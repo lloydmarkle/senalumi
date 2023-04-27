@@ -1,6 +1,7 @@
 <script lang="ts">
     import { appContext } from '../../context';
     import { fly } from 'svelte/transition';
+    import { onDestroy } from 'svelte';
     import type { Game } from '../game';
     import type { Renderer } from '../render';
     import Toggle from './Toggle.svelte';
@@ -8,6 +9,11 @@
 
     export let gfx: Renderer;
     export let game: Game;
+
+    gfx.paused = true;
+    onDestroy(() => {
+        gfx.paused = false;
+    });
 
     const { audio } = appContext();
 

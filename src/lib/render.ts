@@ -52,11 +52,6 @@ class Selector {
     }
 
     pointerup(ev: PIXI.InteractionEvent) {
-        if (!this.game.state.running) {
-            this.clear();
-            this.clearGfx();
-            return;
-        }
         if (this._mode === 'none') {
             if (this.radius === 0 && this.pointerDownTime() < 200) {
                 const planet = this.game.planets.find(p => distSqr(p.position, this.worldPoint) < 1600);
@@ -308,6 +303,7 @@ export class Renderer {
     get transform(): Readable<ViewTransform> { return this.viewstate; };
     readonly viewport: Viewport;
     readonly dbg: DebugRender;
+    public paused = false;
 
     constructor(element: HTMLCanvasElement, private game: Game, audio: Sound, player?: Player) {
         const app = new PIXI.Application({
@@ -452,6 +448,10 @@ export class Renderer {
         app.ticker.add((delta) => {
             this.viewstate.set({ tx: viewport.x, ty: viewport.y, scale: viewport.scaled });
             this.dbg.tick(app);
+            if (this.paused) {
+                return;
+            }
+
             let elapsedMS = app.ticker.elapsedMS;
             // if we switch tabs, elapsedMS can get very large (seconds or minutes) and that will
             // mess up physics so process large pauses in 50ms increments. 50ms is chosen arbitrarily

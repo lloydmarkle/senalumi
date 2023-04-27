@@ -41,6 +41,7 @@
     };
 
     let gameState: GameSchema;
+    const isGameRunning = () => gameState.phase === 'running';
     const joining = joinRoom().then(r => {
         if (destroyed) {
             // joining can take time depending on latency so it's possible the user hits "go back" before the join
@@ -62,7 +63,7 @@
         $localPlayer = gameState.players.get($room.sessionId);
 
         gameState.onChange = async () => {
-            if (gameState.running && !$game) {
+            if (isGameRunning() && !$game) {
                 // clear locally added listeners so we don't hold on to a reference to this svelte component
                 gameState.onChange = null;
                 gameState.config.onChange = null;
@@ -140,10 +141,6 @@
 
             <div class="options-grid">
                 <span>
-                    <label for="config-warmup">Warmup time (seconds):</label>
-                    <input type="number" id="config-warmup" name="config-warmup" bind:value={gameState.config.warmupSeconds} on:change={syncConfig} />
-                </span>
-                <span>
                     <label for="config-speed">Play speed:</label>
                     <input type="number" id="config-speed" name="config-speed" bind:value={gameState.config.gameSpeed} on:change={syncConfig} />
                 </span>
@@ -195,7 +192,7 @@
             <tbody>
             {#each players as player}
                 <tr transition:delayFly>
-                {#if !gameState.running && player === $localPlayer}
+                {#if !isGameRunning() && player === $localPlayer}
                     <td><input type="checkbox" bind:checked={player.ready} on:change={() => updatePlayer(player)} /></td>
                     <td><input type="text" size="12" bind:value={player.displayName} on:change={() => updatePlayer(player)} /></td>
                     <td><TeamSelect options={availableTeams} bind:value={player.team} on:select={() => updatePlayer(player)} /></td>
@@ -216,7 +213,7 @@
         </table>
     </div>
     <div transition:delayFly class="hstack">
-        {#if $localPlayer.admin && !gameState.running}
+        {#if $localPlayer.admin && !isGameRunning()}
             <button disabled={waitingForReady} use:audioQueue={'button'} on:click={startGame}>Start Game</button>
         {/if}
         {#if waitingForReady}

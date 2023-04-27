@@ -11,7 +11,7 @@ export const originPoint = () => point(0, 0);
 export const distSqr = (a: Point, b: Point) => {
     const x = (a.x - b.x);
     const y = (a.y - b.y);
-    return x * x + y * y
+    return x * x + y * y;
 };
 
 // Use a growing pool of quad tree for less gc

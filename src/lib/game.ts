@@ -17,7 +17,6 @@ export const constants = {
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
     satelliteRadius: 8,
-    gameCountDown: 10, // seconds
     // sprite is (currently) 300px
     planetRadius: 150,
 };
@@ -45,7 +44,17 @@ export interface Entity {
     destroy(): void;
 }
 
-export interface GameMap {
+export interface GameWorld {
+    planets: {
+        ownerTeam?: Team,
+        initialSatellies: number,
+        level: PlanetLevel,
+        maxLevel: PlanetLevel,
+        position: Point,
+    }[],
+}
+
+export interface GameMap extends GameWorld {
     props: {
         name: string,
         img: string,
@@ -57,23 +66,14 @@ export interface GameMap {
         teams: Team[],
         planetCounts: { level: number, count: number }[];
     },
-    planets: {
-        ownerTeam?: Team,
-        initialSatellies: number,
-        level: PlanetLevel,
-        maxLevel: PlanetLevel,
-        position: Point,
-    }[],
 }
 
-function generateRandomCircleWorld(game: Game, mapSetup: GameMap['setup']) {
+function generateRandomCircleWorld(mapSetup: GameMap['setup']): GameWorld {
     const minDistance = constants.planetRadius * constants.planetRadius * 4;
-    const worldSize = mapSetup.size;
-    const worldSize2x = mapSetup.size * 2;
-    const tree = new QuadTree<Planet>(1);
+    const tree = new QuadTree<GameMap['planets'][0]>(1);
     const positionPlanet = () => {
         while (true)  {
-            let position = point(Math.random() * worldSize2x - worldSize, Math.random() * worldSize2x - worldSize);
+            let position = point((Math.random() * 2 - 1) * mapSetup.size, (Math.random() * 2 - 1) * mapSetup.size);
             let use = true;
             tree.query(position, constants.planetRadius,
                 p => use = use && distSqr(position, p.position) > minDistance);
@@ -83,37 +83,39 @@ function generateRandomCircleWorld(game: Game, mapSetup: GameMap['setup']) {
         }
     };
 
-    game.players = game.players.filter(p => mapSetup.teams.indexOf(p.team) !== -1);
-
-    const planets: Planet[] = [];
+    const planets: GameMap['planets'] = [];
     // position player planets in a circle
     for (let i = 0; i < mapSetup.teams.length; i++) {
         const angle = Math.PI * 2 * (i / mapSetup.teams.length);
-        const position = point(Math.cos(angle) * worldSize, Math.sin(angle) * worldSize);
-        const planet = new Planet(game, position, 1);
-        planet.capture(game.players[i]);
+        const position = point(Math.cos(angle) * mapSetup.size, Math.sin(angle) * mapSetup.size);
+        planets.push({
+            position,
+            level: 1,
+            maxLevel: 1,
+            ownerTeam: mapSetup.teams[i],
+            initialSatellies: 100,
+        });
 
-        planets.push(planet);
-        tree.insert(planet, constants.planetRadius);
+        tree.insert(planets[planets.length - 1], constants.planetRadius);
     }
     // position other planets randomly
     for (const { level, count } of mapSetup.planetCounts) {
         for (let j = 0; j < count; j++) {
             const position = positionPlanet();
-            planets.push(new Planet(game, position, level as PlanetLevel));
+            planets.push({
+                position,
+                level: 0,
+                initialSatellies: 0,
+                maxLevel: level as PlanetLevel,
+            });
             tree.insert(planets[planets.length - 1], constants.planetRadius);
         }
     }
-
-    // add initial satelliets to each planet
-    game.planets = planets;
-    for (let i = 0; i < mapSetup.initialSatellites; i++){
-        game.pulse();
-    }
+    return { planets };
 }
 
-function setupWorld(game: Game) {
-    generateRandomCircleWorld(game, {
+function setupDefaultMap(game: Game): GameMap {
+    const setup: GameMap['setup'] = {
         function: 'circle',
         initialSatellites: 100,
         size: 1000,
@@ -123,7 +125,10 @@ function setupWorld(game: Game) {
             { level: 2, count: game.players.length / 2 },
             { level: 1, count: game.players.length },
         ],
-    });
+    };
+    const props = { name: 'default', img: '' };
+    const world =  generateRandomCircleWorld(setup);
+    return { props, setup, ...world };
 }
 
 export interface GameEvent {
@@ -140,29 +145,6 @@ const createSnapshot = (time: number): GameStateSnapshot => ({
     satelliteCounts: new Map(),
     events: [],
 });
-
-export type WorldInitializer = (game: Game) => void;
-
-export function initializerFromMap(map: GameMap) {
-    return (game: Game) => {
-        if (map.setup) {
-            generateRandomCircleWorld(game, map.setup);
-        } else {
-            map.planets.forEach(p => {
-                const planet = new Planet(game, p.position, p.maxLevel);
-                if (p.ownerTeam) {
-                    const player = game.players.find(player => player.team === p.ownerTeam);
-                    planet.capture(player);
-                    planet.level = p.level;
-                    for (let i = 0; i < p.initialSatellies; i++) {
-                        game.spawnSatellite(planet);
-                    }
-                }
-                game.planets.push(planet);
-            });
-        }
-    };
-}
 
 export class Player {
     constructor(
@@ -191,26 +173,23 @@ export class Player {
 
 export class Game {
     private snapshot: GameStateSnapshot;
-    private satId = 0;
+    private entId = 0;
+    private lastPulseTime = 0;
 
+    gameTimeMS = 0;
     planets: Planet[] = [];
     players: Player[] = [];
     readonly log: GameStateSnapshot[] = [];
     readonly config = constants;
     readonly satellites = new ArrayPool(() => new Satellite());
     readonly collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
-    readonly state = {
+    readonly frameState = {
         log: null as GameStateSnapshot,
-        // due to pooling and pulse happening after collisions, this removed array may not be accurate
-        // in practice, it doesn't seem to matter
         removed: new GrowOnlyArray<Satellite>(),
         elapsedMS: 0,
-        gameTimeMS: constants.gameCountDown * -1000,
-        lastPulseTime: 0,
-        running: false,
     };
 
-    constructor(private initializeWorld: WorldInitializer = setupWorld) {
+    constructor(private map?: GameMap) {
         const aiStats: AIConfig = {
             minThinkGapMS: 8000,
             maxThinkGapMS: 12000,
@@ -230,16 +209,39 @@ export class Game {
             new Player(this, 'violet', new AIPlayer1(aiStats)),
             new Player(this, 'pink', new AIPlayer2(aiStats)),
         ];
+        this.map = this.map ?? setupDefaultMap(this);
     }
 
-    start(delay = constants.gameCountDown) {
+    start() {
         this.snapshot = createSnapshot(0);
-        this.initializeWorld(this);
-        let pid = 0;
-        this.planets.forEach(p => p.id = 'p' + pid++);
+        this.initializerFromMap();
+    }
 
-        this.state.gameTimeMS = delay * -1000;
-        this.state.running = true;
+    private initializerFromMap() {
+        if (this.map.setup) {
+            this.players = this.players.filter(p => this.map.setup.teams.indexOf(p.team) !== -1);
+            this.map = { ...this.map, ...generateRandomCircleWorld(this.map.setup) };
+            // only generate the map once
+            this.map.setup = null;
+        }
+
+        // destroy old world
+        this.forEachEntity(ent => ent.destroy());
+
+        // init new world
+        this.planets = this.map.planets.map(p => {
+            const planet = new Planet(this, p.position, p.maxLevel);
+            planet.id = `p${this.entId++}`;
+            if (p.ownerTeam) {
+                const player = this.players.find(player => player.team === p.ownerTeam);
+                planet.capture(player);
+                planet.level = p.level;
+                for (let i = 0; i < p.initialSatellies; i++) {
+                    this.spawnSatellite(planet);
+                }
+            }
+            return planet;
+        });
     }
 
     forEachEntity(fn: (ent: Entity) => void) {
@@ -248,28 +250,20 @@ export class Game {
     }
 
     tick(time: number) {
-        this.state.elapsedMS = 0;
-        this.state.log = null;
-        if (!this.state.running) {
-            return this.state;
-        }
-
         const elapsedMS = time * this.config.gameSpeed;
-        this.state.gameTimeMS += elapsedMS;
-        this.state.elapsedMS = elapsedMS;
-        if (this.state.gameTimeMS < 0) {
-            return this.state;
-        }
+        this.gameTimeMS += elapsedMS;
+        this.frameState.elapsedMS = elapsedMS;
+        this.frameState.log = null;
 
         // pulse first so that we don't re-use entities
-        const seconds = Math.floor(this.state.gameTimeMS / 1000);
-        if (seconds > this.state.lastPulseTime) {
-            this.state.lastPulseTime = seconds;
+        const seconds = Math.floor(this.gameTimeMS / 1000);
+        if (seconds > this.lastPulseTime) {
+            this.lastPulseTime = seconds;
             this.pulse();
 
             const map = this.snapshot.satelliteCounts;
             this.satellites.forEach(sat => map.set(sat.owner.team, (map.get(sat.owner.team) ?? 0) + 1));
-            this.state.log = this.snapshot;
+            this.frameState.log = this.snapshot;
             this.log.push(this.snapshot);
             this.snapshot = createSnapshot(seconds);
         }
@@ -286,7 +280,7 @@ export class Game {
 
         this.collisionTree.walk(sats => this.collide(sats, constants.satelliteRadius, elapsedMS));
 
-        return this.state;
+        return this.frameState;
     }
 
     private collide(satellites: Satellite[], radius: number, ms: number) {
@@ -350,7 +344,7 @@ export class Game {
         if (this.satellites.length >= constants.maxSatellites) {
             return;
         }
-        const sat = this.satellites.take().init(`s${this.satId++}`, planet.owner, planet.position);
+        const sat = this.satellites.take().init(`s${this.entId++}`, planet.owner, planet.position);
         sat.mover = new OrbitMover(planet);
     }
 
@@ -630,7 +624,7 @@ export class Satellite implements Entity, Moveable {
         const released = game.satellites.release(this);
         if (released) {
             this.gfx?.destroy();
-            game.state.removed.add(this);
+            game.frameState.removed.add(this);
         }
         if (causeEntity) {
             this.destroyedBy = causeEntity.id;
