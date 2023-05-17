@@ -716,13 +716,15 @@ const statusBarThickness = 8;
 const statusOffset = -Math.PI * 0.5;
 const circlePercent = Math.PI * 2 * 0.01;
 class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
-    private lastSize: number;
     private lastMaxLevel: number;
     private shockwaveInt = new ComboInterpolator();
     private sizeInt = new Interpolator();
     private planetAudio: PlanetAudio;
     private statusBarAlphaInt = new Interpolator();
     private statusBarAlphaLoop = new ComboInterpolator();
+    private healthBarInt = new Interpolator(100);
+    private upgradeBarInt = new Interpolator(0);
+
     rings: PIXI.Container;
     statusBars: PIXI.Graphics;
     constructor(pool: ArrayPool<PlanetGFX>, gfx: PIXI.Sprite, readonly fpool: ArrayPool<FilterSFX>, readonly colorMap: any) {
@@ -735,7 +737,6 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.planetAudio = new PlanetAudio(planet, audio);
 
         this.statusBarAlphaLoop.init([this.statusBarAlphaInt.init(1000, 0.6, 0.8)], 'reverse');
-        this.lastSize = planet.size;
         this.lastMaxLevel = planet.maxLevel;
         this.sizeInt.init(0, 0, planet.size);
         this.statusBars = new PIXI.Graphics();
@@ -767,10 +768,11 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.planetAudio.tick(elapsedMS);
 
         const planet = this.ent;
-        if (this.lastSize !== planet.size) {
+        if (this.sizeInt.target !== planet.size) {
             this.shockwave(planet);
-            this.sizeInt.init(2000, this.lastSize, planet.size, backInOut);
-            this.lastSize = planet.size;
+            this.upgradeBarInt.target = 0;
+            this.healthBarInt.target = 100;
+            this.sizeInt.init(2000, this.sizeInt.target, planet.size, backInOut);
         }
         this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
 
@@ -785,13 +787,19 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         this.statusBars.alpha = this.statusBarAlphaLoop.tick(elapsedMS);
         if (this.statusBarAlphaLoop.finished) {
             const time = Math.ceil((planet.health < 100 ? planet.health : (100 - planet.upgrade)) / 10);
-            this.statusBarAlphaInt.init(time * 200, 0.6, 0.8);
+            this.statusBarAlphaInt.init(time * 200, 0.4, 0.8);
         }
         if (planet.upgrade > 0) {
-            this.drawStatusBar(planet, planet.upgrade, planet.orbitDistance * 0.6, 0x404040, planet.candidateOwner?.color ?? planet.owner.color);
+            if (planet.upgrade !== this.upgradeBarInt.target) {
+                this.upgradeBarInt.init(200, this.upgradeBarInt.target, planet.upgrade);
+            }
+            this.drawStatusBar(planet, this.upgradeBarInt.tick(elapsedMS), planet.orbitDistance * 0.6, 0x404040, planet.candidateOwner?.color ?? planet.owner.color);
         }
         if (planet.health < 100) {
-            this.drawStatusBar(planet, planet.health, planet.orbitDistance * 0.8, 0xa0a0a0, planet.owner.color);
+            if (planet.health !== this.healthBarInt.target) {
+                this.healthBarInt.init(200, this.healthBarInt.target, planet.health);
+            }
+            this.drawStatusBar(planet, this.healthBarInt.tick(elapsedMS), planet.orbitDistance * 0.8, 0xa0a0a0, planet.owner.color);
         }
 
         for (let i = 0; i < this.rings.children.length; i++) {
@@ -801,7 +809,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
     }
 
     private shockwave(planet: Planet) {
-        const growing = (this.lastSize < planet.size);
+        const growing = (this.sizeInt.target < planet.size);
         const filter = new ShockwaveFilter();
         filter.radius = -1;
         filter.time = growing ? 0 : 1.5;

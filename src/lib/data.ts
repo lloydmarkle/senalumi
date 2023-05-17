@@ -44,12 +44,12 @@ export const gameMaps: GameMap[] = [
     },
     {
         props: { name: "Random (7)", img: random7Img }, planets: [], setup: {
-            function: "circle", initialSatellites: 100, size: 1200, teams: ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'pink'], planetCounts: [{ level: 3, count: 3 }, { level: 2, count: 5 }, { level: 1, count: 8 }]
+            function: "circle", initialSatellites: 100, size: 1600, teams: ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'pink'], planetCounts: [{ level: 3, count: 3 }, { level: 2, count: 5 }, { level: 1, count: 8 }]
         }
     },
     {
         props: { name: "Random (6)", img: random6Img }, planets: [], setup: {
-            function: "circle", initialSatellites: 100, size: 1200, teams: ['red', 'yellow', 'green', 'blue', 'violet', 'pink'],
+            function: "circle", initialSatellites: 100, size: 1300, teams: ['red', 'yellow', 'green', 'blue', 'violet', 'pink'],
             planetCounts: [{ level: 3, count: 3 }, { level: 2, count: 6 }, { level: 1, count: 8 }]
         }
     },

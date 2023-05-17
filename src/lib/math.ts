@@ -65,7 +65,7 @@ export class QuadTree<T extends { position: Point }> {
     }
 
     clean() {
-        this.data = [];
+        this.data.length = 0;
         const isLeaf = this.nw &&
             this.nw.data.length === 0 && this.ne.data.length === 0 &&
             this.sw.data.length === 0 && this.se.data.length === 0;
@@ -128,7 +128,7 @@ export class QuadTree<T extends { position: Point }> {
             let d = this.data[i];
             this.child(d).add(d, radius);
         }
-        this.data = [];
+        this.data.length = 0;
     }
 
     private setup(x1: number, y1: number, x2: number, y2: number) {
@@ -260,13 +260,16 @@ export class ArrayPool<T> {
 
 type EaseFn = (p: number) => number;
 export class Interpolator {
-    finished = true;
-    value = 0;
     private lifetime: number;
     private age: number;
     private initial: number;
-    private target: number;
     private timeFn: EaseFn;
+
+    constructor(
+        public target = 0,
+        public value = 0,
+        public finished = true,
+    ) {}
 
     init(timeMS: number, start: number, stop: number, timeFn: EaseFn = linear) {
         this.age = 0;

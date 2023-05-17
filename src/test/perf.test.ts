@@ -28,11 +28,11 @@ describe('perf', () => {
         const timings = [];
         const memory = [];
 
-        // simulate several ticks of a game with 200 satellites/team
+        // simulate several ticks of a game 10 times to calculate some averages
         for (let i = 0; i < 10; i++) {
             const game = new Game();
-            game.start(0);
-            while (game.satellites.length < 200) {
+            game.start();
+            while (game.satellites.length < 2000) {
                 game.pulse();
                 game.tick(10);
             }

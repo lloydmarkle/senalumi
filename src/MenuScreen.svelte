@@ -21,7 +21,7 @@
     };
 
     const demoGame = new Game();
-    demoGame.start(0);
+    demoGame.start();
 </script>
 
 {#if $prefs.showDemoGame}

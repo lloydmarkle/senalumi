@@ -28,7 +28,7 @@
         if (player) {
             player.ai.enabled = false;
         }
-        $game.start(0);
+        $game.start();
     }
 </script>
 

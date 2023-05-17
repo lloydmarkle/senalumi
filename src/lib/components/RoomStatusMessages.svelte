@@ -12,6 +12,7 @@
 
 <style>
     .status-messages {
+        display: none;
         position: absolute;
         bottom: 0;
         pointer-events: all;

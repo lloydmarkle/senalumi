@@ -15,7 +15,7 @@
 
     function hackGame(game: Game) {
         game.planets.forEach(p => p.destroy());
-        game.start(0);
+        game.start();
         game.players.forEach(player => player.ai.enabled = false);
         game.pulse = () => {};
     }
@@ -316,7 +316,7 @@
     .svg-box {
         position:absolute;
         top:0; bottom:0; left:0; right:0;
-        transform: translate(-50%, -50%) scale(15.6 /* but.... why?? */);
+        transform: translate(-50%, -50%) scale(17.7 /* but.... why?? */);
         pointer-events:none;
     }
 
