@@ -1,7 +1,7 @@
 import { defineConfig, Plugin } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-import { AuraluxRoom } from './server';
+import { GameRoom } from './server';
 import { WebSocketTransport } from "@colyseus/ws-transport"
 import { Server } from 'colyseus';
 const colyseusServerPlugin = (): Plugin => {
@@ -18,7 +18,7 @@ const colyseusServerPlugin = (): Plugin => {
       // gameServer.simulateLatency(1600)
       // gameServer.simulateLatency(800)
       // gameServer.simulateLatency(200)
-      gameServer.define('auralux', AuraluxRoom)
+      gameServer.define('senalumi', GameRoom)
         .filterBy(['label']);
     },
     closeBundle() {

@@ -8,7 +8,7 @@
     import BackArrow from "./lib/menu/BackArrow.svelte";
     import { delayFly } from "./lib/menu/transitions";
     import { Game } from "./lib/game";
-    import { appContext } from "./context";
+    import { gameTitle, appContext } from "./context";
     import { fly } from 'svelte/transition';
     import { audioQueue } from "./lib/components/audio-effect";
 
@@ -35,18 +35,18 @@
     <div class="menu">
         {#if $url === '/sp' || $url === '/single-player'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
                 <LocalGameScreen />
             </div>
         {:else if $url === '/mp' || $url === '/multi-player'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />Auralux - Clone</button>
+                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
                 <RemoteGameScreen />
             </div>
         {:else if $url.startsWith('/mp/') || $url.startsWith('/multi-player/')}
             <div transition:myFly class="menu-page">
                 <div class="hstack">
-                    <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow /> Auralux - Clone</button>
+                    <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
                     <button transition:delayFly class="back-button" on:click={goto('/mp')} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</button>
                 </div>
                 <RemoteLobbyScreen />

@@ -286,12 +286,13 @@ defineTypes(GameSchema, {
 import * as Colyseus from 'colyseus.js';
 import { point, type Point } from './math';
 
+const roomName = 'senalumi';
 const gameClient = () => new Colyseus.Client(`ws://${location.hostname}:2567`);
 
 export async function listGameRooms() {
     try {
         const client = gameClient();
-        const rooms = await client.getAvailableRooms('auralux');
+        const rooms = await client.getAvailableRooms(roomName);
         return rooms;
     } catch (e) {
         console.error('Unable to list game rooms', e);
@@ -300,7 +301,7 @@ export async function listGameRooms() {
 }
 
 export async function joinRemoteGame(playerName: string, gameName: string) {
-    const room = await gameClient().joinOrCreate<GameSchema>('auralux', { playerName, label: gameName });
+    const room = await gameClient().joinOrCreate<GameSchema>(roomName, { playerName, label: gameName });
     return await setupRoom(room);
 }
 

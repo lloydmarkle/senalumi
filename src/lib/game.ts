@@ -284,15 +284,6 @@ export class Game {
         return this.frameState;
     }
 
-    private _cMap: { [key in Team]: Satellite[] } = {
-        'red': [],
-        'orange': [],
-        'yellow': [],
-        'green': [],
-        'blue': [],
-        'pink': [],
-        'violet': [],
-    };
     private collide(satellites: Satellite[], radius: number, ms: number) {
         const cMap = Map.groupBy(satellites, (sat => sat.owner.team));
         const r2 = radius * radius;

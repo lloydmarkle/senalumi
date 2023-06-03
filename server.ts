@@ -8,7 +8,7 @@ import { performance } from 'perf_hooks';
 import { availableTeamsFromMap, playerTeams } from './src/lib/data';
 (global as any).performance = performance;
 
-export class AuraluxRoom extends Room<GameSchema> {
+export class GameRoom extends Room<GameSchema> {
     private game: Game;
     // When room is initialized
     onCreate(options: any) {

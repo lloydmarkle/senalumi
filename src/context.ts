@@ -6,6 +6,8 @@ import { GameSchema, PlayerSchema } from "./lib/net-game";
 import { uniqueNamesGenerator, colors, NumberDictionary } from 'unique-names-generator';
 import { Sound } from "./lib/sound";
 
+export const gameTitle = 'Senalumi'
+
 export interface UserPrefs {
     userName: string;
     soundVolume: number;

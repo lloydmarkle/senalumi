@@ -782,6 +782,7 @@ class PlanetGFX extends EntityGFX<Planet, PIXI.Sprite> {
         }
 
         this.gfx.filters = [this.colorMap[planet.owner?.team ?? 'default']];
+        // this.gfx.tint = planet.owner?.color ?? 0x222222;
 
         this.statusBars.clear();
         this.statusBars.alpha = this.statusBarAlphaLoop.tick(elapsedMS);
