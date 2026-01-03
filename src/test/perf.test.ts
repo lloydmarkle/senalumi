@@ -38,13 +38,13 @@ describe('perf', () => {
             }
 
             runInNewContext('gc')();
-            const mstart = memoryUsage.rss();
+            const mstart = memoryUsage().heapUsed;
             const tstart = performance.now();
             for (let i = 0; i < 10000; i++) {
                 game.tick(20);
             }
             timings.push(performance.now() - tstart);
-            memory.push((memoryUsage.rss() - mstart) / megabyte);
+            memory.push((memoryUsage().heapUsed - mstart) / megabyte);
             process.stdout.write('.')
         }
         obs.disconnect();
