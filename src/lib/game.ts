@@ -41,7 +41,7 @@ export interface Entity {
     rotation: number;
     alpha?: number;
 
-    tick(elapsedMS: number);
+    tick(elapsedMS: number): void;
     destroy(): void;
 }
 
@@ -162,7 +162,7 @@ export class Player {
     selection(planet: Planet) {
         const radius = planet.orbitDistance * 1.6;
         const radiusSqr = radius * radius;
-        const sats = [];
+        const sats: Satellite[] = [];
         this.game.collisionTree.query(planet.position, radius, sat => {
             if (sat.owner === this && distSqr(sat.position, planet.position) < radiusSqr) {
                 sats.push(sat);

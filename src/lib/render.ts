@@ -1,7 +1,7 @@
 import { backInOut, backOut, cubicIn, cubicOut } from 'svelte/easing';
 import { writable, type Readable, type Writable } from 'svelte/store';
 import { type Point, distSqr, QuadTree, ArrayPool, Interpolator, ComboInterpolator, point } from './math';
-import { Game, constants, type Player, Planet, type Renderable, Satellite, type Entity } from './game';
+import { Game, constants, type Player, Planet, type Renderable, Satellite, type Entity, type Team } from './game';
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport'
 import { Simple } from "pixi-cull"
@@ -141,7 +141,7 @@ class DebugRender {
         showStats: false,
         showQuadTree: false,
         showPlanetStats: false,
-        showPlayerSelection: {},
+        showPlayerSelection: {} as { [key in Team]?: boolean },
     };
 
     constructor(private game: Game, app: PIXI.Application, gameview: PIXI.Container, cull: Simple) {
@@ -178,7 +178,7 @@ class DebugRender {
                 return;
             }
 
-            const planets = this.game.planets.reduce((map, p) => {
+            const planets = this.game.planets.reduce<{ [key in Team]?: number }>((map, p) => {
                 if (p.owner) {
                     map[p.owner.team] = (map[p.owner.team] ?? 0) + p.level;
                 }
@@ -188,7 +188,7 @@ class DebugRender {
                 .sort((a, b) => b[1] - a[1])
                 .map(([team, count]) => `${team}: ${count} satellites, ${planets[team] ?? 0}/s`);
 
-            const cullStats = [];
+            const cullStats: string[] = [];
             Object.entries(cull.stats()).forEach(stat => cullStats.push(`${stat[0]}: ${stat[1]}`));
 
             text.text = [
@@ -421,7 +421,7 @@ export class Renderer {
             filter.tint(player.color, true);
             map[player.team] = filter;
             return map;
-        }, {})
+        }, {} as { [key in Team | 'default']: PIXI.Filter });
         const greyTeamMatrix = new PIXI.filters.ColorMatrixFilter();
         greyTeamMatrix.tint(0x222222, true);
         playerTintMap['default'] = greyTeamMatrix;
@@ -435,7 +435,7 @@ export class Renderer {
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), filterSfxPool, playerTintMap));
 
         game.forEachEntity(entity => entity.gfx = null);
-        const renderInitializers = {
+        const renderInitializers: any = {
             'Satellite': (satellite: Satellite) => satellitePool.take().init(satellite, satelliteContainer, isPlayerSatellite),
             'Planet': (planet: Planet) => {
                 const gfx = planetPool.take().init(planet, planetContainer, audio);

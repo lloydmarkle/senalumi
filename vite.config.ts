@@ -21,8 +21,8 @@ const colyseusServerPlugin = (): Plugin => {
       gameServer.define('senalumi', GameRoom)
         .filterBy(['label']);
     },
-    closeBundle() {
-      gameServer.gracefullyShutdown(false)
+    async closeBundle() {
+      await gameServer.gracefullyShutdown(false)
     },
   };
 }

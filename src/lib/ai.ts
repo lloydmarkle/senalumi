@@ -1,3 +1,4 @@
+import type { Satellite } from "./game.js";
 import { distSqr, QuadTree, type Point } from "./math.js";
 
 // why are these types here? Because vite (or rullup) doesn't work well with circular imports
@@ -215,7 +216,7 @@ const buildGameBoard = (game: IGame) => {
 
         const radius = p1.orbitDistance * 1.6;
         const radiusSqr = radius * radius;
-        const satellites = [];
+        const satellites: ISatellite[] = [];
         game.collisionTree.query(p1.position, radius, sat => {
             if (distSqr(sat.position, p1.position) < radiusSqr) {
                 satellites.push(sat);

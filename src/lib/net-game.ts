@@ -373,8 +373,8 @@ export function convertToRemoteGame(game: Game, room: Colyseus.Room<GameSchema>)
             };
         };
 
-        state.log.onAdd = (log) => {
-            game.frameState.log = log as GameStateSnapshot;
+        state.log.onAdd = (log: GameStateSnapshot) => {
+            game.frameState.log = log;
             game.log.push(game.frameState.log);
         };
 
