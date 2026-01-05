@@ -1,7 +1,7 @@
 import type { Room } from "colyseus.js";
 import { getContext } from "svelte";
 import { writable } from "svelte/store";
-import type { Game } from "./lib/game";
+import type { Game, Team } from "./lib/game";
 import { GameSchema, PlayerSchema } from "./lib/net-game";
 import { uniqueNamesGenerator, colors, NumberDictionary } from 'unique-names-generator';
 import { Sound } from "./lib/sound";
@@ -10,6 +10,7 @@ export const gameTitle = 'Senalumi'
 
 export interface UserPrefs {
     userName: string;
+    userTeam: string;
     soundVolume: number;
     showDemoGame: boolean;
     remoteGame?: { name: string, sessionId: string, roomId: string },
@@ -26,12 +27,13 @@ export class Context {
     readonly urlParams = writable(new URLSearchParams());
     readonly room = writable<Room<GameSchema>>();
     readonly prefs = writable<UserPrefs>(this._prefs);
-    readonly localPlayer = writable(new PlayerSchema(this._prefs.userName));
+    readonly localPlayer = writable(new PlayerSchema(this._prefs.userName, this._prefs.userTeam as Team));
     readonly audio = new Sound();
 
     constructor() {
         this.localPlayer.subscribe(player => {
             this._prefs.userName = player.displayName;
+            this._prefs.userTeam = player.team;
             this.prefs.set(this._prefs);
         });
 
@@ -72,6 +74,7 @@ export class Context {
         }
         const prefs: UserPrefs = {
             userName: Context.generateName(),
+            userTeam: '',
             soundVolume: 1,
             showDemoGame: true,
             ...storedPrefs,

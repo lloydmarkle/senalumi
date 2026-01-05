@@ -8,13 +8,13 @@ import { gameMaps, playerTeams } from './data';
 export class PlayerSchema extends Schema {
     constructor(
         public displayName: string,
+        public team: Team = '' as any,
         // these don't need to be in the constructor but it's shorter than writing
         // a separate interface and initializing them in the constructor
         public sessionId: string = '',
         public ready = false,
         public admin = false,
         public connected = true,
-        public team: Team = '' as any,
         public ping = 0,
     ) { super() }
 }
