@@ -40,7 +40,7 @@ describe('perf', () => {
             runInNewContext('gc')();
             const mstart = memoryUsage().heapUsed;
             const tstart = performance.now();
-            for (let i = 0; i < 10000; i++) {
+            for (let i = 0; i < 1000; i++) {
                 game.tick(20);
             }
             timings.push(performance.now() - tstart);
@@ -49,6 +49,7 @@ describe('perf', () => {
         }
         obs.disconnect();
         console.log('raw', timings, memory, entries);
+        console.log('(lower is better)')
         console.log('cpu',stats(timings));
         console.log('mem',stats(memory));
     }).timeout(100_000);

@@ -2,7 +2,8 @@ import { AIPlayer, AIPlayer1, AIPlayer2, AIPlayer3, type AIConfig } from './ai.j
 import { teamColor } from './data.js';
 import { ArrayPool, distSqr, originPoint, point, QuadTree, type Point, GrowOnlyArray } from './math.js';
 
-const quadTreeBoxCapacity = 5;
+// after trying a few numbers, 300 seems to be around optimal
+const quadTreeBoxCapacity = 300;
 const moveNoise = () => Math.random() * 1.2 + 0.8;
 const targetOffsetNoise = () => point(
     Math.random() * 20 - 10,
@@ -12,7 +13,7 @@ export const constants = {
     pulseRate: 1, // stars per pulse
     maxWorld: 4000,  //size
     maxSatelliteVelocity: 0.05,
-    maxSatellites: 15000,
+    maxSatellites: 45000,
     impactStrength: -2.2,
     forceStiffness: 0.000007,
     forceDamping: 0.0008,
@@ -283,21 +284,40 @@ export class Game {
         return this.frameState;
     }
 
+    private _cMap: { [key in Team]: Satellite[] } = {
+        'red': [],
+        'orange': [],
+        'yellow': [],
+        'green': [],
+        'blue': [],
+        'pink': [],
+        'violet': [],
+    };
     private collide(satellites: Satellite[], radius: number, ms: number) {
+        const cMap = Map.groupBy(satellites, (sat => sat.owner.team));
         const r2 = radius * radius;
-        for (let i = 0; i < satellites.length; ++i) {
-            for (let j = i; j < satellites.length; ++j) {
-                let sat1 = satellites[i];
-                let sat2 = satellites[j];
-                if (sat1.owner === sat2.owner) {
+        for (const team of cMap.keys()) {
+            const sats2 = cMap.get(team) as Satellite[];
+            for (const sats of cMap.values()) {
+                if (sats[0].owner.team === team) {
                     continue;
                 }
 
-                const dist = distSqr(sat1.position, sat2.position);
-                if (dist < r2) {
-                    this.applyImpact(sat1, sat2, radius * 10, ms);
-                    sat1.destroy(sat2);
-                    sat2.destroy(sat1);
+                for (let i = 0; i < sats.length; ++i) {
+                    for (let j = 0; j < sats2.length; ++j) {
+                        let sat1 = sats[i];
+                        let sat2 = sats2[j];
+                        if (sat1.destroyedBy || sat2.destroyedBy) {
+                            continue;
+                        }
+
+                        const dist = distSqr(sat1.position, sat2.position);
+                        if (dist < r2) {
+                            this.applyImpact(sat1, sat2, radius * 10, ms);
+                            sat1.destroy(sat2);
+                            sat2.destroy(sat1);
+                        }
+                    }
                 }
             }
         }
