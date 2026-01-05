@@ -8,6 +8,7 @@
     import BackArrow from "./lib/menu/BackArrow.svelte";
     import { delayFly } from "./lib/menu/transitions";
     import { Game } from "./lib/game";
+    import { gameMaps } from "./lib/data";
     import { gameTitle, appContext } from "./context";
     import { fly } from 'svelte/transition';
     import { audioQueue } from "./lib/components/audio-effect";
@@ -20,7 +21,7 @@
         $url = urlPath;
     };
 
-    const demoGame = new Game();
+    const demoGame = new Game(gameMaps[0]);
     demoGame.start();
 </script>
 
