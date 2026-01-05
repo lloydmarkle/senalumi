@@ -3,7 +3,7 @@
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
-    import { Context, key } from './context';
+    import { Context, gameTitle, key } from './context';
 
     let context = new Context();
     setContext(key, context);
@@ -49,6 +49,9 @@
     $: menuOpen = !hasGame && screenWidth > 400
 </script>
 
+<svelte:head>
+    <title>{gameTitle}</title>
+</svelte:head>
 <svelte:window
     bind:innerWidth={screenWidth}
     on:click|once|capture={initializeAudio} />
