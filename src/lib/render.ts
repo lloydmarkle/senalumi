@@ -297,6 +297,44 @@ export interface ViewTransform {
     scale: number;
 }
 
+function enableKeyboardDrag(viewport: Viewport) {
+    const acceleration = 1;
+    const friction = .95;
+    const moveDirection = { x: 0, y: 0, z: 0 };
+
+    let keyState: { [key: string]: boolean } = {};
+    const keydown = (ev: KeyboardEvent) => keyState[ev.code] = true;
+    const keyup = (ev: KeyboardEvent) => keyState[ev.code] = false;
+
+    window.addEventListener('keydown', keydown);
+    window.addEventListener('keyup', keyup);
+    return {
+        tick: (time: number) => {
+            moveDirection.x *= friction;
+            moveDirection.y *= friction;
+            moveDirection.z *= friction;
+
+            const shifted = keyState['ShiftRight'] || keyState['ShiftLeft'];
+            const accel = (shifted ? acceleration * 3 : acceleration) * time;
+            if (keyState['ArrowDown'] || keyState['KeyS']) moveDirection.y += accel;
+            if (keyState['ArrowUp'] || keyState['KeyW']) moveDirection.y -= accel;
+            if (keyState['ArrowLeft'] || keyState['KeyA']) moveDirection.x -= accel;
+            if (keyState['ArrowRight'] || keyState['KeyD']) moveDirection.x += accel;
+            if (keyState['Equal']) moveDirection.z += accel * 0.001;
+            if (keyState['Minus']) moveDirection.z -= accel * 0.001;
+
+            viewport.moveCenter(
+                viewport.center.x + moveDirection.x / viewport.scale.x,
+                viewport.center.y + moveDirection.y / viewport.scale.x);
+            viewport.scaled = viewport.scaled + moveDirection.z;
+        },
+        dispose: () => {
+            window.removeEventListener('keydown', keydown);
+            window.removeEventListener('keyup', keyup);
+        },
+    };
+}
+
 export class Renderer {
     private app: PIXI.Application;
     private viewstate: Writable<ViewTransform> = writable({ tx: 0, ty: 0, scale: 0 });
@@ -304,6 +342,8 @@ export class Renderer {
     readonly viewport: Viewport;
     readonly dbg: DebugRender;
     public paused = false;
+    private keyboardControls: ReturnType<typeof enableKeyboardDrag>
+    useKeyboardControls = true;
 
     constructor(element: HTMLCanvasElement, private game: Game, audio: Sound, player?: Player) {
         const app = new PIXI.Application({
@@ -322,6 +362,7 @@ export class Renderer {
             // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
             interaction: app.renderer.plugins.interaction,
         });
+        this.keyboardControls = enableKeyboardDrag(viewport);
         app.stage.addChild(viewport);
         app.renderer.on('resize', () => viewport.resize());
         app.stage.filters = [];
@@ -330,18 +371,17 @@ export class Renderer {
             .drag()
             .pinch()
             .wheel()
-            .decelerate();
-
-        viewport.clampZoom({
-            maxScale: 3.5,
-            minScale: 0.2,
-        });
-        viewport.clamp({
-            top: -game.config.maxWorld * 2,
-            bottom: game.config.maxWorld * 2,
-            left: -game.config.maxWorld * 2,
-            right: game.config.maxWorld * 2,
-        });
+            .decelerate()
+            .clampZoom({
+                maxScale: 3.5,
+                minScale: 0.2,
+            })
+            .clamp({
+                top: -game.config.maxWorld * 2,
+                bottom: game.config.maxWorld * 2,
+                left: -game.config.maxWorld * 2,
+                right: game.config.maxWorld * 2,
+            });
 
         // start screen animation
         this.setScreenshotPosition();
@@ -452,6 +492,9 @@ export class Renderer {
                 return;
             }
 
+            if (this.useKeyboardControls) {
+                this.keyboardControls?.tick(delta);
+            }
             let elapsedMS = app.ticker.elapsedMS;
             // if we switch tabs, elapsedMS can get very large (seconds or minutes) and that will
             // mess up physics so process large pauses in 50ms increments. 50ms is chosen arbitrarily
@@ -485,6 +528,7 @@ export class Renderer {
     }
 
     destroy() {
+        this.keyboardControls?.dispose();
         this.app.destroy(false, { baseTexture: true, children: true, texture: false });
     }
 

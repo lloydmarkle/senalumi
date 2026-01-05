@@ -1,6 +1,5 @@
 <script lang="ts">
-    import { onDestroy, onMount } from "svelte";
-    import WorldSpaceOverlay from "./WorldSpaceOverlay.svelte";
+    import { onMount } from "svelte";
     import type { Game, Player } from "../game";
     import { Renderer } from "../render";
     import type { IAnimateOptions } from "pixi-viewport";
@@ -10,44 +9,27 @@
     export let audio: Sound;
     export let player: Player = null;
     export let initialZoom: IAnimateOptions = null;
+    export let gfx: Renderer = null;
+    export let disableKeyboardInput = false;
 
-    let gfx: Renderer;
+    $: if (gfx) gfx.useKeyboardControls = !disableKeyboardInput;
+
     let el: HTMLCanvasElement;
     onMount(() => {
         gfx = new Renderer(el, game, audio, player);
         if (initialZoom) {
             gfx.viewport.animate(initialZoom);
         }
-    });
-    onDestroy(() => {
-        gfx.destroy();
+        return () => gfx.destroy();
     });
 </script>
 
-<canvas bind:this={el} />
-
-{#if gfx && gfx.dbg.config.showPlanetStats}
-    <WorldSpaceOverlay {gfx}>
-        {#each game.planets as planet}
-            <div class="viewport-transform" style="transform:translate({planet.position.x}px, {planet.position.y}px)">
-                {planet.health + ':' + planet.upgrade + (planet.candidateOwner?.team[0] ?? '') + ':' + planet.level}
-            </div>
-        {/each}
-    </WorldSpaceOverlay>
-{/if}
-
+<canvas bind:this={el}></canvas>
 <slot {gfx} />
 
 <style>
     canvas {
         position: absolute;
-    }
-    .viewport-transform {
-        top: 0; left: 0;
-        position: absolute;
-        pointer-events: auto;
-        transform-origin: 0 0;
-        padding: 0;
-        margin: 0;
+        inset: 0;
     }
 </style>

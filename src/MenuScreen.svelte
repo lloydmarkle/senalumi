@@ -31,6 +31,7 @@
 
 {#if $prefs.showDemoGame}
     <GameView
+        disableKeyboardInput
         game={demoGame}
         audio={noSound}
         initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>

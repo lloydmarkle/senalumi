@@ -16,8 +16,7 @@
   .viewport-content-container {
     pointer-events: none;
     position: absolute;
-    width: 100vw;
-    height: 100vh;
+    inset: 0;
     overflow: hidden;
   }
   .viewport-transform {

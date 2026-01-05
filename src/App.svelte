@@ -66,7 +66,7 @@
 {#if screen === 'editor'}
     <LevelEditorScreen />
 {:else if screen === 'game'}
-    <GameScreen />
+    <GameScreen game={$game} />
 {:else}
     <MenuScreen />
 {/if}

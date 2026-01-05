@@ -9,8 +9,8 @@
     export let closeable = true;
     let open = false;
 
-    const outerAnimDuration = 400;
-    const innerAnimDuration = 400;
+    const outerAnimDuration = 200;
+    const innerAnimDuration = 200;
     // slick! https://css-tricks.com/animating-with-clip-path/
     let expand = (el: Element, props: { delay: number}) => ({
         ...props,
