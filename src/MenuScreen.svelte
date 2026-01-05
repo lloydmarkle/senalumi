@@ -60,9 +60,17 @@
             <div transition:myFly class="menu-page">
                 <h1 transition:delayFly={1}>{gameTitle}</h1>
                 <div class="vstack">
-                    <a class="btn large-button" href="#menu=sp" transition:delayFly use:audioQueue={'forwardNavigation'}>Single Player</a>
+                    <a class="btn large-button" href="#menu=sp" transition:delayFly use:audioQueue={'forwardNavigation'}>Play</a>
+
+                    <!--
+                    Disabled until we can sort out the upgrade to colyseus 16 (to fix security issues in 14) and find a place to host
                     <a class="btn large-button" href="#menu=mp" transition:delayFly use:audioQueue={'forwardNavigation'}>Multiplayer</a>
+                    -->
+
+                    <!--
+                    disable for now until we can actually get a decent user experience
                     <a class="btn large-button" href="#menu=editor" transition:delayFly use:audioQueue={'forwardNavigation'}>Map Editor</a>
+                    -->
                 </div>
             </div>
         {/if}
