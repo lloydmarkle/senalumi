@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Game, type GameMap, type Team } from '../game';
+    import { type GameMap, type Team } from '../game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
     import MapChooser from './MapChooser.svelte';
@@ -7,7 +7,7 @@
     import TeamSelect from '../components/TeamSelect.svelte';
     import { audioQueue } from '../components/audio-effect';
 
-    let { game, localPlayer } = appContext();
+    let { localPlayer } = appContext();
     let map: GameMap = null;
     let availableTeams = playerTeams;
     $: if (map) {
@@ -16,20 +16,12 @@
             ...availableTeamsFromMap(map),
         ];
     }
-    $: $localPlayer.team = $localPlayer.team !== undefined && availableTeams.find(t => t.value === $localPlayer.team)
+    $: playerTeam = availableTeams.find(t => t.value === $localPlayer.team)
         ? $localPlayer.team : selectRandom(availableTeams).value as Team;
+    $: if (playerTeam) $localPlayer.team = playerTeam;
 
     const selectRandom = (items: any[]) =>
         items[1 + Math.floor(Math.random() * (items.length - 1))];
-
-    function startGame() {
-        $game = new Game(map);
-        const player = $game.players.find(p => p.team === $localPlayer.team);
-        if (player) {
-            player.ai.enabled = false;
-        }
-        $game.start();
-    }
 </script>
 
 <h3 transition:delayFly>Single player</h3>
@@ -38,17 +30,22 @@
     <MapChooser bind:selectedMap={map} />
     <span transition:delayFly class="hstack">
         <div>Team</div>
-        <TeamSelect options={availableTeams} bind:value={$localPlayer.team} />
+        <TeamSelect options={availableTeams} bind:value={playerTeam} />
     </span>
-    <button
+    <a href="#team={playerTeam}&map={map?.props.name}"
+        class="btn"
         use:audioQueue={'button'}
         transition:delayFly
-        disabled={map === null}
-        on:click={startGame}>Launch</button>
+        class:disabled={map === null}
+    >Launch</a>
 </div>
 
 <style>
     span {
         opacity: .8;
+    }
+
+    .disabled {
+        opacity: .5;
     }
 </style>

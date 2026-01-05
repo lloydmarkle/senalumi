@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Game, type GameMap } from '../game';
+    import { Game, type GameMap, type Team } from '../game';
     import { convertToRemoteGame, GameSchema, joinRemoteGame, PlayerSchema, rejoinRoom,  } from '../net-game';
     import { delayFly, fade, fly } from './transitions';
     import { appContext } from '../../context';
@@ -13,15 +13,13 @@
     import { onDestroy } from 'svelte';
     import ExpandingMenu from '../components/ExpandingMenu.svelte';
 
-    const { localPlayer, room, game, audio, url, prefs } = appContext();
+    const { localPlayer, room, game, audio, prefs, urlParams } = appContext();
 
     let destroyed = false;
-    onDestroy(() => {
-        destroyed = true;
-    });
+    onDestroy(() => destroyed = true);
 
-    let nameFromUrl = $url.split('/')[2]
-    let roomName = nameFromUrl ?? $prefs.remoteGame?.name;
+    const nameFromUrl = $urlParams.get('lobby');
+    const roomName = nameFromUrl ?? $prefs.remoteGame?.name;
     const joinRoom = async () => {
         const remote = $prefs.remoteGame;
         if (remote && remote.name === nameFromUrl) {
@@ -102,7 +100,7 @@
     $: waitingForReady = players.some(p => !p.ready) || !map;
     $: waitMessage = map ? '(Waiting for players)' : '(Waiting for players and map)';
 
-    const teamName = team => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
+    const teamName = (team: Team) => (playerTeams.find(pt => pt.value === team) ?? playerTeams[0]).label;
 
     function updatePlayer(player: PlayerSchema) {
         $room.send('player:info', player);

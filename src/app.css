@@ -89,7 +89,9 @@ input[type=checkbox] {
   height: 1.2em;
 }
 
+.btn,
 button {
+  text-align: center;
   border-radius: var(--theme-border-radius);
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
@@ -101,9 +103,15 @@ button {
   cursor: pointer;
   transition: border-color 0.25s;
 }
-button:hover, button:active {
+.btn:hover,
+.btn:active,
+button:hover,
+button:active {
   border-color: var(--theme-link);
+  color: var(--theme-foreground);
 }
+.btn:focus,
+.btn:focus-visible,
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;

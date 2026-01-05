@@ -5,9 +5,9 @@
 
 <div>
     {#if map.props.img}
-        <img src={map.props.img} alt="map: {map.props.name}" />
+        <img src={map.props.img} alt="map: {map.props.displayName}" />
     {/if}
-    <span>{map.props.name}</span>
+    <span>{map.props.displayName}</span>
 </div>
 
 <style>

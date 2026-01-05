@@ -1,7 +1,6 @@
 <script lang="ts">
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import GameView from "./lib/components/GameView.svelte";
-    import StartScreen from "./lib/menu/StartScreen.svelte";
     import LocalGameScreen from "./lib/menu/LocalGameScreen.svelte";
     import RemoteGameScreen from "./lib/menu/RemoteGameScreen.svelte";
     import RemoteLobbyScreen from "./lib/menu/RemoteLobbyScreen.svelte";
@@ -16,11 +15,9 @@
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
-    const { url, room, prefs } = appContext();
-    const goto = (urlPath: string) => () => {
-        $room = null;
-        $url = urlPath;
-    };
+    const { urlParams, room, prefs } = appContext();
+    $: menu = $urlParams.get('menu');
+    $: if (!$urlParams.has('lobby')) $room = null;
 
     class NullSound extends Sound {
         // do nothing!
@@ -41,27 +38,32 @@
 
 <OverlayBackground blurBackground>
     <div class="menu">
-        {#if $url === '/sp' || $url === '/single-player'}
+        {#if menu === 'sp' || menu === 'single-player'}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
+                <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
                 <LocalGameScreen />
             </div>
-        {:else if $url === '/mp' || $url === '/multi-player'}
+        {:else if !$urlParams.has('lobby') && (menu === 'mp' || menu === 'multi-player')}
             <div transition:myFly class="menu-page">
-                <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
+                <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
                 <RemoteGameScreen />
             </div>
-        {:else if $url.startsWith('/mp/') || $url.startsWith('/multi-player/')}
+        {:else if $urlParams.has('lobby')}
             <div transition:myFly class="menu-page">
                 <div class="hstack">
-                    <button transition:delayFly={1} class="back-button" on:click={goto('/')} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</button>
-                    <button transition:delayFly class="back-button" on:click={goto('/mp')} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</button>
+                    <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
+                    <a transition:delayFly={1} class="back-button" href={"#menu=mp"} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</a>
                 </div>
                 <RemoteLobbyScreen />
             </div>
         {:else}
             <div transition:myFly class="menu-page">
-                <StartScreen />
+                <h1 transition:delayFly={1}>{gameTitle}</h1>
+                <div class="vstack">
+                    <a class="btn large-button" href="#menu=sp" transition:delayFly use:audioQueue={'forwardNavigation'}>Single Player</a>
+                    <a class="btn large-button" href="#menu=mp" transition:delayFly use:audioQueue={'forwardNavigation'}>Multiplayer</a>
+                    <a class="btn large-button" href="#menu=editor" transition:delayFly use:audioQueue={'forwardNavigation'}>Map Editor</a>
+                </div>
             </div>
         {/if}
     </div>
@@ -92,15 +94,17 @@
         box-shadow: 0em 3em 3em -1em var(--theme-background-2);
     }
 
-    button {
-        text-align: start;
-        padding: 1em 2em;
-    }
     .back-button {
-        display: block;
+        display: flex;
+        align-items: center;
+
+        color: var(--theme-foreground);
         padding: 0.5em 0em;
         border: none;
         background: none;
+    }
+    .back-button:hover {
+        color: var(--theme-link-hover);
     }
 
     @media(min-width: 400px) {
@@ -115,5 +119,9 @@
         .menu-page {
             padding: 1em 4em 4em;
         }
+    }
+
+    .large-button {
+        padding: 1em 4em;
     }
 </style>

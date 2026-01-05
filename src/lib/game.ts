@@ -57,7 +57,10 @@ export interface GameWorld {
 
 export interface GameMap extends GameWorld {
     props: {
+        // this needs to be unique
         name: string,
+        // this name is for a friendlier UI
+        displayName: string,
         img: string,
     },
     setup?: {

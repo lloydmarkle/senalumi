@@ -8,7 +8,7 @@
     import LoadingIndicator from '../components/LoadingIndicator.svelte';
     import { audioQueue } from '../components/audio-effect';
 
-    let { localPlayer, url } = appContext();
+    let { localPlayer } = appContext();
 
     let loading = false;
     let rooms: RoomAvailable<any>[] = [];
@@ -25,10 +25,6 @@
     });
 
     let roomName: string = undefined;
-    function joinRoom(roomName: string) {
-        $url = `/mp/${roomName}`;
-    }
-
     function generateRoomName() {
         return uniqueNamesGenerator({
             dictionaries: [adjectives, colors, animals],
@@ -60,7 +56,7 @@
                         <td>{room.metadata.label}</td>
                         <td>{room.metadata.state}</td>
                         <td>{room.clients} / {room.maxClients ?? 16}</td>
-                        <td><button on:click={() => joinRoom(room.metadata.label)}>Join</button></td>
+                        <td><a class="btn" href="#menu=mp&lobby={room.metadata.label}">Join</a></td>
                     </tr>
                 {/each}
             </tbody>
@@ -77,7 +73,7 @@
                 <label for="room-name">Game name</label>
                 <input type="text" id="room-name" name="room-name" bind:value={roomName} />
                 <button transition:delayFly use:audioQueue={'button'} on:click={() => roomName = generateRoomName()}>↻</button>
-                <button transition:delayFly use:audioQueue={'button'} on:click={() => joinRoom(roomName)}>Create and join</button>
+                <a class="btn" href="#menu=mp&lobby={roomName}" transition:delayFly use:audioQueue={'button'}>Create and join</a>
             </span>
         {:else}
             <button style="width:30%" use:audioQueue={'button'} on:click={() => roomName = generateRoomName()}>Create new game</button>

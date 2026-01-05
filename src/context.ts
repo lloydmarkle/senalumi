@@ -23,7 +23,7 @@ export interface UserPrefs {
 export class Context {
     private _prefs = Context.loadPrefs();
     readonly game = writable<Game>(undefined);
-    readonly url = writable(location.pathname);
+    readonly urlParams = writable(new URLSearchParams());
     readonly room = writable<Room<GameSchema>>();
     readonly prefs = writable<UserPrefs>(this._prefs);
     readonly localPlayer = writable(new PlayerSchema(this._prefs.userName));
@@ -34,8 +34,6 @@ export class Context {
             this._prefs.userName = player.displayName;
             this.prefs.set(this._prefs);
         });
-
-        this.url.subscribe(url => history.pushState(null, null, url));
 
         let lastRoom: Room<GameSchema>;
         this.room.subscribe(room => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { setContext } from 'svelte';
+    import { onMount, setContext } from 'svelte';
     import MenuScreen from './MenuScreen.svelte';
     import GameScreen from './GameScreen.svelte';
     import LevelEditorScreen from './LevelEditorScreen.svelte';
@@ -7,17 +7,18 @@
 
     const context = new Context();
     setContext(key, context);
-    const { game, url, prefs, audio, room } = context;
+    const { game, urlParams, prefs, audio, room, localPlayer } = context;
 
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     import VolumeControl from './lib/components/VolumeControl.svelte';
     import Toggle from './lib/components/Toggle.svelte';
     import ConfirmButton from './lib/components/ConfirmButton.svelte';
+    import { Game, type Team } from './lib/game';
+    import { gameMaps } from './lib/data';
 
     function quitGame() {
-        $room = null;
-        $game = null;
-        $url = '/';
+        history.pushState(null, null, '#');
+        parseUrlParams();
     }
 
     function initializeAudio() {
@@ -25,8 +26,32 @@
         audio.volume($prefs.soundVolume);
     }
 
+    function parseUrlParams() {
+        try {
+            $urlParams = new URLSearchParams(window.location.hash.substring(1));
+
+            if ($urlParams.has('team') && $urlParams.has('map')) {
+                const map = gameMaps.find(m => m.props.name === $urlParams.get('map'));
+                $game = new Game(map);
+                $localPlayer.team = $urlParams.get('team') as Team;
+                const player = $game.players.find(p => p.team === $localPlayer.team);
+                if (player) {
+                    player.ai.enabled = false;
+                }
+                $game.start();
+            } else if (!$urlParams.has('lobby')) {
+                $game = null;
+                $room = null;
+            }
+        } catch {
+            // TODO: what to do with errors?
+        }
+    }
+    onMount(parseUrlParams);
+
     let screenWidth: number;
-    $: hasGame = !!$game || $url === '/editor';
+    $: screen = $game ? 'game' : $urlParams.get('menu');
+    $: hasGame = !!$game || screen === 'editor';
     $: menuOpen = !hasGame && screenWidth > 400
 </script>
 
@@ -35,11 +60,12 @@
 </svelte:head>
 <svelte:window
     bind:innerWidth={screenWidth}
+    on:popstate={parseUrlParams}
     on:click|once|capture={initializeAudio} />
 
-{#if $url === '/editor'}
+{#if screen === 'editor'}
     <LevelEditorScreen />
-{:else if $game}
+{:else if screen === 'game'}
     <GameScreen />
 {:else}
     <MenuScreen />

@@ -4,7 +4,6 @@
     span {
         font-size: 0.8rem;
         position: relative;
-        top: -0.3em;
         padding-inline-end: 0.5em;
         opacity: 0.7;
         animation: fade 1s infinite
