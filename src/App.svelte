@@ -5,33 +5,14 @@
     import LevelEditorScreen from './LevelEditorScreen.svelte';
     import { Context, gameTitle, key } from './context';
 
-    let context = new Context();
+    const context = new Context();
     setContext(key, context);
-    const { game, url, prefs, audio, room, localPlayer } = context;
+    const { game, url, prefs, audio, room } = context;
 
-    import { Game, Planet } from './lib/game';
-    import { point } from './lib/math';
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     import VolumeControl from './lib/components/VolumeControl.svelte';
     import Toggle from './lib/components/Toggle.svelte';
     import ConfirmButton from './lib/components/ConfirmButton.svelte';
-    import { joinRemoteGame, rejoinRoom } from './lib/net-game';
-    let p2Game = g => {
-        g.planets = [
-            new Planet(g, point(-200, 0), 3),
-            new Planet(g, point(200, 0), 3),
-        ];
-        g.planets[0].capture(g.players[0])
-        g.planets[1].capture(g.players[1])
-        for (let i = 0; i < 2000; i++) {
-            g.spawnSatellite(g.planets[0]);
-            g.spawnSatellite(g.planets[1]);
-        }
-    }
-    // $game = new Game();
-    // $game = new Game(p2Game);
-    // $localPlayer.team = $game.players[0].team;
-    // $game.start(5);
 
     function quitGame() {
         $room = null;

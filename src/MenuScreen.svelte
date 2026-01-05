@@ -12,14 +12,21 @@
     import { gameTitle, appContext } from "./context";
     import { fly } from 'svelte/transition';
     import { audioQueue } from "./lib/components/audio-effect";
+    import { Sound } from "./lib/sound";
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
-    const { url, room, audio, prefs } = appContext();
+    const { url, room, prefs } = appContext();
     const goto = (urlPath: string) => () => {
         $room = null;
         $url = urlPath;
     };
+
+    class NullSound extends Sound {
+        // do nothing!
+        override resume(): void {}
+    }
+    const noSound = new NullSound();
 
     const demoGame = new Game(gameMaps[0]);
     demoGame.start();
@@ -28,7 +35,7 @@
 {#if $prefs.showDemoGame}
     <GameView
         game={demoGame}
-        {audio}
+        audio={noSound}
         initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
 {/if}
 

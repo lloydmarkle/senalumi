@@ -19,7 +19,7 @@ function mtof(note: number): number {
 // https://web.dev/webaudio-games/
 
 function adsr(gain: GainNode, T: number, a: number, d: number, s: number, r: number, sustain: number) {
-    const set = (v, t) => gain.gain.linearRampToValueAtTime(v, T + t);
+    const set = (v: number, t :number) => gain.gain.linearRampToValueAtTime(v, T + t);
     set(0.0, -T);
     set(0.0, 0);
     set(1.0, a);
@@ -164,8 +164,6 @@ export class Sound {
     private satPopSound?: DebounceSound;
 
     menu?: MenuAudio;
-
-    constructor() {}
 
     resume() {
         if (this.ctx) {

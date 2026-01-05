@@ -1,7 +1,6 @@
 <script lang="ts">
     import { audioQueue } from "./audio-effect";
 
-
     let hoverVolume: number;
     export let volume: number = 0;
     let levels = [0, .2, .4, .6, .8, 1];
@@ -15,8 +14,7 @@
             class="vlevel"
             class:volume={volume >= level}
             class:over={hoverVolume >= level}
-            on:focus={null}
-            on:mouseover={() => hoverVolume = level}
+            on:pointermove={() => hoverVolume = level}
             on:click={() => volume = level}
             style="--bar-height:calc({level} * 4em)" />
     {/each}
