@@ -22,7 +22,6 @@
         gameState = game.log ?? [];
 
         // game over!
-        gameOver = 'win'
         const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
         const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
         if (winnerCandidate) {

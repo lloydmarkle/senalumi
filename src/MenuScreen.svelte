@@ -69,7 +69,10 @@
             </div>
         {:else}
             <div transition:myFly class="menu-page">
-                <h1 transition:delayFly={1}>{gameTitle}</h1>
+                <h1 transition:delayFly={1} class="hstack">
+                    <img width={64} height={64} src="./favicon.png" alt="{gameTitle} logo - a coloured moon" />
+                    {gameTitle}
+                </h1>
                 <div class="vstack">
                     <a class="btn large-button" href="#menu=sp" transition:delayFly use:audioQueue={'forwardNavigation'}>Play</a>
 
@@ -94,6 +97,22 @@
         align-items: center;
         min-height: 40vh;
         min-width: 40vw;
+    }
+
+    h1 {
+        padding: 0rem 2rem;
+        gap: .5rem;
+    }
+    h1 img {
+        animation: spin 45s linear infinite,
+            color-rotate 12s linear infinite reverse;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    @keyframes color-rotate {
+        from { filter: hue-rotate(0deg) saturate(120%); }
+        to { filter: hue-rotate(360deg) saturate(120%); }
     }
 
     .menu-page {
@@ -127,9 +146,6 @@
     }
 
     @media(min-width: 400px) {
-        .menu {
-            padding-top: 6em;
-        }
         .menu-page {
             padding: .5em 2em 2em;
         }
