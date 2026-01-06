@@ -41,9 +41,18 @@
             gfx.paused = showScore && !$room;
         }
     }
+
+    function changeTabVisibility() {
+        if (document.hidden) {
+            gfx.paused = true;
+            showScore = true;
+        }
+    }
 </script>
 
-<svelte:window on:keyup={keyup} />
+<svelte:window
+    on:keyup={keyup}
+    on:visibilitychange={changeTabVisibility} />
 
 {#key game}
 <GameView {game} {audio} {player} bind:gfx={gfx}>

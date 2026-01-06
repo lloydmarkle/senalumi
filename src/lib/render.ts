@@ -23,7 +23,7 @@ const lightColor = Object.fromEntries(Object.entries(colorMap).map(([team, val])
 
 class Selector {
     private dragMove: ListenerFn;
-    private mid: Point = { x:0, y:0 };
+    private mid: Point = { x: 0, y: 0 };
     private radius: number = 0;
     private radiusSqr: number = 0;
     private downStart: number = 0;
@@ -33,12 +33,30 @@ class Selector {
 
     onMoveSatellites: (point: Point) => void;
     readonly gfx: PIXI.Graphics;
+    readonly dragIndicator: DragIndicator;
+    readonly container = new PIXI.Container();
     private _mode: 'none' | 'select' | 'drag' = 'none';
     get mode() { return this._mode; }
 
     constructor(readonly viewport: Viewport, readonly game: Game, readonly player: Player) {
         this.gfx = new PIXI.Graphics();
+        this.container.addChild(this.gfx);
         this.dragMove = (ev: PIXI.InteractionEvent) => this.pointermove(ev);
+
+        // probably more efficient to have a simple sprite (or generate a sprite)
+        const rOffset = Math.PI / 4;
+        const arrowPoints = [{ x: 0, y: 20 }, { x: 60, y: 20 }, { x: 60, y: 0 }, { x: 100, y: 50 }, { x: 60, y: 100 }, { x: 60, y: 80 }, { x: 0, y: 80 }];
+        const t1 = new PIXI.Matrix().translate(40, -50).scale(.7, .5).rotate(Math.PI * 0.0 + rOffset);
+        const t2 = new PIXI.Matrix().translate(40, -50).scale(.7, .5).rotate(Math.PI * 0.5 + rOffset);
+        const t3 = new PIXI.Matrix().translate(40, -50).scale(.7, .5).rotate(Math.PI * 1.0 + rOffset);
+        const t4 = new PIXI.Matrix().translate(40, -50).scale(.7, .5).rotate(Math.PI * 1.5 + rOffset);
+        const dragGfx = new PIXI.Graphics()
+            .lineStyle(5, 0x606060)
+            .beginFill(0xa0a0a0).drawPolygon(arrowPoints.map(p => t1.apply(p))).endFill()
+            .beginFill(0xa0a0a0).drawPolygon(arrowPoints.map(p => t2.apply(p))).endFill()
+            .beginFill(0xa0a0a0).drawPolygon(arrowPoints.map(p => t3.apply(p))).endFill()
+            .beginFill(0xa0a0a0).drawPolygon(arrowPoints.map(p => t4.apply(p))).endFill();
+        this.dragIndicator = new DragIndicator(dragGfx);
     }
 
     contains = (point: Point) => distSqr(point, this.mid) < this.radiusSqr;
@@ -84,17 +102,27 @@ class Selector {
 
             if (this._mode !== 'drag') {
                 const point = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
-                const top = Math.min(point.y, this.worldPoint.y);
-                const bottom = Math.max(point.y, this.worldPoint.y);
-                const left = Math.min(point.x, this.worldPoint.x);
-                const right = Math.max(point.x, this.worldPoint.x);
                 const radius = Math.max(Math.abs(this.worldPoint.x - point.x), Math.abs(this.worldPoint.y - point.y)) / 2;
-                this.updateGfx({
-                        x: left + (right - left) / 2,
-                        y: top + (bottom - top) / 2,
-                    }, radius);
+                this.updateGfx(this.computeTouchPoint(ev), radius);
             }
         }
+
+        if (this._mode === 'drag') {
+            const mid = this.computeTouchPoint(ev);
+            this.dragIndicator.init(this.container, mid);
+        }
+    }
+
+    private computeTouchPoint(ev: PIXI.InteractionEvent) {
+        const point = this.viewport.toWorld(ev.data.global.x, ev.data.global.y);
+        const top = Math.min(point.y, this.worldPoint.y);
+        const bottom = Math.max(point.y, this.worldPoint.y);
+        const left = Math.min(point.x, this.worldPoint.x);
+        const right = Math.max(point.x, this.worldPoint.x);
+        return {
+            x: left + (right - left) / 2,
+            y: top + (bottom - top) / 2,
+        };
     }
 
     private pointerDownTime() {
@@ -419,11 +447,9 @@ export class Renderer {
         const satelliteTracesPool: ArrayPool<TraceSFX> = new ArrayPool(() => new TraceSFX(satelliteTracesPool, createGraphics(satelliteTexture)));
         const targetFlashPool: ArrayPool<TargetSFX> = new ArrayPool(() => new TargetSFX(targetFlashPool, createGraphics(satelliteTexture)));
 
-        let interactionContainer = new PIXI.Container();
-        viewport.addChild(interactionContainer);
         const isPlayerSatellite = (sat: Satellite) => sat.owner === player && selector.contains(sat.position);
         let selector = new Selector(viewport, game, player);
-        interactionContainer.addChild(selector.gfx);
+        viewport.addChild(selector.container);
         if (player) {
             viewport.on('pointerdown', ev => selector.pointerdown(ev));
             viewport.on('pointerup', ev => selector.pointerup(ev));
@@ -469,7 +495,8 @@ export class Renderer {
         const filterSfxPool: ArrayPool<FilterSFX> = new ArrayPool(() => new FilterSFX(filterSfxPool, viewport));
         const pulsePool: ArrayPool<PulseSFX> = new ArrayPool(() => new PulseSFX(pulsePool, new PIXI.Graphics()));
         const flashPool: ArrayPool<FlashSFX> = new ArrayPool(() => new FlashSFX(flashPool, createGraphics(satelliteTexture)));
-        const renderables: ArrayPool<Renderable>[] = [filterSfxPool, pulsePool, flashPool, targetFlashPool, satelliteTracesPool];
+        const renderables: (ArrayPool<Renderable> | Renderable[])[] = [filterSfxPool, pulsePool, flashPool, targetFlashPool, satelliteTracesPool,
+            [selector.dragIndicator]];
 
         const satellitePool: ArrayPool<SatelliteGFX> = new ArrayPool(() => new SatelliteGFX(satellitePool, createGraphics(satelliteTexture)));
         const planetPool: ArrayPool<PlanetGFX> = new ArrayPool(() => new PlanetGFX(planetPool, createGraphics(planetTexture), filterSfxPool, playerTintMap));
@@ -581,12 +608,10 @@ function createGraphics(texture: PIXI.Texture) {
 class FilterSFX<T extends PIXI.Filter = PIXI.Filter> implements Renderable {
     private filter: T;
     private lifetimeMS: number;
-    private ent: Entity;
     private tickFn: (vp: Viewport, ms: number) => void;
     constructor(readonly pool: ArrayPool<FilterSFX>, readonly viewport: Viewport) {}
 
     init(ent: Entity, lifetimeMS: number, filter: T, tickFn: (vp: Viewport, ms: number) => void) {
-        this.ent = ent;
         this.tickFn = tickFn;
         this.lifetimeMS = lifetimeMS;
         this.filter = filter;
@@ -620,14 +645,14 @@ class FilterSFX<T extends PIXI.Filter = PIXI.Filter> implements Renderable {
     }
 }
 
-class SFX<T extends PIXI.Container = PIXI.Container> implements Renderable {
+class SFX<T extends PIXI.DisplayObject = PIXI.DisplayObject> implements Renderable {
     protected alphaInt = new Interpolator();
     protected rotationInt = new Interpolator();
-    protected sizeInt = new Interpolator();
+    protected sizeInt = new Interpolator(1, 1);
     protected xPoint = new Interpolator();
     protected yPoint = new Interpolator();
 
-    constructor(private pool: ArrayPool<SFX<T>>, readonly gfx: T) {}
+    constructor(readonly gfx: T) {}
 
     sfxInit(container: PIXI.Container) {
         container.addChild(this.gfx);
@@ -645,8 +670,7 @@ class SFX<T extends PIXI.Container = PIXI.Container> implements Renderable {
         this.gfx.position.y = this.yPoint.tick(elapsedMS);
     }
 
-    destroy () {
-        this.pool.release(this);
+    destroy() {
         this.gfx.parent.removeChild(this.gfx);
     }
 
@@ -656,7 +680,39 @@ class SFX<T extends PIXI.Container = PIXI.Container> implements Renderable {
     }
 }
 
-class TargetSFX extends SFX<PIXI.Sprite> {
+class DragIndicator extends SFX<PIXI.Graphics> {
+    init(container: PIXI.Container, point: Point) {
+        this.alphaInt.init(800, .6, 0, cubicOut);
+        this.sizeInt.init(800, 1, 0, cubicIn);
+        this.position(point);
+        container.addChild(this.gfx);
+    }
+
+    override tick(elapsedMS: number): void {
+        if (!this.gfx.parent) {
+            return;
+        }
+        if (this.alphaInt.finished) {
+            return this.destroy();
+        }
+        this.gfx.rotation = this.rotationInt.tick(elapsedMS);
+        this.gfx.alpha = this.alphaInt.tick(elapsedMS);
+        this.gfx.scale.set(this.sizeInt.tick(elapsedMS));
+        this.gfx.position.x = this.xPoint.tick(elapsedMS);
+        this.gfx.position.y = this.yPoint.tick(elapsedMS);
+    }
+}
+
+class PooledSFX<T extends PIXI.DisplayObject = PIXI.DisplayObject> extends SFX<T> {
+    constructor(private pool: ArrayPool<PooledSFX<T>>, readonly gfx: T) { super(gfx) }
+
+    override destroy() {
+        this.pool.release(this);
+        super.destroy();
+    }
+}
+
+class TargetSFX extends PooledSFX<PIXI.Sprite> {
     init(point: Point, container: PIXI.Container) {
         this.alphaInt.init(2000, .6, 0, cubicOut);
         this.sizeInt.init(2000, 25, 30, cubicOut);
@@ -666,7 +722,7 @@ class TargetSFX extends SFX<PIXI.Sprite> {
     }
 }
 
-class TraceSFX extends SFX<PIXI.Sprite> {
+class TraceSFX extends PooledSFX<PIXI.Sprite> {
     init(point: Point, sat: Satellite, container: PIXI.Container) {
         const time = Math.random() * 100 + 400;
         this.xPoint.init(time, sat.position.x, point.x, cubicOut);
@@ -678,7 +734,7 @@ class TraceSFX extends SFX<PIXI.Sprite> {
     }
 }
 
-class PulseSFX extends SFX<PIXI.Graphics> {
+class PulseSFX extends PooledSFX<PIXI.Graphics> {
     planet: Planet;
 
     init(planet: Planet, container: PIXI.Container) {
@@ -699,7 +755,7 @@ class PulseSFX extends SFX<PIXI.Graphics> {
     }
 }
 
-class FlashSFX extends SFX<PIXI.Sprite> {
+class FlashSFX extends PooledSFX<PIXI.Sprite> {
     init(sat: Satellite, container: PIXI.Container, audio: Sound) {
         const time = Math.random() * 300 + 200;
         if (sat.destroyedBy?.startsWith('s')) {
@@ -719,9 +775,9 @@ class FlashSFX extends SFX<PIXI.Sprite> {
     }
 }
 
-class EntityGFX<T extends Entity, U extends PIXI.Container = PIXI.Container> implements Renderable {
+class EntityGFX<T extends Entity, U extends PIXI.DisplayObject = PIXI.DisplayObject> implements Renderable {
     protected ent: T;
-    constructor(private pool: ArrayPool<EntityGFX<any>>, readonly gfx: U) {}
+    constructor(private pool: ArrayPool<EntityGFX<T>>, readonly gfx: U) {}
 
     baseInit(entity: T, container: PIXI.Container) {
         this.ent = entity;

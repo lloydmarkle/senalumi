@@ -12,6 +12,7 @@
     import { fly } from 'svelte/transition';
     import { audioQueue } from "./lib/components/audio-effect";
     import { Sound } from "./lib/sound";
+    import type { Renderer } from "./lib/render";
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
@@ -25,13 +26,22 @@
     }
     const noSound = new NullSound();
 
+    let render: Renderer;
+    function visChange() {
+        if (render) {
+            render.paused = document.hidden;
+        }
+    }
     const demoGame = new Game(gameMaps[0]);
     demoGame.start();
 </script>
 
+<svelte:window on:visibilitychange={visChange} />
+
 {#if $prefs.showDemoGame}
     <GameView
         disableKeyboardInput
+        bind:render={render}
         game={demoGame}
         audio={noSound}
         initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
