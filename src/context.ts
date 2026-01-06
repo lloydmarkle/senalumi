@@ -8,11 +8,14 @@ import { Sound } from "./lib/sound";
 
 export const gameTitle = 'Senalumi'
 
-export interface UserPrefs {
-    userName: string;
-    userTeam: string;
-    soundVolume: number;
-    showDemoGame: boolean;
+const defaultPreferences = () => ({
+    userName: Context.generateName(),
+    userTeam: '',
+    soundVolume: 1,
+    showDemoGame: true,
+    preferredTeams: [] as Team[],
+});
+export type UserPrefs = ReturnType<typeof defaultPreferences> & {
     remoteGame?: { name: string, sessionId: string, roomId: string },
 }
 
@@ -72,14 +75,7 @@ export class Context {
         } catch {
             // below we add in any default values since last time we loaded prefs
         }
-        const prefs: UserPrefs = {
-            userName: Context.generateName(),
-            userTeam: '',
-            soundVolume: 1,
-            showDemoGame: true,
-            ...storedPrefs,
-        };
-        return prefs;
+        return { ...defaultPreferences(), ...storedPrefs, };
     }
 }
 

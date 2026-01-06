@@ -7,7 +7,7 @@
     import PlayerTable from "./lib/components/PlayerTable.svelte";
     import { onMount } from "svelte";
     import RoomStatusMessages from "./lib/components/RoomStatusMessages.svelte";
-    import type { Game } from "./lib/game";
+    import type { Game, Player, Team } from "./lib/game";
     import { fly } from "svelte/transition";
     import WorldSpaceOverlay from "./lib/components/WorldSpaceOverlay.svelte";
     import type { Renderer } from "./lib/render";
@@ -15,16 +15,46 @@
     const { room, audio, localPlayer } = appContext();
 
     export let game: Game;
+    export let player: Player;
 
     let gameState = game.log ?? [];
+    function checkScore() {
+        gameState = game.log ?? [];
+
+        // game over!
+        gameOver = 'win'
+        const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
+        const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
+        if (winnerCandidate) {
+            const satCounts: { [key in Team]?: number } = {};
+            game.satellites.forEach(sat => satCounts[sat.owner.team] = (satCounts[sat.owner.team] ?? 0) + 1);
+            let canComeback = false;
+            for (const team of Object.keys(satCounts)) {
+                if (team !== winnerCandidate) {
+                    canComeback = canComeback || satCounts[team as Team] > 100;
+                }
+            }
+
+            if (!canComeback) {
+                if (winnerCandidate === player.team) {
+                    gameOver = 'You win!';
+                    // save statistic (somewhere)
+                } else {
+                    gameOver = 'You lose';
+                }
+            }
+        }
+    }
     onMount(() => {
-        const scoreUpdateInterval = setInterval(() => gameState = game.log ?? [], 5000);
+        const scoreUpdateInterval = setInterval(checkScore, 5000);
         return () => clearInterval(scoreUpdateInterval);
     });
 
-    $: player = (game && $localPlayer.team)
-        ? game.players.find(p => p.team === $localPlayer.team) : null;
-
+    let gameOver = '';
+    $: if (gameOver) {
+        gfx.paused = true;
+        showScore = true;
+    }
     let gfx: Renderer;
     let showScore = false;
     let showDebugOptions = false;
@@ -37,7 +67,7 @@
             showDebugOptions = !$room && !showDebugOptions;
         }
         if (ev.code === 'Space' || ev.code === 'Escape') {
-            showScore = !showScore;
+            showScore = !showScore || gameOver.length > 0;
             gfx.paused = showScore && !$room;
         }
     }
@@ -63,7 +93,13 @@
                 <h2>Paused</h2>
             </div>
             {/if}
-            <div class="hstack scoreboard">
+            <div class="vstack scoreboard">
+                {#if gameOver}
+                    <div class="game-result">
+                        <h2>{gameOver}</h2>
+                        <a href="#menu=sp" class="btn">Leave</a>
+                    </div>
+                {/if}
                 <div class="chart">
                     <Scoreboard {gameState} />
                 </div>
@@ -97,11 +133,17 @@
 </div>
 
 <style>
+    .game-result {
+        display: flex;
+        gap: 1rem;
+        padding: 1rem 2rem;
+        align-items: center;
+    }
+
     .scoreboard {
         align-items: flex-start;
-		margin: 0 auto;
         background: var(--theme-gradient-fg2);
-        width: 80vw;
+        width: 80%;
     }
     .chart {
         width: 100%;

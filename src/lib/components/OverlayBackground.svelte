@@ -9,8 +9,8 @@
 <div style="--blur-strength:{blurStrength}px"
     class="container"
     class:container-visible={blurBackground}
-    on:introend={() => blurBackground = true}
-    on:outrostart={() => blurBackground = false}
+    on:introend={() => blurBackground = true }
+    on:outrostart={() => blurBackground = false }
     transition:fly|local={{ y: (window.innerHeight * -0.8) }}
 >
     <slot />
@@ -21,19 +21,17 @@
         display: flex;
         align-items: center;
         justify-content: center;
+
+        transition: backdrop-filter 2s;
+        backdrop-filter: blur(var(--blur-strength)) opacity(0);
         background: linear-gradient(to bottom, rgb(200, 200, 200, 0.1), rgb(200, 200, 200, 0.3));
         position: absolute;
-        inset: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 100vh;
     }
-    .container::before {
-        content: '';
-        opacity: 0;
-        backdrop-filter: blur(var(--blur-strength));
-        transition: opacity 2s;
-        position: absolute;
-        inset: 0;
-    }
-    .container-visible::before {
-        opacity: 1;
+    .container-visible {
+        backdrop-filter: blur(var(--blur-strength)) opacity(1);
     }
 </style>

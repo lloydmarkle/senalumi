@@ -26,10 +26,10 @@
     }
     const noSound = new NullSound();
 
-    let render: Renderer;
+    let gfx: Renderer;
     function visChange() {
-        if (render) {
-            render.paused = document.hidden;
+        if (gfx) {
+            gfx.paused = document.hidden;
         }
     }
     const demoGame = new Game(gameMaps[0]);
@@ -41,7 +41,7 @@
 {#if $prefs.showDemoGame}
     <GameView
         disableKeyboardInput
-        bind:render={render}
+        bind:gfx={gfx}
         game={demoGame}
         audio={noSound}
         initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
