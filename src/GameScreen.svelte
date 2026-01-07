@@ -35,7 +35,7 @@
         updateMapData(md => {
             if (winnerCandidate === player.team) {
                 gameOver = 'You win!';
-                md.stats.bestTime = lastEvent.time < md.stats.bestTime ? lastEvent.time : md.stats.bestTime;
+                md.stats.bestTime = lastEvent.time < md.stats.bestTime && md.stats.bestTime > 0 ? lastEvent.time : md.stats.bestTime;
                 md.stats.wins += 1;
             } else {
                 gameOver = 'You lose';
