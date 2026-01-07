@@ -32,41 +32,47 @@
             gfx.paused = document.hidden;
         }
     }
+    $: if (gfx) {
+        // use less cpu/gpu for demo game
+        gfx.fpsLimit.maxFPS = 20;
+        // and don't handle keyboard input
+        gfx.useKeyboardControls = false;
+    }
 
     const createDemoGame = () =>
         DataStore.load()
             .then(data => data.loadMaps())
             .then(maps => new Game(maps[0].map).start());
-    $: demoGame = $prefs.showDemoGame ? createDemoGame() : new Promise<Game>(resolve => {});
 </script>
 
 <svelte:window on:visibilitychange={visChange} />
 
-{#await demoGame then game}
-    <GameView
-        disableKeyboardInput
-        bind:gfx={gfx}
-        {game}
-        audio={noSound}
-        initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
-{/await}
+{#if $prefs.showDemoGame}
+    {#await createDemoGame() then game}
+        <GameView
+            bind:gfx={gfx}
+            {game}
+            audio={noSound}
+            initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
+    {/await}
+{/if}
 
 <OverlayBackground blurBackground>
     <div class="menu">
         {#if menu === 'sp' || menu === 'single-player'}
             <div transition:myFly class="menu-page">
-                <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
+                {@render backToMain()}
                 <LocalGameScreen />
             </div>
         {:else if !$urlParams.has('lobby') && (menu === 'mp' || menu === 'multi-player')}
             <div transition:myFly class="menu-page">
-                <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
+                {@render backToMain()}
                 <RemoteGameScreen />
             </div>
         {:else if $urlParams.has('lobby')}
             <div transition:myFly class="menu-page">
                 <div class="hstack">
-                    <a transition:delayFly={1} class="back-button" href={"#"} use:audioQueue={'backNavigation'}><BackArrow />{gameTitle}</a>
+                    {@render backToMain()}
                     <a transition:delayFly={1} class="back-button" href={"#menu=mp"} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</a>
                 </div>
                 <RemoteLobbyScreen />
@@ -74,7 +80,7 @@
         {:else}
             <div transition:myFly class="menu-page">
                 <h1 transition:delayFly={1} class="hstack">
-                    <img width={64} height={64} src="./favicon.png" alt="{gameTitle} logo - a coloured moon" />
+                    {@render titleImage(96)}
                     {gameTitle}
                 </h1>
                 <div class="vstack">
@@ -95,6 +101,20 @@
     </div>
 </OverlayBackground>
 
+{#snippet backToMain()}
+    <a transition:delayFly={1} class="back-button hstack" href={"#"} use:audioQueue={'backNavigation'}>
+        <BackArrow />
+        {@render titleImage(24)}
+        {gameTitle}
+    </a>
+{/snippet}
+
+{#snippet titleImage(size: number)}
+    <img class="title-img"
+        width={size} height={size}
+        src="./favicon.png" alt="{gameTitle} logo - a coloured moon" />
+{/snippet}
+
 <style>
     .menu {
         display: grid;
@@ -105,9 +125,10 @@
 
     h1 {
         padding: 0rem 2rem;
-        gap: .5rem;
+        gap: 1rem;
     }
-    h1 img {
+
+    .title-img {
         animation: spin 45s linear infinite,
             color-rotate 12s linear infinite reverse;
     }
@@ -137,9 +158,7 @@
     }
 
     .back-button {
-        display: flex;
-        align-items: center;
-
+        gap: .5rem;
         color: var(--theme-foreground);
         padding: 0.5em 0em;
         border: none;

@@ -34,6 +34,13 @@
         $prefs.preferredTeams = priorityTeams.map(e => e.value as Team);
     }
 
+    const formatTime = (duration: number) => [
+        Math.floor(duration / 60).toString().padStart(2, '0'),
+        Math.floor(duration % 60).toString().padStart(2, '0'),
+    ].join(':');
+    const formatPercent = (num: number) =>
+        (num * 100).toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 0 }) + '%';
+
     const selectRandom = (items: any[]) =>
         items[1 + Math.floor(Math.random() * (items.length - 1))];
 </script>
@@ -43,11 +50,16 @@
     {#await gameMaps}
         <LoadingIndicator size={80} color='#747bff' />
     {:then gameMaps}
-        <MapChooser
-            maps={gameMaps}
-            bind:selectedMap={mapData} />
+        <MapChooser maps={gameMaps} bind:selectedMap={mapData} let:mapData>
+            {@render mapTileWithStats(mapData as MapData)}
+        </MapChooser>
     {/await}
-    <div transition:delayFly>Map <span>{mapData?.map.props.name ?? ''}</span></div>
+    <div transition:delayFly class="hstack">
+        Map
+        <span>{mapData?.map.props.name ?? ''}</span>
+        <span>Wins rate: {!mapData || mapData.stats.attempts === 0 ? 'No data' : formatPercent(mapData.stats.wins / mapData.stats.attempts)}</span>
+        <span>(win: {mapData?.stats.wins ?? 0}, loss: {mapData?.stats.loses ?? 0}, attempt: {mapData?.stats.attempts ?? 0})</span>
+    </div>
     <div transition:delayFly style="width:15em">
         <ExpandingMenu>
             <div class="hstack admin-toggle" slot="button-content" let:open>
@@ -101,9 +113,69 @@
     >Launch</a>
 </div>
 
+{#snippet mapTileWithStats(md: MapData)}
+    <div class="map-tile" >
+        {#if md.map.props.img}
+            <img src={md.map.props.img} alt="map: {md.map.props.displayName}" />
+        {/if}
+        <span>{md.map.props.displayName}</span>
+        {#if md.stats.bestTime}
+            <div class="hstack win-stats">
+                <div class="trophy">🏆</div>
+                <div class="best-time">Time: {formatTime(md.stats.bestTime)}</div>
+            </div>
+        {/if}
+    </div>
+{/snippet}
+
 <style>
-    span {
-        opacity: .8;
+    .map-tile {
+        aspect-ratio: 1;
+        width: 64px;
+        position: relative;
+        background: var(--theme-background-3);
+        border-radius: var(--theme-border-radius);
+    }
+    .map-tile .win-stats {
+        position: absolute;
+        top: .5rem;
+        left: .5rem;
+        gap: .5rem;
+    }
+    .map-tile .trophy {
+        font-size: 1.5rem;
+    }
+    .map-tile img {
+        position: relative;
+        width: 48px;
+        top: .5em;
+    }
+    .map-tile span:first-child {
+        display: none;
+        position: absolute;
+        right: 0.5rem;
+        bottom: 0.5rem;
+    }
+
+    @media(min-width: 400px) {
+        .map-tile span {
+            display: inline;
+        }
+        .map-tile {
+            width: 96px;
+        }
+        .map-tile img {
+            width: 64px;
+            top: 1em;
+        }
+    }
+    @media(min-width: 860px) {
+        .map-tile {
+            width: 160px;
+        }
+        .map-tile img {
+            width: 128px;
+        }
     }
 
     .disabled {

@@ -11,40 +11,63 @@
     import { fly } from "svelte/transition";
     import WorldSpaceOverlay from "./lib/components/WorldSpaceOverlay.svelte";
     import type { Renderer } from "./lib/render";
+    import { DataStore, type MapData } from "./stored-data";
 
     const { room, audio, localPlayer } = appContext();
 
     export let game: Game;
     export let player: Player;
 
+    async function updateMapData(fn: (mapData: MapData) => MapData) {
+        const db = await DataStore.load();
+        const mapData = await db.loadMaps().then(maps => maps.find(m => m.id === game.mapName));
+        db.storeMap(fn(mapData));
+    }
+
+    $: gameConfig = game.config;
     let gameState = game.log ?? [];
     function checkScore() {
         gameState = game.log ?? [];
 
-        // game over!
+        let lastEvent = gameState[gameState.length - 1];
         const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
+        // only one player owns a planet
         const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
-        if (winnerCandidate) {
-            const satCounts: { [key in Team]?: number } = {};
-            game.satellites.forEach(sat => satCounts[sat.owner.team] = (satCounts[sat.owner.team] ?? 0) + 1);
-            let canComeback = false;
-            for (const team of Object.keys(satCounts)) {
-                if (team !== winnerCandidate) {
-                    canComeback = canComeback || satCounts[team as Team] > 100;
-                }
-            }
+        if (!winnerCandidate) {
+            return;
+        }
 
-            if (!canComeback) {
-                if (winnerCandidate === player.team) {
-                    gameOver = 'You win!';
-                    // save statistic (somewhere)
-                } else {
-                    gameOver = 'You lose';
-                }
+        let canComeback = false;
+        for (const [team, count] of lastEvent.satelliteCounts.entries()) {
+            if (team !== winnerCandidate) {
+                canComeback = canComeback || count > 100;
             }
         }
+        // and the other players don't have enough satellites to capture
+        if (canComeback) {
+            return;
+        }
+
+        // so it's game over
+        updateMapData(md => {
+            md.stats.bestTime = lastEvent.time;
+            if (winnerCandidate === player.team) {
+                gameOver = 'You win!';
+                md.stats.wins += 1;
+            } else {
+                gameOver = 'You lose';
+                md.stats.loses += 1;
+            }
+            return md;
+        });
     }
+
     onMount(() => {
+        updateMapData(md => {
+            md.stats.attempts += 1;
+            return md;
+        });
+
         const scoreUpdateInterval = setInterval(checkScore, 5000);
         return () => clearInterval(scoreUpdateInterval);
     });
@@ -57,7 +80,7 @@
     let gfx: Renderer;
     let showScore = false;
     let showDebugOptions = false;
-    function keyup(ev: KeyboardEvent) {
+    function keydown(ev: KeyboardEvent) {
         if (!game) {
             return;
         }
@@ -68,6 +91,17 @@
         if (ev.code === 'Space' || ev.code === 'Escape') {
             showScore = !showScore || gameOver.length > 0;
             gfx.paused = showScore && !$room;
+            updateFpsLimit();
+        }
+
+        // some helpful
+        if (ev.code === 'BracketLeft') {
+            gameConfig.gameSpeed -= .1;
+            gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
+        }
+        if (ev.code === 'BracketRight') {
+            gameConfig.gameSpeed += .1;
+            gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
         }
     }
 
@@ -75,12 +109,24 @@
         if (document.hidden) {
             gfx.paused = true;
             showScore = true;
+            updateFpsLimit();
+        }
+    }
+
+    function updateFpsLimit() {
+        if (!gfx) return;
+        if (gfx.paused) {
+            gfx.fpsLimit.maxFPS = 5;
+            gfx.fpsLimit.minFPS = 1;
+        } else {
+            gfx.fpsLimit.maxFPS = 0;
+            gfx.fpsLimit.minFPS = 10;
         }
     }
 </script>
 
 <svelte:window
-    on:keyup={keyup}
+    on:keydown={keydown}
     on:visibilitychange={changeTabVisibility} />
 
 {#key game}

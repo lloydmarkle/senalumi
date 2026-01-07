@@ -10,9 +10,6 @@
     export let player: Player = null;
     export let initialZoom: IAnimateOptions = null;
     export let gfx: Renderer = null;
-    export let disableKeyboardInput = false;
-
-    $: if (gfx) gfx.useKeyboardControls = !disableKeyboardInput;
 
     let el: HTMLCanvasElement;
     onMount(() => {

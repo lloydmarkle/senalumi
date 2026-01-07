@@ -17,8 +17,11 @@
         <button
             use:audioQueue={'button'}
             class:selected-map={selectedMap?.id === md.id}
-            on:click={() => setMapFunction(md)}>
-            <MapTile map={md.map} />
+            on:click={() => setMapFunction(md)}
+        >
+            <slot mapData={md}>
+                <MapTile map={md.map} />
+            </slot>
         </button>
     {/each}
 </div>

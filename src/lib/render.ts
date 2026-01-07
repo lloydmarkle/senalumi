@@ -372,6 +372,7 @@ export class Renderer {
     public paused = false;
     private keyboardControls: ReturnType<typeof enableKeyboardDrag>
     useKeyboardControls = true;
+    get fpsLimit(): { minFPS: number, maxFPS: number } { return this.app.ticker };
 
     constructor(element: HTMLCanvasElement, private game: Game, audio: Sound, player?: Player) {
         const app = new PIXI.Application({

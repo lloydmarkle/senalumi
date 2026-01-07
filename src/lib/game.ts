@@ -130,7 +130,7 @@ function setupDefaultMap(game: Game): GameMap {
             { level: 1, count: game.players.length },
         ],
     };
-    const props = { name: 'default', img: '' };
+    const props = { name: 'default', displayName: 'Default', img: '' };
     const world =  generateRandomCircleWorld(setup);
     return { props, setup, ...world };
 }
@@ -184,7 +184,7 @@ export class Game {
     planets: Planet[] = [];
     players: Player[] = [];
     readonly log: GameStateSnapshot[] = [];
-    readonly config = constants;
+    readonly config = { ...constants };
     readonly satellites = new ArrayPool(() => new Satellite());
     readonly collisionTree = new QuadTree<Satellite>(quadTreeBoxCapacity);
     readonly frameState = {
@@ -192,6 +192,7 @@ export class Game {
         removed: new GrowOnlyArray<Satellite>(),
         elapsedMS: 0,
     };
+    get mapName() { return this.map.props.name; }
 
     constructor(private map?: GameMap) {
         const aiStats: AIConfig = {
