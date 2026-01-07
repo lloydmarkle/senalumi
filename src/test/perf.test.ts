@@ -20,7 +20,7 @@ const stats = (arr: number[], usePopulation = false) => {
 
 describe('perf', () => {
     it('benchmark', () => {
-        let entries = [];
+        let entries: any[] = [];
         const obs = new PerformanceObserver((list) => {
             entries = entries.concat(list.getEntries()[0]);
         });

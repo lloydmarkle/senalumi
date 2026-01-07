@@ -1,4 +1,5 @@
 import { linear } from 'svelte/easing';
+// @ts-ignore
 import { create as createPool } from 'deepool';
 
 export interface Point {

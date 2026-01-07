@@ -110,7 +110,7 @@
             {/if}
             {#if hasGame}
                 <ConfirmButton
-                    text={'Quit'}
+                    text={'Leave'}
                     confirmText={'Really leave?'}
                     actionFn={quitGame}
                 />

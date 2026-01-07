@@ -18,10 +18,6 @@
 
 <style>
     .container {
-        /* display: flex;
-        align-items: center;
-        justify-content: center; */
-
         transition: backdrop-filter 2s;
         backdrop-filter: blur(var(--blur-strength)) opacity(0);
         background: linear-gradient(to bottom, rgb(200, 200, 200, 0.1), rgb(200, 200, 200, 0.3));

@@ -4,12 +4,13 @@
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import Scoreboard from "./lib/components/Scoreboard.svelte";
     import { appContext } from "./context";
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
     import type { Game, GameStateSnapshot, Player, Team } from "./lib/game";
     import { fly } from "svelte/transition";
     import WorldSpaceOverlay from "./lib/components/WorldSpaceOverlay.svelte";
     import type { Renderer } from "./lib/render";
     import { DataStore, type MapData } from "./stored-data";
+    import { writable } from "svelte/store";
 
     const { audio } = appContext();
 
@@ -90,6 +91,17 @@
         return () => clearInterval(scoreUpdateInterval);
     });
 
+    let hudMessage = writable('');
+    let hudText = '';
+    let hudMessageNum = 0;
+    $: handleHudMessage($hudMessage);
+    async function handleHudMessage(text: string) {
+        hudText = text;
+        hudMessageNum += 1;
+        await tick();
+        $hudMessage = '';
+    }
+
     let gameOver = '';
     $: if (gameOver && !watchMode) {
         gfx.paused = true;
@@ -116,10 +128,12 @@
         if (ev.code === 'BracketLeft') {
             gameConfig.gameSpeed -= .1;
             gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
+            $hudMessage = `Game speed: ${gameConfig.gameSpeed.toFixed(1)}`;
         }
         if (ev.code === 'BracketRight') {
             gameConfig.gameSpeed += .1;
             gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
+            $hudMessage = `Game speed: ${gameConfig.gameSpeed.toFixed(1)}`;
         }
     }
 
@@ -146,6 +160,16 @@
 <svelte:window
     on:keydown={keydown}
     on:visibilitychange={changeTabVisibility} />
+
+<div style="position:absolute; font-size:1.5rem; right:1rem; bottom: 3rem; z-index: 10">
+    <div style="display:flex; flex-direction:column; overflow:hidden; gap:.5rem">
+        {#key hudMessageNum}
+            <div out:fly={{ y: '-1rem', delay: 2000 }}>
+                <div in:fly={{ y: '1rem' }}>{hudText}</div>
+            </div>
+        {/key}
+    </div>
+</div>
 
 {#key game}
 <GameView {game} {audio} {player} bind:gfx={gfx}>

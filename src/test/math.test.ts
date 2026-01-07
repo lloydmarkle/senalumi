@@ -24,7 +24,7 @@ describe('quad tree', () => {
         // qt.insert(star(575, 75), radius);
         qPrint(qt);
 
-        const items = [];
+        const items: any[] = [];
         qt.query(point(3, 3), radius, e => items.push(e));
         console.log(items);
     });
