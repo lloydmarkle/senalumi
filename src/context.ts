@@ -1,8 +1,6 @@
-import type { Room } from "colyseus.js";
 import { getContext } from "svelte";
 import { writable } from "svelte/store";
 import type { Game, Team } from "./lib/game";
-import { GameSchema, PlayerSchema } from "./lib/net-game";
 import { uniqueNamesGenerator, colors, NumberDictionary } from 'unique-names-generator';
 import { Sound } from "./lib/sound";
 
@@ -28,29 +26,14 @@ export class Context {
     private _prefs = Context.loadPrefs();
     readonly game = writable<Game>(undefined);
     readonly urlParams = writable(new URLSearchParams());
-    readonly room = writable<Room<GameSchema>>();
     readonly prefs = writable<UserPrefs>(this._prefs);
-    readonly localPlayer = writable(new PlayerSchema(this._prefs.userName, this._prefs.userTeam as Team));
+    readonly localPlayer = writable({ displayName: this._prefs.userName, team: this._prefs.userTeam as Team });
     readonly audio = new Sound();
 
     constructor() {
         this.localPlayer.subscribe(player => {
             this._prefs.userName = player.displayName;
             this._prefs.userTeam = player.team;
-            this.prefs.set(this._prefs);
-        });
-
-        let lastRoom: Room<GameSchema>;
-        this.room.subscribe(room => {
-            if (lastRoom) {
-                lastRoom.leave();
-            }
-            lastRoom = room;
-            if (room) {
-                this._prefs.remoteGame = { name: room.state.label, roomId: room.id, sessionId: room.sessionId };
-            } else if (room === null) {
-                delete this._prefs.remoteGame;
-            }
             this.prefs.set(this._prefs);
         });
 

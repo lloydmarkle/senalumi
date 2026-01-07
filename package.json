@@ -30,7 +30,6 @@
     "temp-dir": "build/private/nyc"
   },
   "devDependencies": {
-    "@colyseus/ws-transport": "^0.14.21",
     "@pixi/filter-shockwave": "^4.2.0",
     "@sveltejs/pancake": "^0.0.18",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
@@ -41,8 +40,6 @@
     "@types/sinon": "^10.0.13",
     "chai": "^4.3.6",
     "color-convert": "^2.0.1",
-    "colyseus": "^0.14.24",
-    "colyseus.js": "^0.14.13",
     "deepool": "^3.0.1",
     "mocha": "^10.1.0",
     "nyc": "^15.1.0",

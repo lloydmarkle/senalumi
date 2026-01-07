@@ -2,8 +2,6 @@
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import GameView from "./lib/components/GameView.svelte";
     import LocalGameScreen from "./lib/menu/LocalGameScreen.svelte";
-    import RemoteGameScreen from "./lib/menu/RemoteGameScreen.svelte";
-    import RemoteLobbyScreen from "./lib/menu/RemoteLobbyScreen.svelte";
     import BackArrow from "./lib/menu/BackArrow.svelte";
     import { delayFly } from "./lib/menu/transitions";
     import { Game } from "./lib/game";
@@ -17,9 +15,8 @@
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
-    const { urlParams, room, prefs } = appContext();
+    const { urlParams, prefs } = appContext();
     $: menu = $urlParams.get('menu');
-    $: if (!$urlParams.has('lobby')) $room = null;
 
     class NullSound extends Sound {
         // do nothing!
@@ -69,19 +66,6 @@
             <div transition:myFly class="menu-page">
                 {@render backToMain()}
                 <AboutScreen />
-            </div>
-        {:else if !$urlParams.has('lobby') && (menu === 'mp' || menu === 'multi-player')}
-            <div transition:myFly class="menu-page">
-                {@render backToMain()}
-                <RemoteGameScreen />
-            </div>
-        {:else if $urlParams.has('lobby')}
-            <div transition:myFly class="menu-page">
-                <div class="hstack">
-                    {@render backToMain()}
-                    <a transition:delayFly={1} class="back-button" href={"#menu=mp"} use:audioQueue={'backNavigation'}><BackArrow />Multiplayer</a>
-                </div>
-                <RemoteLobbyScreen />
             </div>
         {:else}
             <div transition:myFly class="menu-page">

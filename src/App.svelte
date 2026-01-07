@@ -7,7 +7,7 @@
 
     const context = new Context();
     setContext(key, context);
-    const { game, urlParams, prefs, audio, room, localPlayer } = context;
+    const { game, urlParams, prefs, audio, localPlayer } = context;
 
     import ExpandingMenu from './lib/components/ExpandingMenu.svelte';
     import VolumeControl from './lib/components/VolumeControl.svelte';
@@ -54,7 +54,7 @@
     }
 
     let player: Player;
-    $: if ($game && $room) player = $game.players.find(p => p.team === $localPlayer.team)
+    $: if ($game) player = $game.players.find(p => p.team === $localPlayer.team)
     function parseUrlParams() {
         try {
             $urlParams = new URLSearchParams(window.location.hash.substring(1));
@@ -72,7 +72,6 @@
                 });
             } else if (!$urlParams.has('lobby')) {
                 $game = null;
-                $room = null;
             }
         } catch {
             // TODO: what to do with errors?

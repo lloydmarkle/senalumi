@@ -4,16 +4,14 @@
     import OverlayBackground from "./lib/components/OverlayBackground.svelte";
     import Scoreboard from "./lib/components/Scoreboard.svelte";
     import { appContext } from "./context";
-    import PlayerTable from "./lib/components/PlayerTable.svelte";
     import { onMount } from "svelte";
-    import RoomStatusMessages from "./lib/components/RoomStatusMessages.svelte";
     import type { Game, Player, Team } from "./lib/game";
     import { fly } from "svelte/transition";
     import WorldSpaceOverlay from "./lib/components/WorldSpaceOverlay.svelte";
     import type { Renderer } from "./lib/render";
     import { DataStore, type MapData } from "./stored-data";
 
-    const { room, audio, localPlayer } = appContext();
+    const { audio } = appContext();
 
     export let game: Game;
     export let player: Player;
@@ -100,11 +98,11 @@
         }
 
         if (ev.code === 'Backquote') {
-            showDebugOptions = !$room && !showDebugOptions;
+            showDebugOptions = !showDebugOptions;
         }
         if (ev.code === 'Space' || ev.code === 'Escape') {
             showScore = !showScore || (gameOver.length > 0 && !watchMode);
-            gfx.paused = showScore && !$room;
+            gfx.paused = showScore;
             updateFpsLimit();
         }
 
@@ -185,15 +183,6 @@
 </GameView>
 {/key}
 
-<div class="fullscreen-container">
-    {#if $room}
-    <div class="player-table">
-        <PlayerTable room={$room} localPlayer={$localPlayer} />
-    </div>
-    <RoomStatusMessages room={$room} />
-    {/if}
-</div>
-
 <style>
     .game-result {
         display: flex;
@@ -225,26 +214,6 @@
         background: var(--theme-background);
         padding: .5rem 4rem;
         border-radius: var(--theme-border-radius);
-    }
-
-    .fullscreen-container {
-        pointer-events: none;
-        position: absolute;
-        top:0; left:0 ;
-        width: 100vw;
-        height: 100vh;
-    }
-    .player-table {
-        pointer-events: all;
-        position: absolute;
-        width: 20em;
-        left: 1em;
-        bottom: 1em;
-        opacity: var(--theme-hover-opacity-off);
-        transition: opacity .3s;
-    }
-    .player-table:hover, .player-table:active {
-        opacity: var(--theme-hover-opacity);
     }
 
     .viewport-transform {

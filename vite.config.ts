@@ -1,35 +1,9 @@
 import { defineConfig, Plugin } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-import { GameRoom } from './server';
-import { WebSocketTransport } from "@colyseus/ws-transport"
-import { Server } from 'colyseus';
-const colyseusServerPlugin = (): Plugin => {
-  let gameServer: Server;
-  return {
-    name: 'colyseus-server',
-    buildStart(options) {
-      gameServer = new Server({
-        transport: new WebSocketTransport({
-          pingMaxRetries: 10,
-        }),
-      });
-      gameServer.listen(2567);
-      // gameServer.simulateLatency(1600)
-      // gameServer.simulateLatency(800)
-      // gameServer.simulateLatency(200)
-      gameServer.define('senalumi', GameRoom)
-        .filterBy(['label']);
-    },
-    async closeBundle() {
-      await gameServer.gracefullyShutdown(false)
-    },
-  };
-}
-
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [svelte(), colyseusServerPlugin()],
+  plugins: [svelte()],
   server: {
     cors: true,
     host: '0.0.0.0',
