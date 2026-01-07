@@ -427,8 +427,8 @@ export class Renderer {
         let strongBlur = new PIXI.filters.BlurFilter(50, 16);
 
         // Create the sprite and add it to the stage
-        let satelliteTexture = PIXI.Texture.from('/star.png');
-        let planetTexture = PIXI.Texture.from('/sun.png');
+        let satelliteTexture = PIXI.Texture.from('star.png');
+        let planetTexture = PIXI.Texture.from('sun.png');
 
         let bgContainer = new PIXI.Container();
         viewport.addChild(bgContainer);
