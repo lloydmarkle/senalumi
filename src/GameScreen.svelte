@@ -24,12 +24,38 @@
         db.storeMap(fn(mapData));
     }
 
+    // TODO: watchmode, pause, showscore... these are all kind of similar but the code is messy
+    let watchMode = false;
+    const startWatching = () => {
+        watchMode = true;
+        showScore = false;
+        gfx.paused = false;
+        updateFpsLimit();
+    }
+
     $: gameConfig = game.config;
     let gameState = game.log ?? [];
     function checkScore() {
         gameState = game.log ?? [];
 
-        let lastEvent = gameState[gameState.length - 1];
+        const lastEvent = gameState[gameState.length - 1];
+        const playerEliminated =
+            !game.planets.some(p => p?.owner?.team === player.team) && lastEvent.satelliteCounts.get(player.team) < 100;
+        if (!watchMode && playerEliminated) {
+            // so it's game over
+            updateMapData(md => {
+                if (winnerCandidate === player.team) {
+                    gameOver = 'You win!';
+                    md.stats.bestTime = lastEvent.time < md.stats.bestTime ? lastEvent.time : md.stats.bestTime;
+                    md.stats.wins += 1;
+                } else {
+                    gameOver = 'You lose';
+                    md.stats.loses += 1;
+                }
+                return md;
+            });
+        }
+
         const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
         // only one player owns a planet
         const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
@@ -47,19 +73,7 @@
         if (canComeback) {
             return;
         }
-
-        // so it's game over
-        updateMapData(md => {
-            md.stats.bestTime = lastEvent.time;
-            if (winnerCandidate === player.team) {
-                gameOver = 'You win!';
-                md.stats.wins += 1;
-            } else {
-                gameOver = 'You lose';
-                md.stats.loses += 1;
-            }
-            return md;
-        });
+        gameOver = winnerCandidate + ' wins';
     }
 
     onMount(() => {
@@ -73,7 +87,7 @@
     });
 
     let gameOver = '';
-    $: if (gameOver) {
+    $: if (gameOver && !watchMode) {
         gfx.paused = true;
         showScore = true;
     }
@@ -89,7 +103,7 @@
             showDebugOptions = !$room && !showDebugOptions;
         }
         if (ev.code === 'Space' || ev.code === 'Escape') {
-            showScore = !showScore || gameOver.length > 0;
+            showScore = !showScore || (gameOver.length > 0 && !watchMode);
             gfx.paused = showScore && !$room;
             updateFpsLimit();
         }
@@ -144,6 +158,7 @@
                         <div class="game-result">
                             <h2>{gameOver}</h2>
                             <a href="#menu=sp" class="btn">Leave</a>
+                            <button on:click={startWatching}>Continue watching</button>
                         </div>
                     {/if}
                     <div class="chart">
