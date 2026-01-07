@@ -133,20 +133,22 @@
 <GameView {game} {audio} {player} bind:gfx={gfx}>
     {#if showScore}
         <OverlayBackground>
-            {#if gfx.paused}
-            <div transition:fly={{ y:'-100%', delay: 400 }} class="top-info">
-                <h2>Paused</h2>
-            </div>
-            {/if}
-            <div class="vstack scoreboard">
-                {#if gameOver}
-                    <div class="game-result">
-                        <h2>{gameOver}</h2>
-                        <a href="#menu=sp" class="btn">Leave</a>
-                    </div>
+            <div class="overlay-root">
+                {#if gfx.paused}
+                <div transition:fly={{ y:'-100%', delay: 400 }} class="top-info">
+                    <h2>Paused</h2>
+                </div>
                 {/if}
-                <div class="chart">
-                    <Scoreboard {gameState} />
+                <div class="vstack scoreboard">
+                    {#if gameOver}
+                        <div class="game-result">
+                            <h2>{gameOver}</h2>
+                            <a href="#menu=sp" class="btn">Leave</a>
+                        </div>
+                    {/if}
+                    <div class="chart">
+                        <Scoreboard {gameState} />
+                    </div>
                 </div>
             </div>
         </OverlayBackground>
@@ -185,17 +187,21 @@
         align-items: center;
     }
 
+    .overlay-root {
+        display: flex;
+        height: 100%;
+        justify-content: center;
+        align-items: center;
+    }
     .scoreboard {
-        align-items: flex-start;
         background: var(--theme-gradient-fg2);
         width: 80%;
+        height: 60%;
     }
     .chart {
-        width: 100%;
-		height: 60vh;
+		height: 100%;
 		padding: 3em;
-		max-width: 80em;
-		max-height: 60em;
+		max-height: 60rem;
 	}
 
     .top-info {

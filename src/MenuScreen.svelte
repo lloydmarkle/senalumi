@@ -13,6 +13,7 @@
     import { Sound } from "./lib/sound";
     import type { Renderer } from "./lib/render";
     import { DataStore } from "./stored-data";
+    import AboutScreen from "./lib/menu/AboutScreen.svelte";
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
@@ -64,6 +65,11 @@
                 {@render backToMain()}
                 <LocalGameScreen />
             </div>
+        {:else if menu === 'about'}
+            <div transition:myFly class="menu-page">
+                {@render backToMain()}
+                <AboutScreen />
+            </div>
         {:else if !$urlParams.has('lobby') && (menu === 'mp' || menu === 'multi-player')}
             <div transition:myFly class="menu-page">
                 {@render backToMain()}
@@ -95,6 +101,8 @@
                     disable for now until we can actually get a decent user experience
                     <a class="btn large-button" href="#menu=editor" transition:delayFly use:audioQueue={'forwardNavigation'}>Map Editor</a>
                     -->
+
+                    <a class="btn large-button" href="#menu=about" transition:delayFly use:audioQueue={'forwardNavigation'}>About</a>
                 </div>
             </div>
         {/if}
@@ -116,13 +124,6 @@
 {/snippet}
 
 <style>
-    .menu {
-        display: grid;
-        align-items: center;
-        min-height: 40vh;
-        min-width: 40vw;
-    }
-
     h1 {
         padding: 0rem 2rem;
         gap: 1rem;
@@ -140,8 +141,16 @@
         to { filter: hue-rotate(360deg) saturate(120%); }
     }
 
+    .menu {
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        align-items: center;
+        height: 100%;
+    }
     .menu-page {
         background: var(--theme-background-3);
+        margin-top: 4rem;
         padding: 1em 1em 1em;
         align-self: center;
         justify-self: center;
@@ -160,9 +169,11 @@
     .back-button {
         gap: .5rem;
         color: var(--theme-foreground);
+        background: var(--theme-background-3);
         padding: 0.5em 0em;
         border: none;
-        background: none;
+        position: sticky;
+        top: 0;
     }
     .back-button:hover {
         color: var(--theme-link-hover);
@@ -170,12 +181,7 @@
 
     @media(min-width: 400px) {
         .menu-page {
-            padding: .5em 2em 2em;
-        }
-    }
-    @media(min-width: 860px) {
-        .menu-page {
-            padding: 1em 4em 4em;
+            margin-top: 8rem;
         }
     }
 

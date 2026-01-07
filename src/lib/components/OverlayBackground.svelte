@@ -18,18 +18,15 @@
 
 <style>
     .container {
-        display: flex;
+        /* display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: center; */
 
         transition: backdrop-filter 2s;
         backdrop-filter: blur(var(--blur-strength)) opacity(0);
         background: linear-gradient(to bottom, rgb(200, 200, 200, 0.1), rgb(200, 200, 200, 0.3));
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 100vh;
+        inset: 0;
     }
     .container-visible {
         backdrop-filter: blur(var(--blur-strength)) opacity(1);
