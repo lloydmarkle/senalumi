@@ -5,7 +5,7 @@
     import Scoreboard from "./lib/components/Scoreboard.svelte";
     import { appContext } from "./context";
     import { onMount } from "svelte";
-    import type { Game, Player, Team } from "./lib/game";
+    import type { Game, GameStateSnapshot, Player, Team } from "./lib/game";
     import { fly } from "svelte/transition";
     import WorldSpaceOverlay from "./lib/components/WorldSpaceOverlay.svelte";
     import type { Renderer } from "./lib/render";
@@ -31,6 +31,20 @@
         updateFpsLimit();
     }
 
+    function recordGameStats(winnerCandidate: Team, lastEvent: GameStateSnapshot) {
+        updateMapData(md => {
+            if (winnerCandidate === player.team) {
+                gameOver = 'You win!';
+                md.stats.bestTime = lastEvent.time < md.stats.bestTime ? lastEvent.time : md.stats.bestTime;
+                md.stats.wins += 1;
+            } else {
+                gameOver = 'You lose';
+                md.stats.loses += 1;
+            }
+            return md;
+        });
+    }
+
     $: gameConfig = game.config;
     let gameState = game.log ?? [];
     function checkScore() {
@@ -39,24 +53,13 @@
         const lastEvent = gameState[gameState.length - 1];
         const playerEliminated =
             !game.planets.some(p => p?.owner?.team === player.team) && lastEvent.satelliteCounts.get(player.team) < 100;
+        const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
+        const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
         if (!watchMode && playerEliminated) {
-            // so it's game over
-            updateMapData(md => {
-                if (winnerCandidate === player.team) {
-                    gameOver = 'You win!';
-                    md.stats.bestTime = lastEvent.time < md.stats.bestTime ? lastEvent.time : md.stats.bestTime;
-                    md.stats.wins += 1;
-                } else {
-                    gameOver = 'You lose';
-                    md.stats.loses += 1;
-                }
-                return md;
-            });
+            return recordGameStats(winnerCandidate, lastEvent);
         }
 
-        const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
         // only one player owns a planet
-        const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
         if (!winnerCandidate) {
             return;
         }
@@ -70,6 +73,9 @@
         // and the other players don't have enough satellites to capture
         if (canComeback) {
             return;
+        }
+        if (winnerCandidate === player.team) {
+            recordGameStats(winnerCandidate, lastEvent);
         }
         gameOver = winnerCandidate + ' wins';
     }
