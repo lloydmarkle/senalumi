@@ -7,12 +7,12 @@
     import BackArrow from "./lib/menu/BackArrow.svelte";
     import { delayFly } from "./lib/menu/transitions";
     import { Game } from "./lib/game";
-    import { gameMaps } from "./lib/data";
     import { gameTitle, appContext } from "./context";
     import { fly } from 'svelte/transition';
     import { audioQueue } from "./lib/components/audio-effect";
     import { Sound } from "./lib/sound";
     import type { Renderer } from "./lib/render";
+    import { DataStore } from "./stored-data";
 
     const myFly = (el: Element) => fly(el, { y: -40, duration: 400 });
 
@@ -32,20 +32,24 @@
             gfx.paused = document.hidden;
         }
     }
-    const demoGame = new Game(gameMaps[0]);
-    demoGame.start();
+
+    const createDemoGame = () =>
+        DataStore.load()
+            .then(data => data.loadMaps())
+            .then(maps => new Game(maps[0].map).start());
+    $: demoGame = $prefs.showDemoGame ? createDemoGame() : new Promise<Game>(resolve => {});
 </script>
 
 <svelte:window on:visibilitychange={visChange} />
 
-{#if $prefs.showDemoGame}
+{#await demoGame then game}
     <GameView
         disableKeyboardInput
         bind:gfx={gfx}
-        game={demoGame}
+        {game}
         audio={noSound}
         initialZoom={{ scale: .4, time: 5000, ease: 'easeInOutQuad' }}/>
-{/if}
+{/await}
 
 <OverlayBackground blurBackground>
     <div class="menu">

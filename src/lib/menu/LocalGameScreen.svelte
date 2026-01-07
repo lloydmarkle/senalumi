@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { type GameMap, type Team } from '../game';
+    import { type Team } from '../game';
     import { appContext } from '../../context';
     import { delayFly } from './transitions';
     import MapChooser from './MapChooser.svelte';
@@ -8,14 +8,17 @@
     import { audioQueue } from '../components/audio-effect';
     import ExpandingMenu from '../components/ExpandingMenu.svelte';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
+    import { DataStore, type MapData } from '../../stored-data';
+    import LoadingIndicator from '../components/LoadingIndicator.svelte';
 
     let { localPlayer, prefs } = appContext();
+    const gameMaps = DataStore.load().then(db => db.loadMaps());
 
     let priorityTeams: TeamInfo[] = $prefs.preferredTeams.map(e => playerTeams.find(t => t.value === e));
     let overrideTeams: TeamInfo[] = playerTeams.slice(1).filter(e => !priorityTeams.includes(e));
     let availableTeams = [playerTeams[0], ...priorityTeams, ...overrideTeams];
-    let map: GameMap = null;
-    $: if (map) availableTeams = [playerTeams[0], ...prioritizedTeams(availableTeamsFromMap(map), priorityTeams)];
+    let mapData: MapData = null;
+    $: if (mapData) availableTeams = [playerTeams[0], ...prioritizedTeams(availableTeamsFromMap(mapData.map), priorityTeams)];
     $: playerTeam = availableTeams.find(t => t.value === $localPlayer.team)
         ? $localPlayer.team : selectRandom(availableTeams).value as Team;
     $: if (playerTeam) $localPlayer.team = playerTeam;
@@ -37,8 +40,14 @@
 
 <h3 transition:delayFly>Single player</h3>
 <div class="vstack">
-    <div transition:delayFly>Map <span>{map?.props.name ?? ''}</span></div>
-    <MapChooser bind:selectedMap={map} />
+    {#await gameMaps}
+        <LoadingIndicator size={80} color='#747bff' />
+    {:then gameMaps}
+        <MapChooser
+            maps={gameMaps}
+            bind:selectedMap={mapData} />
+    {/await}
+    <div transition:delayFly>Map <span>{mapData?.map.props.name ?? ''}</span></div>
     <div transition:delayFly style="width:15em">
         <ExpandingMenu>
             <div class="hstack admin-toggle" slot="button-content" let:open>
@@ -84,11 +93,11 @@
         <div>Team</div>
         <TeamSelect options={availableTeams} bind:value={playerTeam} />
     </span>
-    <a href="#team={availableTeams.findIndex(t => t.value === playerTeam)}&map={map?.props.name}"
+    <a href="#team={availableTeams.findIndex(t => t.value === playerTeam)}&map={mapData?.map.props.name}"
         class="btn"
         use:audioQueue={'button'}
         transition:delayFly
-        class:disabled={map === null}
+        class:disabled={mapData === null}
     >Launch</a>
 </div>
 

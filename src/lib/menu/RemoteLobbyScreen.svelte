@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Game, type GameMap, type Team } from '../game';
-    import { convertToRemoteGame, GameSchema, joinRemoteGame, PlayerSchema, rejoinRoom,  } from '../net-game';
+    import { convertToRemoteGame, GameSchema, joinRemoteGame, PlayerSchema, rejoinRoom } from '../net-game';
     import { delayFly, fade, fly } from './transitions';
     import { appContext } from '../../context';
     import TeamSelectionIcon from '../components/TeamSelectionIcon.svelte';
@@ -12,8 +12,10 @@
     import LoadingIndicator from '../components/LoadingIndicator.svelte';
     import { onDestroy } from 'svelte';
     import ExpandingMenu from '../components/ExpandingMenu.svelte';
+    import { DataStore, type MapData } from '../../stored-data';
 
     const { localPlayer, room, game, audio, prefs, urlParams } = appContext();
+    const gameMaps = DataStore.load().then(db => db.loadMaps());
 
     let destroyed = false;
     onDestroy(() => destroyed = true);
@@ -83,7 +85,8 @@
         readConfig();
     });
 
-    let map: GameMap;
+    let selectedMap: MapData;
+    $: map = selectedMap?.map;
     let players: PlayerSchema[] = [];
 
     let availableTeams = playerTeams;
@@ -128,9 +131,17 @@
     </div>
 {:then}
     <h3 transition:delayFly><span>Game</span> {gameState.label}</h3>
-    <div transition:delayFly>Map</div>
     {#if $localPlayer.admin}
-        <span transition:delayFly><MapChooser bind:selectedMap={map} /></span>
+        <span transition:delayFly>
+            {#await gameMaps}
+                <LoadingIndicator size={80} color='#747bff' />
+            {:then gameMaps}
+                <MapChooser
+                    maps={gameMaps}
+                    bind:selectedMap={selectedMap} />
+            {/await}
+        </span>
+        <div transition:delayFly>Map <span>{map?.props.name ?? ''}</span></div>
         <span transition:delayFly style="width:15em">
         <ExpandingMenu>
             <div class="hstack admin-toggle" slot="button-content" let:open>

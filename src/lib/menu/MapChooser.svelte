@@ -1,24 +1,24 @@
 <script lang="ts">
-    import type { GameMap } from '../game';
-    import { gameMaps } from '../data';
     import { delayFly } from './transitions';
     import MapTile from './MapTile.svelte';
     import { audioQueue } from '../components/audio-effect';
+    import type { MapData } from 'src/stored-data';
 
-    export let selectedMap: GameMap;
+    export let maps: Iterable<MapData>;
+    export let selectedMap: MapData;
 
-    function setMapFunction(map: GameMap) {
+    function setMapFunction(map: MapData) {
         selectedMap = map;
     }
 </script>
 
 <div transition:delayFly={3} class="hstack map-select">
-    {#each gameMaps as map}
+    {#each maps as md}
         <button
             use:audioQueue={'button'}
-            class:selected-map={selectedMap?.props.img === map.props.img}
-            on:click={() => setMapFunction(map)}>
-            <MapTile {map} />
+            class:selected-map={selectedMap?.id === md.id}
+            on:click={() => setMapFunction(md)}>
+            <MapTile map={md.map} />
         </button>
     {/each}
 </div>

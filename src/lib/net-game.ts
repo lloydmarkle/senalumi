@@ -1,6 +1,6 @@
 import { Schema, MapSchema, defineTypes, ArraySchema, type DataChange } from '@colyseus/schema';
 import { Game, constants, Planet, Satellite, Player, type GameEvent, type GameStateSnapshot, type Team } from './game';
-import { gameMaps, playerTeams } from './data';
+import { preloadedMaps, playerTeams } from './data';
 
 // something weird going on with vite, decorators, and colyseus.
 // Not really sure what but using defineTypes() instead of decorators works
@@ -199,7 +199,7 @@ export class GameConfigSchema extends Schema {
         public maxPlayers = 16,
         public colours = playerTeams.map(p => p.value),
         public startGame = false, // signal to start game
-        public gameMap = JSON.stringify(gameMaps[0]),
+        public gameMap = JSON.stringify(preloadedMaps[0]),
     ) { super() }
 }
 defineTypes(GameConfigSchema, {

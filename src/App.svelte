@@ -14,7 +14,8 @@
     import Toggle from './lib/components/Toggle.svelte';
     import ConfirmButton from './lib/components/ConfirmButton.svelte';
     import { Game, Player, type Team } from './lib/game';
-    import { availableTeamsFromMap, gameMaps, playerTeams, prioritizedTeams } from './lib/data';
+    import { availableTeamsFromMap, playerTeams, prioritizedTeams } from './lib/data';
+    import { DataStore } from './stored-data';
 
     function quitGame() {
         history.pushState(null, null, '#');
@@ -26,6 +27,32 @@
         audio.volume($prefs.soundVolume);
     }
 
+    async function loadMap(mapName: string) {
+        // such a hack to customize the colour overrides... there has got to be a simpler way
+        const gameMaps = await DataStore.load().then(d => d.loadMaps());
+        const map = { ...gameMaps.map(e => e.map).find(m => m.props.name === mapName) };
+        let teams: Team[] = [];
+        if (map.setup) {
+            map.setup = { ...map.setup };
+            const teamsFromMap = availableTeamsFromMap(map);
+            const priorityTeams = $prefs.preferredTeams.map(e => playerTeams.find(p => p.value === e));
+            teams = prioritizedTeams(teamsFromMap, priorityTeams).map(e => e.value) as Team[];
+            map.setup.teams = teams;
+        } else {
+            map.planets = map.planets.map(p => ({ ...p }));
+            const teamsFromMap = availableTeamsFromMap(map);
+            const priorityTeams = $prefs.preferredTeams.map(e => playerTeams.find(p => p.value === e));
+            teams = prioritizedTeams(teamsFromMap, priorityTeams).map(e => e.value) as Team[];
+            map.planets.map(p => {
+                if (p.ownerTeam) {
+                    p.ownerTeam =  teams[teamsFromMap.findIndex(v => v.value === p.ownerTeam)]
+                }
+                return p;
+            });
+        }
+        return { map, teams };
+    }
+
     let player: Player;
     $: if ($game && $room) player = $game.players.find(p => p.team === $localPlayer.team)
     function parseUrlParams() {
@@ -33,36 +60,16 @@
             $urlParams = new URLSearchParams(window.location.hash.substring(1));
 
             if ($urlParams.has('team') && $urlParams.has('map')) {
-                // such a hack to customize the colour overrides... there has got to be a simpler way
-                const map = { ...gameMaps.find(m => m.props.name === $urlParams.get('map')) };
-                let mapTeams: Team[] = [];
-                if (map.setup) {
-                    map.setup = { ...map.setup };
-                    const teamsFromMap = availableTeamsFromMap(map);
-                    const priorityTeams = $prefs.preferredTeams.map(e => playerTeams.find(p => p.value === e));
-                    mapTeams = prioritizedTeams(teamsFromMap, priorityTeams).map(e => e.value) as Team[];
-                    map.setup.teams = mapTeams;
-                } else {
-                    map.planets = map.planets.map(p => ({ ...p }));
-                    const teamsFromMap = availableTeamsFromMap(map);
-                    const priorityTeams = $prefs.preferredTeams.map(e => playerTeams.find(p => p.value === e));
-                    mapTeams = prioritizedTeams(teamsFromMap, priorityTeams).map(e => e.value) as Team[];
-                    map.planets.map(p => {
-                        if (p.ownerTeam) {
-                            p.ownerTeam =  mapTeams[teamsFromMap.findIndex(v => v.value === p.ownerTeam)]
-                        }
-                        return p;
-                    });
-                }
-                $game = new Game(map);
+                loadMap($urlParams.get('map')).then(({ map, teams }) => {
+                    $game = new Game(map);
+                    const playerTeam = teams[parseInt($urlParams.get('team')) - 1];
+                    player = $game.players.find(p => p.team === playerTeam);
+                    if (player) {
+                        player.ai.enabled = false;
+                    }
 
-                const playerTeam = mapTeams[parseInt($urlParams.get('team')) - 1];
-                player = $game.players.find(p => p.team === playerTeam);
-                if (player) {
-                    player.ai.enabled = false;
-                }
-
-                $game.start();
+                    $game.start();
+                });
             } else if (!$urlParams.has('lobby')) {
                 $game = null;
                 $room = null;

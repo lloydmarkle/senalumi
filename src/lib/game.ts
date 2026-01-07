@@ -219,6 +219,7 @@ export class Game {
     start() {
         this.snapshot = createSnapshot(0);
         this.initializerFromMap();
+        return this;
     }
 
     private initializerFromMap() {
