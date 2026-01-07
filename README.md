@@ -2,6 +2,8 @@
 
 A very simple real-time strategy game heavily inspired by [Auralux](http://auraluxconstellations.com/).
 
+Try is live: https://lloydmarkle.github.io/senalumi/
+
 ![Senalumi game play](assets/screenshot.jpg)
 
 ## Description
