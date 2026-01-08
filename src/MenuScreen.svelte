@@ -88,6 +88,11 @@
 
                     <a class="btn large-button" href="#menu=about" transition:delayFly use:audioQueue={'forwardNavigation'}>About</a>
                 </div>
+
+                <div class="tech-info">
+                    <a href="https://github.com/lloydmarkle/senalumi/" target="_blank" rel="noreferrer">github</a>
+                    <span>v{APP_VERSION}</span>
+                </div>
             </div>
         {/if}
     </div>
@@ -171,5 +176,14 @@
 
     .large-button {
         padding: 1em 4em;
+    }
+
+    .tech-info {
+        display: flex;
+        justify-content: flex-end;
+        position: relative;
+        padding-top: 0.5rem;
+        gap: .5rem;
+        font-size: .8rem;
     }
 </style>

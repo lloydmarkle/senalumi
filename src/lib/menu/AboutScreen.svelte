@@ -24,7 +24,7 @@
             and thus produce more satellites. Some planets (indicated by grey rings) can evolve to a larger size and produce more satellites per pulse.
         </p>
         <p class="warning">
-            <em>CAUTION</em>: other players will be doing the same thing and trying to conquer you. Be smart and quick!
+            <em>CAUTION</em>: other players will be trying to take over your planets. Be smart and quick!
         </p>
     </section>
 
