@@ -56,9 +56,11 @@
     {/await}
     <div transition:delayFly class="hstack">
         Map
-        <span>{mapData?.map.props.name ?? ''}</span>
-        <span>Wins rate: {!mapData || mapData.stats.attempts === 0 ? 'No data' : formatPercent(mapData.stats.wins / mapData.stats.attempts)}</span>
-        <span>(win: {mapData?.stats.wins ?? 0}, loss: {mapData?.stats.loses ?? 0}, attempt: {mapData?.stats.attempts ?? 0})</span>
+        {#if mapData}
+        <span>{mapData.map.props.name}</span>
+        <span>Wins rate: {mapData.stats.attempts === 0 ? 'No data' : formatPercent(mapData.stats.wins / mapData.stats.attempts)}</span>
+        <span>(win: {mapData.stats.wins}, loss: {mapData.stats.loses}, attempt: {mapData.stats.attempts}</span>
+        {/if}
     </div>
     <div transition:delayFly style="width:15em">
         <ExpandingMenu>

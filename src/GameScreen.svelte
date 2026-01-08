@@ -23,62 +23,46 @@
         db.storeMap(fn(mapData));
     }
 
-    // TODO: watchmode, pause, showscore... these are all kind of similar but the code is messy
-    let watchMode = false;
-    const startWatching = () => {
-        watchMode = true;
-        showScore = false;
-        gfx.paused = false;
-        updateFpsLimit();
-    }
-
-    function recordGameStats(winnerCandidate: Team, lastEvent: GameStateSnapshot) {
+    function recordGameStats(result: 'win' | 'loss', lastEvent: GameStateSnapshot) {
         updateMapData(md => {
-            if (winnerCandidate === player.team) {
-                gameOver = 'You win!';
-                md.stats.bestTime = lastEvent.time < md.stats.bestTime && md.stats.bestTime > 0 ? lastEvent.time : md.stats.bestTime;
+            if (result === 'win') {
+                md.stats.bestTime = lastEvent.time < md.stats.bestTime || md.stats.bestTime === 0 ? lastEvent.time : md.stats.bestTime;
                 md.stats.wins += 1;
             } else {
-                gameOver = 'You lose';
                 md.stats.loses += 1;
             }
             return md;
         });
     }
 
-    $: gameConfig = game.config;
+    let gameOver = '';
     let gameState = game.log ?? [];
     function checkScore() {
         gameState = game.log ?? [];
+        if (gameOver) {
+            return;
+        }
 
         const lastEvent = gameState[gameState.length - 1];
-        const playerEliminated =
-            !game.planets.some(p => p?.owner?.team === player.team) && lastEvent.satelliteCounts.get(player.team) < 100;
-        const owners = game.planets.filter(p => p.owner).reduce((set, p) => set.add(p.owner.team), new Set<Team>());
-        const winnerCandidate = owners.size === 1 ? [...owners.values()][0] : null;
-        if (!watchMode && playerEliminated) {
-            return recordGameStats(winnerCandidate, lastEvent);
-        }
+        const possibleWinners = game.players.map(p => {
+            const sats = lastEvent.satelliteCounts.get(p.team);
+            const ownedPlanets = game.planets.filter(e => e.owner?.team === p.team);
+            const partiallyOwnedPlanets = game.planets.filter(e => e.candidateOwner?.team === p.team);
+            const canWin = ownedPlanets.length > 0
+                || sats > 100
+                || partiallyOwnedPlanets.some(p => p.upgrade + sats > 99);
+            return  canWin ? p.team : '';
+        }).filter(e => e);
 
-        // only one player owns a planet
-        if (!winnerCandidate) {
-            return;
+        if (!possibleWinners.includes(player.team)) {
+            gameOver = 'You lose';
+            recordGameStats('loss', lastEvent);
+        } else if (possibleWinners.length === 1 && possibleWinners[0] === player.team) {
+            gameOver = 'You win!';
+            recordGameStats('win', lastEvent);
+        } else if (possibleWinners.length === 1) {
+            gameOver = possibleWinners[0] + ' wins';
         }
-
-        let canComeback = false;
-        for (const [team, count] of lastEvent.satelliteCounts.entries()) {
-            if (team !== winnerCandidate) {
-                canComeback = canComeback || count > 100;
-            }
-        }
-        // and the other players don't have enough satellites to capture
-        if (canComeback) {
-            return;
-        }
-        if (winnerCandidate === player.team) {
-            recordGameStats(winnerCandidate, lastEvent);
-        }
-        gameOver = winnerCandidate + ' wins';
     }
 
     onMount(() => {
@@ -91,6 +75,7 @@
         return () => clearInterval(scoreUpdateInterval);
     });
 
+    const gameConfig = game.config;
     let hudMessage = writable('');
     let hudText = '';
     let hudMessageNum = 0;
@@ -102,12 +87,11 @@
         $hudMessage = '';
     }
 
-    let gameOver = '';
-    $: if (gameOver && !watchMode) {
-        gfx.paused = true;
-        showScore = true;
+    let watchMode = false;
+    const startWatching = () => {
+        watchMode = true;
+        showScore = false;
     }
-    let gfx: Renderer;
     let showScore = false;
     let showDebugOptions = false;
     function keydown(ev: KeyboardEvent) {
@@ -120,33 +104,34 @@
         }
         if (ev.code === 'Space' || ev.code === 'Escape') {
             showScore = !showScore || (gameOver.length > 0 && !watchMode);
-            gfx.paused = showScore;
-            updateFpsLimit();
         }
 
         // some helpful
         if (ev.code === 'BracketLeft') {
             gameConfig.gameSpeed -= .1;
-            gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
+            gameConfig.gameSpeed = Math.max(0.1, Math.min(5, game.config.gameSpeed));
             $hudMessage = `Game speed: ${gameConfig.gameSpeed.toFixed(1)}`;
         }
         if (ev.code === 'BracketRight') {
             gameConfig.gameSpeed += .1;
-            gameConfig.gameSpeed = Math.max(0.1, Math.min(4, game.config.gameSpeed));
+            gameConfig.gameSpeed = Math.max(0.1, Math.min(5, game.config.gameSpeed));
             $hudMessage = `Game speed: ${gameConfig.gameSpeed.toFixed(1)}`;
         }
     }
 
     function changeTabVisibility() {
         if (document.hidden) {
-            gfx.paused = true;
             showScore = true;
-            updateFpsLimit();
         }
     }
 
+    let gfx: Renderer;
+    $: if (gameOver && !watchMode) showScore = true;
+    $: if (gfx) {
+        gfx.paused = showScore || showDebugOptions;
+        updateFpsLimit();
+    }
     function updateFpsLimit() {
-        if (!gfx) return;
         if (gfx.paused) {
             gfx.fpsLimit.maxFPS = 5;
             gfx.fpsLimit.minFPS = 1;
@@ -176,11 +161,6 @@
     {#if showScore}
         <OverlayBackground>
             <div class="overlay-root">
-                {#if gfx.paused}
-                <div transition:fly={{ y:'-100%', delay: 400 }} class="top-info">
-                    <h2>Paused</h2>
-                </div>
-                {/if}
                 <div class="vstack scoreboard">
                     {#if gameOver}
                         <div class="game-result">
@@ -220,6 +200,9 @@
         padding: 1rem 2rem;
         align-items: center;
     }
+    .game-result h2 {
+        text-transform: capitalize;
+    }
 
     .overlay-root {
         display: flex;
@@ -237,14 +220,6 @@
 		padding: 3em;
 		max-height: 60rem;
 	}
-
-    .top-info {
-        position: absolute;
-        top: 1rem;
-        background: var(--theme-background);
-        padding: .5rem 4rem;
-        border-radius: var(--theme-border-radius);
-    }
 
     .viewport-transform {
         inset: 0;
